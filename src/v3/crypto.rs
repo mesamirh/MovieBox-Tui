@@ -261,7 +261,7 @@ mod tests {
         assert!(token.starts_with("1629876543210,"));
         let parts: Vec<&str> = token.split(',').collect();
         assert_eq!(parts.len(), 2);
-        assert_eq!(parts[1].len(), 32); // MD5 is 32 hex chars
+        assert_eq!(parts[1].len(), 32);
     }
 
     #[test]
@@ -275,10 +275,10 @@ mod tests {
         assert_eq!(parts[0], "GET");
         assert_eq!(parts[1], "application/json");
         assert_eq!(parts[2], "application/json");
-        assert_eq!(parts[3], ""); // body length
-        assert_eq!(parts[4], "1000"); // ts
-        assert_eq!(parts[5], ""); // body hash
-        assert_eq!(parts[6], "/test?a=1&b=2"); // sorted query
+        assert_eq!(parts[3], "");
+        assert_eq!(parts[4], "1000");
+        assert_eq!(parts[5], "");
+        assert_eq!(parts[6], "/test?a=1&b=2");
     }
 
     #[test]

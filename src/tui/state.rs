@@ -34,6 +34,10 @@ pub struct AppState {
     pub active_screen: Screen,
     pub input_mode: InputMode,
     pub search_query: String,
+    pub last_suggest_query: String,
+    pub last_search_edit: std::time::Instant,
+    pub search_suggestions: Vec<String>,
+    pub suggest_index: Option<usize>,
     pub search_results: Vec<SearchResult>,
     pub search_list_state: TableState,
 
@@ -65,6 +69,7 @@ pub struct AppState {
     pub active_error: Option<String>,
     pub is_loading: bool,
     pub status_message: String,
+    pub status_timer: usize,
 
     pub toast_message: Option<String>,
     pub toast_timer: usize,
@@ -74,6 +79,11 @@ pub struct AppState {
     pub cancel_download: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     pub language_chosen: bool,
+
+    pub subtitle_popup: bool,
+    pub subtitle_list: Vec<(String, String)>,
+    pub subtitle_list_state: ListState,
+    pub pending_play_link: Option<String>,
 }
 
 impl Default for AppState {
@@ -82,6 +92,10 @@ impl Default for AppState {
             active_screen: Screen::Home,
             input_mode: InputMode::Normal,
             search_query: String::new(),
+            last_suggest_query: String::new(),
+            last_search_edit: std::time::Instant::now(),
+            search_suggestions: Vec::new(),
+            suggest_index: None,
             search_results: Vec::new(),
             search_list_state: TableState::default(),
             selected_details: None,
@@ -104,17 +118,23 @@ impl Default for AppState {
             image_picker: None,
             show_logs: false,
             show_help: false,
-            logs: vec!["MovieBox TUI started.".to_string()],
+            logs: vec!["MovieBox-Tui started.".to_string()],
             logs_scroll: 0,
             active_error: None,
             is_loading: false,
-            status_message: "Ready.".to_string(),
+            status_message: String::new(),
+            status_timer: 0,
             toast_message: None,
             toast_timer: 0,
             download_progress: None,
             download_status: None,
             cancel_download: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             language_chosen: false,
+
+            subtitle_popup: false,
+            subtitle_list: Vec::new(),
+            subtitle_list_state: ListState::default(),
+            pending_play_link: None,
         }
     }
 }

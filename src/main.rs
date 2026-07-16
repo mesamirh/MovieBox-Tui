@@ -1,4 +1,4 @@
-use moviebox::tui::app::App;
+use moviebox_tui::tui::app::App;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {

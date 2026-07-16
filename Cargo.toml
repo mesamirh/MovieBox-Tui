@@ -1,10 +1,10 @@
 [package]
-name = "moviebox"
+name = "moviebox-tui"
 version = "0.1.0"
 edition = "2024"
 description = "A terminal user interface (TUI) client for MovieBox API."
-repository = "https://github.com/mesamirh/MovieBox"
-homepage = "https://github.com/mesamirh/MovieBox"
+repository = "https://github.com/mesamirh/MovieBox-Tui"
+homepage = "https://github.com/mesamirh/MovieBox-Tui"
 license = "MIT OR Apache-2.0"
 keywords = ["tui", "moviebox", "scraper", "streaming", "cli"]
 categories = ["command-line-utilities", "multimedia"]
@@ -28,5 +28,5 @@ tokio = { version = "1.52.3", features = ["full"] }
 url = "2.5.8"
 
 [lib]
-name = "moviebox"
+name = "moviebox_tui"
 path = "src/lib.rs"

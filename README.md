@@ -1,11 +1,11 @@
-# MovieBox
+# MovieBox-Tui
 
 A lightning fast, zero-config terminal user interface (TUI) for streaming movies and TV series directly from your terminal.
 
 ## Installation
 
 ```sh
-cargo install moviebox
+cargo install moviebox-tui
 ```
 
 *Note: Requires `mpv` installed on your system for video playback.*
@@ -15,7 +15,7 @@ cargo install moviebox
 Launch the app from your terminal:
 
 ```sh
-moviebox
+moviebox-tui
 ```
 
 - **Search**: Press `/` to search for movies or shows.

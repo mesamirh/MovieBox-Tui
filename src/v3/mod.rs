@@ -14,12 +14,31 @@ impl MovieBoxClient {
     }
 
     pub async fn search(&self, query: &str, page: usize) -> Result<Value, ScraperError> {
+        self.search_with_tab(query, page, "All").await
+    }
+
+    pub async fn search_movies(&self, query: &str, page: usize) -> Result<Value, ScraperError> {
+        self.search_with_tab(query, page, "MovieTV").await
+    }
+
+    pub async fn suggest(&self, query: &str) -> Result<Value, ScraperError> {
+        let payload = json!({
+            "keyword": query,
+            "page": 1,
+            "perPage": 8,
+            "subjectType": "All",
+            "tabId": "All"
+        });
+        self.post("/wefeed-mobile-bff/subject-api/search/v2", &payload).await
+    }
+
+    async fn search_with_tab(&self, query: &str, page: usize, tab_id: &str) -> Result<Value, ScraperError> {
         let payload = json!({
             "keyword": query,
             "page": page,
             "perPage": 20,
             "subjectType": "All",
-            "tabId": "All"
+            "tabId": tab_id
         });
         self.post("/wefeed-mobile-bff/subject-api/search/v2", &payload)
             .await
@@ -119,5 +138,17 @@ impl MovieBoxClient {
             combined.insert("list".to_string(), serde_json::Value::Array(all_list));
             Ok(serde_json::Value::Object(combined))
         }
+    }
+
+    pub async fn get_ext_captions(
+        &self,
+        subject_id: &str,
+        resource_id: &str,
+    ) -> Result<Value, ScraperError> {
+        let path = format!(
+            "/wefeed-mobile-bff/subject-api/get-ext-captions?subjectId={}&resourceId={}",
+            subject_id, resource_id
+        );
+        self.get(&path).await
     }
 }

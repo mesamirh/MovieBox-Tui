@@ -5,35 +5,85 @@ use crate::tui::{
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table, Wrap},
+    widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table},
 };
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) {
-    let search_content = if state.input_mode == InputMode::Editing {
-        format!(" {}█", state.search_query)
-    } else {
-        if state.search_query.is_empty() {
-            " (Press '/' to search)".to_string()
+    let show_cursor = (state.tick_count % 16) < 8;
+    let search_content = if !state.status_message.is_empty() && state.input_mode == InputMode::Normal {
+        format!("> {}", state.status_message)
+    } else if state.search_query.is_empty() {
+        let prompts = ["Search for a movie...", "Search for a TV series...", "Search by genre..."];
+        let type_speed = 3;
+        let del_speed = 1;
+        let pause1 = 60; // ~1 sec
+        let pause2 = 15; // ~250 ms
+        
+        let mut total_ticks = 0;
+        for p in prompts.iter() {
+            total_ticks += p.len() * type_speed + pause1 + p.len() * del_speed + pause2;
+        }
+        let mut t = (state.tick_count as usize) % total_ticks;
+        
+        let mut animated_text = String::new();
+        for p in prompts.iter() {
+            let t_type = p.len() * type_speed;
+            let t_del = p.len() * del_speed;
+            let cycle = t_type + pause1 + t_del + pause2;
+            
+            if t < cycle {
+                let display_len = if t < t_type {
+                    t / type_speed
+                } else if t < t_type + pause1 {
+                    p.len()
+                } else if t < t_type + pause1 + t_del {
+                    p.len().saturating_sub((t - (t_type + pause1)) / del_speed)
+                } else {
+                    0
+                };
+                animated_text = p[0..display_len].to_string();
+                break;
+            } else {
+                t -= cycle;
+            }
+        }
+
+        if state.input_mode == InputMode::Editing {
+            if show_cursor { format!("> {}█", animated_text) } else { format!("> {} ", animated_text) }
         } else {
-            format!(" {}", state.search_query)
+            if show_cursor { format!("> {}|", animated_text) } else { format!("> {} ", animated_text) }
+        }
+    } else {
+        if state.input_mode == InputMode::Editing {
+            if show_cursor { format!("> {}█", state.search_query) } else { format!("> {} ", state.search_query) }
+        } else {
+            format!("> {}", state.search_query)
         }
     };
 
-    let border_style = match state.input_mode {
-        InputMode::Editing => theme.border_focus,
-        InputMode::Normal => theme.border,
-    };
+
 
     if state.search_results.is_empty()
         && !state.is_loading
         && !state.status_message.to_lowercase().contains("fail")
     {
+        if state.tick_count < 1 {
+            return; // terminal opens black
+        }
+
         let is_narrow = area.width < 60;
-        let logo_height = if is_narrow { 3 } else { 5 };
+        let is_wide = area.width >= 100;
+        let logo_height = if is_narrow { 2 } else if is_wide { 6 } else { 4 };
         let logo_text = if is_narrow {
             r"█▀▄▀█ █▀█ █ █ █ █▀▀ █▀▄ █▀█ ▀▄▀
 █ ▀ █ █▄█ ▀▄▀ █ ██▄ █▄▀ █▄█ █ █"
+        } else if is_wide {
+            r" __  __   ____   __     __  ___   _____   ____     ____   __  __ 
+|  \/  | / __ \  \ \   / / |_ _| | ____| | __ )   / __ \  \ \/ / 
+| \  / || |  | |  \ \ / /   | |  |  _|   |  _ \  | |  | |  \  /  
+| |\/| || |  | |   \ V /    | |  | |___  | |_) | | |  | |  /  \  
+| |  | || |__| |    \ /     | |  |  ___| |  _ <  | |__| | / /\ \ 
+|_|  |_| \____/      V     |___| |_____| |_| \_\  \____/ /_/  \_\ "
         } else {
             r"  __  __  ___  __   __ ___  ___  ___   ___  __  __ 
  |  \/  |/ _ \ \ \ / /|_ _|| __|| _ ) / _ \ \ \/ / 
@@ -44,79 +94,108 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(30),      // Top padding
-                Constraint::Length(logo_height), // Dynamic logo height
-                Constraint::Length(3),           // Search bar height
-                Constraint::Length(2),           // Status text
-                Constraint::Percentage(30),      // Bottom padding
+                Constraint::Percentage(15),
+                Constraint::Length(logo_height),
+                Constraint::Length(1),
+                Constraint::Percentage(15),
+                Constraint::Length(1),
+                Constraint::Min(0),
+                Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(area);
 
+        let logo_width = if is_narrow { 31 } else if is_wide { 73 } else { 55 };
+        let pad = area.width.saturating_sub(logo_width) / 2;
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(5),  // Left padding
-                Constraint::Percentage(90), // Ample centered space for logo
-                Constraint::Percentage(5),  // Right padding
+                Constraint::Length(pad),
+                Constraint::Length(logo_width),
+                Constraint::Min(0),
             ])
-            .split(vertical_chunks[1]); // Logo horizontal constraints
+            .split(vertical_chunks[1]);
 
-        let search_chunks = Layout::default()
+        let version_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
+                Constraint::Length(pad),
+                Constraint::Length(logo_width),
+                Constraint::Min(0),
             ])
-            .split(vertical_chunks[2]); // Search bar horizontal constraints
+            .split(vertical_chunks[2]);
+
+        let logo_style = if state.tick_count == 1 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(60, 60, 60))
+        } else if state.tick_count == 2 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(140, 140, 140))
+        } else {
+            theme.title
+        };
 
         let title_art = Paragraph::new(logo_text)
-            .alignment(Alignment::Center)
-            .style(theme.title);
-
-        let search_bar = Paragraph::new(search_content)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(" Search ")
-                    .title_style(theme.title)
-                    .border_style(border_style),
-            )
-            .style(theme.text);
-
-        let intro = Paragraph::new(state.status_message.as_str())
-            .alignment(Alignment::Center)
-            .style(theme.text_dim);
+            .alignment(Alignment::Left)
+            .style(logo_style);
 
         frame.render_widget(title_art, horizontal_chunks[1]);
-        frame.render_widget(search_bar, search_chunks[1]);
-        frame.render_widget(intro, vertical_chunks[3]);
+
+        let version_style = if state.tick_count == 1 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(40, 40, 40))
+        } else if state.tick_count == 2 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(90, 90, 90))
+        } else {
+            theme.text_dim
+        };
+        let version = Paragraph::new("v0.1.0")
+            .alignment(Alignment::Right)
+            .style(version_style);
+        frame.render_widget(version, version_chunks[1]);
+
+        if state.tick_count >= 3 {
+            let search_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(25),
+                ])
+                .split(vertical_chunks[4]);
+
+            let search_bar = Paragraph::new(search_content.clone())
+                .alignment(Alignment::Center)
+                .style(match state.input_mode {
+                    InputMode::Editing => theme.title,
+                    InputMode::Normal => theme.text,
+                });
+
+            frame.render_widget(search_bar, search_chunks[1]);
+
+            let legend = Paragraph::new("/ Search   ↑↓ Browse   ? Help")
+                .alignment(Alignment::Center)
+                .style(theme.text_dim);
+            frame.render_widget(legend, vertical_chunks[6]);
+        }
     } else {
+        let desired_height = if state.is_loading {
+            10
+        } else {
+            std::cmp::max(state.search_results.len() as u16 + 4, 6)
+        };
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3), // Top header / search input
-                Constraint::Min(4),    // Main content panel
+                Constraint::Length(3),
+                Constraint::Length(desired_height),
+                Constraint::Min(0),
             ])
             .split(area);
 
-        let search_bar = Paragraph::new(search_content)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(" Search ")
-                    .title_style(theme.title)
-                    .border_style(border_style),
-            )
-            .style(theme.text);
+        let search_bar = Paragraph::new(search_content.clone())
+            .style(match state.input_mode {
+                InputMode::Editing => theme.title,
+                InputMode::Normal => theme.text,
+            });
         frame.render_widget(search_bar, chunks[0]);
-
-        let content_split = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[1]);
 
         let list_block = Block::default()
             .borders(Borders::ALL)
@@ -129,8 +208,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
             let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
 
-            let inner_area = list_block.inner(content_split[0]);
-            frame.render_widget(list_block, content_split[0]);
+            let inner_area = list_block.inner(chunks[1]);
+            frame.render_widget(list_block, chunks[1]);
 
             let v_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -177,10 +256,10 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .row_highlight_style(theme.highlight.bg(ratatui::style::Color::Rgb(30, 30, 50)))
                 .highlight_symbol(">> ");
 
-            frame.render_stateful_widget(table, content_split[0], &mut state.search_list_state);
+            frame.render_stateful_widget(table, chunks[1], &mut state.search_list_state);
         } else {
-            let inner_area = list_block.inner(content_split[0]);
-            frame.render_widget(list_block, content_split[0]);
+            let inner_area = list_block.inner(chunks[1]);
+            frame.render_widget(list_block, chunks[1]);
 
             let v_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -196,236 +275,70 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .style(theme.error);
             frame.render_widget(p, v_chunks[1]);
         }
+    }
 
-        let preview_block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .title(" Info Preview ")
-            .title_style(theme.title)
-            .border_style(theme.border);
-
-        let preview_area = content_split[1];
-
-        if state.preview_loading {
-            let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-            let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
-
-            let inner_area = preview_block.inner(preview_area);
-            frame.render_widget(preview_block, preview_area);
-
-            let v_chunks = Layout::default()
+    if state.input_mode == InputMode::Editing && !state.search_suggestions.is_empty() {
+        let search_area = if state.search_results.is_empty() && !state.is_loading && !state.status_message.to_lowercase().contains("fail") {
+            let is_narrow = area.width < 60;
+            let is_wide = area.width >= 100;
+            let logo_height = if is_narrow { 2 } else if is_wide { 6 } else { 4 };
+            let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Percentage(45),
+                    Constraint::Percentage(15),
+                    Constraint::Length(logo_height),
                     Constraint::Length(1),
-                    Constraint::Percentage(50),
+                    Constraint::Percentage(15),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
                 ])
-                .split(inner_area);
-
-            let loading_p = Paragraph::new(format!("{} Loading metadata...", spinner))
-                .alignment(Alignment::Center)
-                .style(theme.text_dim);
-            frame.render_widget(loading_p, v_chunks[1]);
-        } else if let Some(preview) = &state.search_preview {
-            let inner_area = preview_block.inner(preview_area);
-            frame.render_widget(preview_block.clone(), preview_area);
-
-            let v_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Length(15), Constraint::Min(1)])
-                .split(inner_area);
-
-            let top_area = v_chunks[0];
-            let synopsis_area = v_chunks[1];
-
-            let chunks = Layout::default()
+                .split(area);
+            Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Length(20),
-                    Constraint::Length(2),
-                    Constraint::Min(1),
-                ])
-                .split(top_area);
-
-            let poster_area = chunks[0];
-            let meta_area = chunks[2];
-
-            if let Some(img) = &state.poster_image {
-                if state.poster_protocol.as_ref().map(|(r, _)| *r) != Some(poster_area)
-                    && let Some(picker) = &mut state.image_picker
-                {
-                    let size = ratatui::layout::Size::new(poster_area.width, poster_area.height);
-                    if let Ok(proto) =
-                        picker.new_protocol(img.clone(), size, ratatui_image::Resize::Fit(None))
-                    {
-                        state.poster_protocol = Some((poster_area, proto));
-                    }
-                }
-                if let Some((_, proto)) = &state.poster_protocol {
-                    frame.render_widget(ratatui_image::Image::new(proto), poster_area);
-                }
-            } else {
-                let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-                let current_spinner =
-                    spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
-
-                let v_chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Percentage(45),
-                        Constraint::Length(1),
-                        Constraint::Percentage(50),
-                    ])
-                    .split(poster_area);
-
-                let placeholder = Paragraph::new(format!("{} Loading Art...", current_spinner))
-                    .style(theme.text_dim)
-                    .alignment(Alignment::Center);
-                frame.render_widget(placeholder, v_chunks[1]);
-            }
-
-            let title = preview
-                .get("title")
-                .and_then(|t| t.as_str())
-                .unwrap_or("Unknown");
-            let description = preview
-                .get("description")
-                .and_then(|d| d.as_str())
-                .or_else(|| preview.get("intro").and_then(|i| i.as_str()))
-                .unwrap_or("No description available.");
-            let release_date = preview
-                .get("releaseDate")
-                .and_then(|y| y.as_str())
-                .or_else(|| preview.get("year").and_then(|y| y.as_str()))
-                .unwrap_or("N/A");
-            let imdb_rating = preview
-                .get("imdbRatingValue")
-                .and_then(|r| {
-                    r.as_f64()
-                        .map(|rf| rf.to_string())
-                        .or_else(|| r.as_str().map(|s| s.to_string()))
-                })
-                .unwrap_or_else(|| "N/A".to_string());
-
-            let genres = preview
-                .get("genre")
-                .and_then(|g| g.as_array())
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                })
-                .unwrap_or_else(|| "N/A".to_string());
-            let duration = preview
-                .get("duration")
-                .and_then(|d| d.as_str())
-                .unwrap_or("N/A");
-            let country = preview
-                .get("countryName")
-                .and_then(|c| c.as_str())
-                .unwrap_or("N/A");
-            let content_rating = preview
-                .get("contentRating")
-                .and_then(|c| c.as_str())
-                .unwrap_or("N/A");
-
-            let type_val = preview
-                .get("subjectType")
-                .and_then(|s| s.as_i64())
-                .unwrap_or(1);
-            let type_str = if type_val == 2 { "TV Series" } else { "Movie" };
-
-            let viewers = preview.get("viewers").and_then(|v| v.as_i64()).unwrap_or(0);
-
-            let mut staff_list = Vec::new();
-            if let Some(staff) = preview.get("staffList").and_then(|s| s.as_array()) {
-                for person in staff.iter().take(3) {
-                    if let Some(name) = person.get("name").and_then(|n| n.as_str()) {
-                        staff_list.push(name.to_string());
-                    }
-                }
-            }
-            let cast = if staff_list.is_empty() {
-                "N/A".to_string()
-            } else {
-                staff_list.join(", ")
-            };
-
-            let label_style = theme.header;
-            let val_style = theme.text;
-
-            let meta_lines = vec![
-                Line::from(vec![
-                    Span::styled("Title:    ", label_style),
-                    Span::styled(title, val_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("Type:     ", label_style),
-                    Span::styled(type_str, val_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("Genre:    ", label_style),
-                    Span::styled(genres, val_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("Released: ", label_style),
-                    Span::styled(release_date, val_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("Duration: ", label_style),
-                    Span::styled(duration, val_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("Rating:   ", label_style),
-                    Span::styled(
-                        format!("{} (IMDb: {})", content_rating, imdb_rating),
-                        val_style,
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::styled("Country:  ", label_style),
-                    Span::styled(country, val_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("Cast:     ", label_style),
-                    Span::styled(cast, val_style),
-                ]),
-                Line::from(vec![
-                    Span::styled("Viewers:  ", label_style),
-                    Span::styled(viewers.to_string(), val_style),
-                ]),
-            ];
-
-            let synopsis_lines = vec![
-                Line::from(vec![Span::styled("Synopsis:", label_style)]),
-                Line::from(vec![]),
-            ];
-
-            let meta_p = Paragraph::new(meta_lines).wrap(Wrap { trim: true });
-            frame.render_widget(meta_p, meta_area);
-
-            let mut syn_lines = synopsis_lines;
-            syn_lines.push(Line::from(vec![Span::styled(description, theme.text_dim)]));
-            let p = Paragraph::new(syn_lines).wrap(Wrap { trim: true });
-            frame.render_widget(p, synopsis_area);
+                .constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)])
+                .split(vertical_chunks[4])[1]
         } else {
-            let inner_area = preview_block.inner(preview_area);
-            frame.render_widget(preview_block, preview_area);
+            Layout::default().direction(Direction::Vertical).constraints([Constraint::Length(3), Constraint::Min(4)]).split(area)[0]
+        };
 
-            let v_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Percentage(45),
-                    Constraint::Length(1),
-                    Constraint::Percentage(50),
-                ])
-                .split(inner_area);
+        let dropdown_height = std::cmp::min(state.search_suggestions.len() as u16 + 2, 10);
+        
+        let is_home_screen = state.search_results.is_empty() && !state.is_loading && !state.status_message.to_lowercase().contains("fail");
+        
+        let dropdown_y = if !is_home_screen && search_area.y > area.height / 2 {
+            search_area.y.saturating_sub(dropdown_height)
+        } else {
+            search_area.y + search_area.height
+        };
+        
+        let max_len = state.search_suggestions.iter().map(|s| s.len()).max().unwrap_or(0) as u16;
+        let dropdown_width = std::cmp::min(std::cmp::max(max_len + 8, 30), search_area.width);
+        let dropdown_x = search_area.x + (search_area.width.saturating_sub(dropdown_width)) / 2;
 
-            let empty_p = Paragraph::new("Select a result to preview info.")
-                .alignment(Alignment::Center)
-                .style(theme.text_dim);
-            frame.render_widget(empty_p, v_chunks[1]);
+        let dropdown_area = Rect {
+            x: dropdown_x,
+            y: dropdown_y,
+            width: dropdown_width,
+            height: dropdown_height,
+        };
+
+        if dropdown_area.y + dropdown_area.height <= area.height || search_area.y > area.height / 2 {
+            frame.render_widget(ratatui::widgets::Clear, dropdown_area);
+            let items: Vec<ratatui::widgets::ListItem> = state.search_suggestions.iter().enumerate().map(|(i, s)| {
+                let text = if Some(i) == state.suggest_index { format!(">> {}", s) } else { format!("   {}", s) };
+                let style = if Some(i) == state.suggest_index { theme.highlight } else { theme.text };
+                ratatui::widgets::ListItem::new(ratatui::text::Line::from(ratatui::text::Span::styled(text, style)).alignment(ratatui::layout::Alignment::Left))
+            }).collect();
+            let list = ratatui::widgets::List::new(items)
+                .block(
+                    ratatui::widgets::Block::default()
+                        .borders(ratatui::widgets::Borders::ALL)
+                        .border_style(theme.border_focus)
+                        .border_type(ratatui::widgets::BorderType::Rounded)
+                );
+            frame.render_widget(list, dropdown_area);
         }
     }
 }

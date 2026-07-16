@@ -1,6 +1,6 @@
-# Contributing to MovieBox
+# Contributing to MovieBox-Tui
 
-Thank you for your interest in contributing to MovieBox!
+Thank you for your interest in contributing to MovieBox-Tui!
 
 ## Pull Request Process
 

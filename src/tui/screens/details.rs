@@ -10,10 +10,12 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(23), // Metadata header (Title, Release, Synopsis)
-            Constraint::Min(4),     // Stream links lists
+            Constraint::Length(14),
+            Constraint::Length(1),
+            Constraint::Min(10),
         ])
         .split(area);
+    let bottom_area = chunks[2];
 
     let details_json = match &state.selected_details {
         Some(d) => d,
@@ -101,25 +103,30 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let inner_area = details_block.inner(chunks[0]);
     frame.render_widget(details_block.clone(), chunks[0]);
 
-    let v_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(15), Constraint::Min(1)])
-        .split(inner_area);
-
-    let top_area = v_chunks[0];
-    let synopsis_area = v_chunks[1];
+    let poster_width = (inner_area.height as f32 * 2.2).ceil() as u16;
 
     let h_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(20),
-            Constraint::Length(2),
+            Constraint::Length(poster_width),
+            Constraint::Length(1),
             Constraint::Min(1),
         ])
-        .split(top_area);
+        .split(inner_area);
 
     let poster_area = h_chunks[0];
-    let meta_area = h_chunks[2];
+    let right_area = h_chunks[2];
+
+    let right_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(10),
+            Constraint::Min(1),
+        ])
+        .split(right_area);
+
+    let meta_area = right_chunks[0];
+    let synopsis_area = right_chunks[1];
 
     if let Some(img) = &state.poster_image {
         if state.poster_protocol.as_ref().map(|(r, _)| *r) != Some(poster_area)
@@ -204,64 +211,25 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let label_style = theme.header;
     let val_style = theme.text;
 
-    let meta_lines = vec![
-        Line::from(vec![
-            Span::styled("Title:    ", label_style),
-            Span::styled(title, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Type:     ", label_style),
-            Span::styled(type_str, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Genre:    ", label_style),
-            Span::styled(genres, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Released: ", label_style),
-            Span::styled(year, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Duration: ", label_style),
-            Span::styled(duration, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Rating:   ", label_style),
-            Span::styled(
-                format!("{} (IMDb: {})", content_rating, imdb_rating),
-                val_style,
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Country:  ", label_style),
-            Span::styled(country, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Cast:     ", label_style),
-            Span::styled(cast, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Dubbing:  ", label_style),
-            Span::styled(dubbing_str, val_style),
-        ]),
-        Line::from(vec![
-            Span::styled("Viewers:  ", label_style),
-            Span::styled(viewers.to_string(), val_style),
-        ]),
+    let meta_rows = vec![
+        Row::new(vec![Cell::from("Title:").style(label_style), Cell::from(title).style(val_style)]),
+        Row::new(vec![Cell::from("Type:").style(label_style), Cell::from(type_str).style(val_style)]),
+        Row::new(vec![Cell::from("Genre:").style(label_style), Cell::from(genres).style(val_style)]),
+        Row::new(vec![Cell::from("Released:").style(label_style), Cell::from(year).style(val_style)]),
+        Row::new(vec![Cell::from("Duration:").style(label_style), Cell::from(duration).style(val_style)]),
+        Row::new(vec![Cell::from("Rating:").style(label_style), Cell::from(format!("{} (IMDb: {})", content_rating, imdb_rating)).style(val_style)]),
+        Row::new(vec![Cell::from("Country:").style(label_style), Cell::from(country).style(val_style)]),
+        Row::new(vec![Cell::from("Cast:").style(label_style), Cell::from(cast).style(val_style)]),
+        Row::new(vec![Cell::from("Dubbing:").style(label_style), Cell::from(dubbing_str).style(val_style)]),
+        Row::new(vec![Cell::from("Viewers:").style(label_style), Cell::from(viewers.to_string()).style(val_style)]),
     ];
 
-    let synopsis_lines = vec![
-        Line::from(vec![Span::styled("Synopsis:", label_style)]),
-        Line::from(vec![]),
+    let meta_table = Table::new(meta_rows, [Constraint::Length(10), Constraint::Min(10)]);
+    frame.render_widget(meta_table, meta_area);
+
+    let syn_lines = vec![
+        Line::from(vec![Span::styled("Synopsis: ", label_style), Span::styled(intro, theme.text_dim)])
     ];
-
-    frame.render_widget(
-        Paragraph::new(meta_lines).wrap(Wrap { trim: true }),
-        meta_area,
-    );
-
-    let mut syn_lines = synopsis_lines;
-    syn_lines.push(Line::from(vec![Span::styled(intro, theme.text_dim)]));
     let intro_p = Paragraph::new(syn_lines).wrap(Wrap { trim: true });
     frame.render_widget(intro_p, synopsis_area);
 
@@ -273,50 +241,78 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let (is_series, bottom_chunks) = if type_val == 2 && !state.available_seasons.is_empty() {
         if has_languages {
-            (
-                true,
-                Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Percentage(15), // Languages
-                        Constraint::Percentage(15), // Seasons
-                        Constraint::Percentage(15), // Episodes
-                        Constraint::Percentage(55), // Streams
-                    ])
-                    .split(chunks[1]),
-            )
+            if !state.language_chosen {
+                (
+                    true,
+                    Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([
+                            Constraint::Min(0),
+                            Constraint::Length(20),
+                            Constraint::Min(0),
+                        ])
+                        .split(bottom_area),
+                )
+            } else {
+                (
+                    true,
+                    Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([
+                            Constraint::Length(18),
+                            Constraint::Length(15),
+                            Constraint::Length(15),
+                            Constraint::Min(1),
+                        ])
+                        .split(bottom_area),
+                )
+            }
         } else {
             (
                 true,
                 Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([
-                        Constraint::Percentage(15), // Seasons
-                        Constraint::Percentage(15), // Episodes
-                        Constraint::Percentage(70), // Streams
+                        Constraint::Length(15),
+                        Constraint::Length(15),
+                        Constraint::Min(1),
                     ])
-                    .split(chunks[1]),
+                    .split(bottom_area),
             )
         }
     } else {
         if has_languages {
-            (
-                false,
-                Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Percentage(20), // Languages
-                        Constraint::Percentage(80), // Streams
-                    ])
-                    .split(chunks[1]),
-            )
+            if !state.language_chosen {
+                (
+                    false,
+                    Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([
+                            Constraint::Min(0),
+                            Constraint::Length(20),
+                            Constraint::Min(0),
+                        ])
+                        .split(bottom_area),
+                )
+            } else {
+                (
+                    false,
+                    Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([
+                            Constraint::Length(18),
+                            Constraint::Min(1),
+                        ])
+                        .split(bottom_area),
+                )
+            }
         } else {
             (
                 false,
                 Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([Constraint::Percentage(100)])
-                    .split(chunks[1]),
+                    .split(bottom_area),
             )
         }
     };
@@ -342,6 +338,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 }
             }
         }
+        let list_height = (lang_items.len() as u16).saturating_add(2);
+        
         let lang_border = if state.details_pane == crate::tui::state::DetailsPane::Languages {
             theme.border_focus
         } else {
@@ -358,8 +356,30 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .highlight_style(theme.highlight.bg(ratatui::style::Color::Rgb(30, 30, 50)))
             .highlight_symbol(">> ");
 
-        frame.render_stateful_widget(lang_list, bottom_chunks[0], &mut state.language_list_state);
+        let lang_area = if !state.language_chosen {
+            let v_split = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(0),
+                    Constraint::Length(list_height),
+                    Constraint::Min(0),
+                ])
+                .split(bottom_chunks[1]);
+            v_split[1]
+        } else {
+            let v_split = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(list_height),
+                    Constraint::Min(0),
+                ])
+                .split(bottom_chunks[0]);
+            v_split[0]
+        };
+        frame.render_stateful_widget(lang_list, lang_area, &mut state.language_list_state);
     }
+
+    if !has_languages || state.language_chosen {
 
     if is_series {
         use ratatui::widgets::{List, ListItem};
@@ -453,7 +473,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let streams_block = Block::default()
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
-        .title(" Streams | [Enter/P] Play  [D] Download  [C] Copy Link  [B/Esc] Back ")
+        .title(ratatui::text::Line::from(" Streams ").alignment(Alignment::Left))
+        .title(ratatui::text::Line::from(" [Enter/P] Play  [D] Download  [C] Copy Link  [B/Esc] Back ").alignment(Alignment::Right))
         .title_style(theme.title)
         .border_style(streams_border);
 
@@ -524,7 +545,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             .style(theme.title),
                     )
                     .block(streams_block)
-                    .row_highlight_style(theme.highlight.bg(ratatui::style::Color::Rgb(30, 30, 50))) // Cool subtle glow animation
+                    .row_highlight_style(theme.highlight.bg(ratatui::style::Color::Rgb(30, 30, 50)))
                     .highlight_symbol(">> ")
             } else {
                 let has_multiple_dubs = state
@@ -554,19 +575,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
                 let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
                 format!("{} Loading streams...", spinner)
+            } else if has_multiple_dubs && !state.language_chosen {
+                "Please select a language dubbing from the right panel to view streams.".to_string()
             } else if state.status_message.to_lowercase().contains("failed")
                 || state.status_message.to_lowercase().contains("error")
             {
                 state.status_message.clone()
-            } else if has_multiple_dubs && !state.language_chosen {
-                "Select a language/dubbing and press Enter to load streams.".to_string()
             } else {
                 "Failed to load streams.".to_string()
             };
-            let r = Row::new(vec![Cell::from(msg).style(if state.is_loading {
+            let r = Row::new(vec![Cell::from(msg).style(if state.is_loading || (has_multiple_dubs && !state.language_chosen) {
                 theme.text_dim
-            } else if has_multiple_dubs && !state.language_chosen {
-                theme.border_focus
             } else {
                 theme.error
             })]);
@@ -575,4 +594,40 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     };
 
     frame.render_stateful_widget(table, streams_area, &mut state.resource_list_state);
+    }
+
+    if state.subtitle_popup {
+        let popup_width = 50;
+        let popup_height = std::cmp::min(15, state.subtitle_list.len() as u16 + 2);
+        
+        let area = frame.area();
+        let popup_area = ratatui::layout::Rect {
+            x: area.width.saturating_sub(popup_width) / 2,
+            y: area.height.saturating_sub(popup_height) / 2,
+            width: popup_width,
+            height: popup_height,
+        };
+
+        frame.render_widget(ratatui::widgets::Clear, popup_area);
+
+        let items: Vec<ratatui::widgets::ListItem> = state
+            .subtitle_list
+            .iter()
+            .map(|(name, _)| ratatui::widgets::ListItem::new(name.clone()))
+            .collect();
+
+        let list = ratatui::widgets::List::new(items)
+            .block(
+                ratatui::widgets::Block::default()
+                    .title(" Select Subtitle ")
+                    .title_style(theme.title)
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(theme.border),
+            )
+            .highlight_style(theme.highlight)
+            .highlight_symbol(">> ");
+
+        frame.render_stateful_widget(list, popup_area, &mut state.subtitle_list_state);
+    }
 }
