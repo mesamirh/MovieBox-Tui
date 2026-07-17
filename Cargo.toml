@@ -1,6 +1,6 @@
 [package]
 name = "moviebox-tui"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A terminal user interface (TUI) client for MovieBox API."
 repository = "https://github.com/mesamirh/MovieBox-Tui"

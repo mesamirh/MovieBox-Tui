@@ -478,7 +478,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         .title_style(theme.title)
         .border_style(streams_border);
 
-    let table = match &state.selected_resources {
+    let mut render_table = None;
+    match &state.selected_resources {
         Some(res) => {
             if let Some(list) = res.get("list").and_then(|l| l.as_array()) {
                 let rows: Vec<Row> = list
@@ -539,14 +540,15 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     Constraint::Min(15),
                 ];
 
-                Table::new(rows, widths)
+                let t = Table::new(rows, widths)
                     .header(
                         Row::new(vec!["Res", "Codec", "Size", "Subs", "Uploader"])
                             .style(theme.title),
                     )
                     .block(streams_block)
                     .row_highlight_style(theme.highlight.bg(ratatui::style::Color::Rgb(30, 30, 50)))
-                    .highlight_symbol(">> ")
+                    .highlight_symbol(">> ");
+                render_table = Some(t);
             } else {
                 let has_multiple_dubs = state
                     .selected_details
@@ -559,8 +561,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 } else {
                     "No streaming files available."
                 };
-                let r = Row::new(vec![Cell::from(msg)]);
-                Table::new(vec![r], [Constraint::Percentage(100)]).block(streams_block)
+                
+                let inner = streams_block.inner(streams_area);
+                let pad = "\n".repeat((inner.height.saturating_sub(1) / 2) as usize);
+                let p = Paragraph::new(format!("{}{}", pad, msg))
+                    .style(theme.text_dim)
+                    .alignment(Alignment::Center)
+                    .block(streams_block);
+                frame.render_widget(p, streams_area);
             }
         }
         None => {
@@ -584,16 +592,26 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             } else {
                 "Failed to load streams.".to_string()
             };
-            let r = Row::new(vec![Cell::from(msg).style(if state.is_loading || (has_multiple_dubs && !state.language_chosen) {
+            
+            let style = if state.is_loading || (has_multiple_dubs && !state.language_chosen) {
                 theme.text_dim
             } else {
                 theme.error
-            })]);
-            Table::new(vec![r], [Constraint::Percentage(100)]).block(streams_block)
-        }
-    };
+            };
 
-    frame.render_stateful_widget(table, streams_area, &mut state.resource_list_state);
+            let inner = streams_block.inner(streams_area);
+            let pad = "\n".repeat((inner.height.saturating_sub(1) / 2) as usize);
+            let p = Paragraph::new(format!("{}{}", pad, msg))
+                .style(style)
+                .alignment(Alignment::Center)
+                .block(streams_block);
+            frame.render_widget(p, streams_area);
+        }
+    }
+
+    if let Some(t) = render_table {
+        frame.render_stateful_widget(t, streams_area, &mut state.resource_list_state);
+    }
     }
 
     if state.subtitle_popup {

@@ -280,11 +280,14 @@ impl App {
                                 self.action_sender.send(Action::MoveRight).ok();
                             }
                             KeyCode::Enter => {
-                                match self.state.details_pane {
-                                    crate::tui::state::DetailsPane::Streams => {
-                                        self.action_sender.send(Action::PlayStream).ok();
-                                    }
-                                    crate::tui::state::DetailsPane::Seasons => {
+                                if self.state.subtitle_popup {
+                                    self.action_sender.send(Action::Submit).ok();
+                                } else {
+                                    match self.state.details_pane {
+                                        crate::tui::state::DetailsPane::Streams => {
+                                            self.action_sender.send(Action::PlayStream).ok();
+                                        }
+                                        crate::tui::state::DetailsPane::Seasons => {
                                         self.action_sender.send(Action::MoveRight).ok();
                                     }
                                     crate::tui::state::DetailsPane::Episodes => {
@@ -331,6 +334,7 @@ impl App {
                                             self.state.language_list_state.selected().unwrap_or(0);
                                         self.action_sender.send(Action::SelectLanguage(idx)).ok();
                                     }
+                                }
                                 }
                             }
                             _ => {}
