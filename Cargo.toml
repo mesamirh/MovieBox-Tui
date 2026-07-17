@@ -30,3 +30,4 @@ url = "2.5.8"
 [lib]
 name = "moviebox_tui"
 path = "src/lib.rs"
+

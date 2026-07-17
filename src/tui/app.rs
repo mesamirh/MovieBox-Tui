@@ -539,17 +539,29 @@ impl App {
                     });
                 }
 
-                self.state
-                    .search_list_state
-                    .select(if count > 0 { Some(0) } else { None });
                 self.state.status_message = format!("Found {} results.", count); self.state.status_timer = 150;
                 self.state
                     .add_log(format!("Search completed: {} items loaded.", count));
 
-                if let Some(res) = self.state.search_results.first() {
-                    self.action_sender
-                        .send(Action::FetchPreview(res.id.clone()))
-                        .ok();
+                let query_lower = query.to_lowercase().trim().to_string();
+                let exact_match_idx = self.state.search_results.iter().position(|r| r.title.to_lowercase() == query_lower);
+
+                if let Some(idx) = exact_match_idx {
+                    self.state.search_list_state.select(Some(idx));
+                    self.action_sender.send(Action::Submit).ok();
+                } else if count == 1 {
+                    self.state.search_list_state.select(Some(0));
+                    self.action_sender.send(Action::Submit).ok();
+                } else {
+                    self.state
+                        .search_list_state
+                        .select(if count > 0 { Some(0) } else { None });
+
+                    if let Some(res) = self.state.search_results.first() {
+                        self.action_sender
+                            .send(Action::FetchPreview(res.id.clone()))
+                            .ok();
+                    }
                 }
             }
             Action::SearchFailure(err) => {

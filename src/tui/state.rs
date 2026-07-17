@@ -84,6 +84,7 @@ pub struct AppState {
     pub subtitle_list: Vec<(String, String)>,
     pub subtitle_list_state: ListState,
     pub pending_play_link: Option<String>,
+    pub basic_terminal: bool,
 }
 
 impl Default for AppState {
@@ -98,6 +99,7 @@ impl Default for AppState {
             suggest_index: None,
             search_results: Vec::new(),
             search_list_state: TableState::default(),
+            basic_terminal: std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal",
             selected_details: None,
             selected_resources: None,
             resource_list_state: TableState::default(),

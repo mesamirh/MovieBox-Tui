@@ -64,25 +64,31 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let genres = details_json
         .get("genre")
-        .and_then(|g| g.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
+        .and_then(|g| {
+            if let Some(a) = g.as_array() {
+                let joined = a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ");
+                if joined.is_empty() { None } else { Some(joined) }
+            } else if let Some(s) = g.as_str() {
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            } else {
+                None
+            }
         })
         .unwrap_or_else(|| "N/A".to_string());
     let duration = details_json
         .get("duration")
         .and_then(|d| d.as_str())
+        .filter(|s| !s.is_empty())
         .unwrap_or("N/A");
     let country = details_json
         .get("countryName")
         .and_then(|c| c.as_str())
+        .filter(|s| !s.is_empty())
         .unwrap_or("N/A");
     let content_rating = details_json
         .get("contentRating")
         .and_then(|c| c.as_str())
+        .filter(|s| !s.is_empty())
         .unwrap_or("N/A");
     let imdb_rating = details_json
         .get("imdbRatingValue")
@@ -91,6 +97,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .map(|rf| rf.to_string())
                 .or_else(|| r.as_str().map(|s| s.to_string()))
         })
+        .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "N/A".to_string());
 
     let details_block = Block::default()
@@ -143,8 +150,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             frame.render_widget(ratatui_image::Image::new(proto), poster_area);
         }
     } else {
-        let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-        let current_spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
+        let current_spinner = if state.basic_terminal {
+            let frames = ['-', '\\', '|', '/'];
+            frames[(state.tick_count as usize) % frames.len()]
+        } else {
+            let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            frames[(state.tick_count as usize) % frames.len()]
+        };
 
         let placeholder = Paragraph::new(format!("\n\n\n\n\n  {} Loading Art...", current_spinner))
             .style(theme.text_dim)
@@ -239,82 +251,26 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         false
     };
 
-    let (is_series, bottom_chunks) = if type_val == 2 && !state.available_seasons.is_empty() {
-        if has_languages {
-            if !state.language_chosen {
-                (
-                    true,
-                    Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Min(0),
-                            Constraint::Length(20),
-                            Constraint::Min(0),
-                        ])
-                        .split(bottom_area),
-                )
-            } else {
-                (
-                    true,
-                    Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Length(18),
-                            Constraint::Length(15),
-                            Constraint::Length(15),
-                            Constraint::Min(1),
-                        ])
-                        .split(bottom_area),
-                )
-            }
-        } else {
-            (
-                true,
-                Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Length(15),
-                        Constraint::Length(15),
-                        Constraint::Min(1),
-                    ])
-                    .split(bottom_area),
-            )
-        }
+    let is_series = type_val == 2 && !state.available_seasons.is_empty();
+    let bottom_chunks = if has_languages && !state.language_chosen {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(0), Constraint::Length(20), Constraint::Min(0)])
+            .split(bottom_area)
     } else {
+        let mut c = Vec::new();
         if has_languages {
-            if !state.language_chosen {
-                (
-                    false,
-                    Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Min(0),
-                            Constraint::Length(20),
-                            Constraint::Min(0),
-                        ])
-                        .split(bottom_area),
-                )
-            } else {
-                (
-                    false,
-                    Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Length(18),
-                            Constraint::Min(1),
-                        ])
-                        .split(bottom_area),
-                )
-            }
-        } else {
-            (
-                false,
-                Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([Constraint::Percentage(100)])
-                    .split(bottom_area),
-            )
+            c.push(Constraint::Length(18));
         }
+        if is_series {
+            c.push(Constraint::Length(15));
+            c.push(Constraint::Length(15));
+        }
+        c.push(Constraint::Min(1));
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(c)
+            .split(bottom_area)
     };
 
     if has_languages {

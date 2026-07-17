@@ -123,16 +123,28 @@ impl MovieBoxClient {
         }
 
         let mut all_list = Vec::new();
+        let mut last_err = None;
         for h in handles {
-            if let Ok(Ok(res)) = h.await
-                && let Some(list) = res.get("list").and_then(|l| l.as_array())
-            {
-                all_list.extend(list.clone());
+            if let Ok(res_result) = h.await {
+                match res_result {
+                    Ok(res) => {
+                        if let Some(list) = res.get("list").and_then(|l| l.as_array()) {
+                            all_list.extend(list.clone());
+                        }
+                    }
+                    Err(e) => {
+                        last_err = Some(e);
+                    }
+                }
             }
         }
 
         if all_list.is_empty() {
-            Err(ScraperError::ApiStatus(404))
+            if let Some(e) = last_err {
+                Err(e)
+            } else {
+                Err(ScraperError::ApiStatus(404))
+            }
         } else {
             let mut combined = serde_json::Map::new();
             combined.insert("list".to_string(), serde_json::Value::Array(all_list));

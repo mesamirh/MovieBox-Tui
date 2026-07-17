@@ -61,7 +61,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         }
     };
 
-
+    let mut search_bar_area = Rect::default();
 
     if state.search_results.is_empty()
         && !state.is_loading
@@ -75,15 +75,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         let is_wide = area.width >= 100;
         let logo_height = if is_narrow { 2 } else if is_wide { 6 } else { 4 };
         let logo_text = if is_narrow {
-            r"█▀▄▀█ █▀█ █ █ █ █▀▀ █▀▄ █▀█ ▀▄▀
-█ ▀ █ █▄█ ▀▄▀ █ ██▄ █▄▀ █▄█ █ █"
+            "█▀▄▀█ █▀█ █ █ █ █▀▀ █▀▄ █▀█ ▀▄▀\n█ ▀ █ █▄█ ▀▄▀ █ ██▄ █▄▀ █▄█ █ █"
         } else if is_wide {
-            r" __  __   ____   __     __  ___   _____   ____     ____   __  __ 
-|  \/  | / __ \  \ \   / / |_ _| | ____| | __ )   / __ \  \ \/ / 
-| \  / || |  | |  \ \ / /   | |  |  _|   |  _ \  | |  | |  \  /  
-| |\/| || |  | |   \ V /    | |  | |___  | |_) | | |  | |  /  \  
-| |  | || |__| |    \ /     | |  |  ___| |  _ <  | |__| | / /\ \ 
-|_|  |_| \____/      V     |___| |_____| |_| \_\  \____/ /_/  \_\ "
+            r"███╗   ███╗  ██████╗  ██╗   ██╗ ██╗ ███████╗ ██████╗   ██████╗  ██╗  ██╗
+████╗ ████║ ██╔═══██╗ ██║   ██║ ██║ ██╔════╝ ██╔══██╗ ██╔═══██╗ ╚██╗██╔╝
+██╔████╔██║ ██║   ██║ ██║   ██║ ██║ █████╗   ██████╔╝ ██║   ██║  ╚███╔╝ 
+██║╚██╔╝██║ ██║   ██║ ╚██╗ ██╔╝ ██║ ██╔══╝   ██╔══██╗ ██║   ██║  ██╔██╗ 
+██║ ╚═╝ ██║ ╚██████╔╝  ╚████╔╝  ██║ ███████╗ ██████╔╝ ╚██████╔╝ ██╔╝ ██╗
+╚═╝     ╚═╝  ╚═════╝    ╚═══╝   ╚═╝ ╚══════╝ ╚═════╝   ╚═════╝  ╚═╝  ╚═╝"
         } else {
             r"  __  __  ___  __   __ ___  ___  ___   ___  __  __ 
  |  \/  |/ _ \ \ \ / /|_ _|| __|| _ ) / _ \ \ \/ / 
@@ -160,6 +159,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     Constraint::Percentage(25),
                 ])
                 .split(vertical_chunks[4]);
+            
+            search_bar_area = search_chunks[1];
 
             let search_bar = Paragraph::new(search_content.clone())
                 .alignment(Alignment::Center)
@@ -168,7 +169,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     InputMode::Normal => theme.text,
                 });
 
-            frame.render_widget(search_bar, search_chunks[1]);
+            frame.render_widget(search_bar, search_bar_area);
 
             let legend = Paragraph::new("/ Search   ↑↓ Browse   ? Help")
                 .alignment(Alignment::Center)
@@ -190,12 +191,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             ])
             .split(area);
 
+        search_bar_area = chunks[0];
+
         let search_bar = Paragraph::new(search_content.clone())
             .style(match state.input_mode {
                 InputMode::Editing => theme.title,
                 InputMode::Normal => theme.text,
             });
-        frame.render_widget(search_bar, chunks[0]);
+        frame.render_widget(search_bar, search_bar_area);
 
         let list_block = Block::default()
             .borders(Borders::ALL)
@@ -205,8 +208,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .border_style(theme.border);
 
         if state.is_loading {
-            let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-            let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
+            let spinner = if state.basic_terminal {
+                let frames = ['-', '\\', '|', '/'];
+                frames[(state.tick_count as usize) % frames.len()]
+            } else {
+                let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+                frames[(state.tick_count as usize) % frames.len()]
+            };
 
             let inner_area = list_block.inner(chunks[1]);
             frame.render_widget(list_block, chunks[1]);
@@ -277,31 +285,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         }
     }
 
-    if state.input_mode == InputMode::Editing && !state.search_suggestions.is_empty() {
-        let search_area = if state.search_results.is_empty() && !state.is_loading && !state.status_message.to_lowercase().contains("fail") {
-            let is_narrow = area.width < 60;
-            let is_wide = area.width >= 100;
-            let logo_height = if is_narrow { 2 } else if is_wide { 6 } else { 4 };
-            let vertical_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Percentage(15),
-                    Constraint::Length(logo_height),
-                    Constraint::Length(1),
-                    Constraint::Percentage(15),
-                    Constraint::Length(1),
-                    Constraint::Min(0),
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                ])
-                .split(area);
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)])
-                .split(vertical_chunks[4])[1]
-        } else {
-            Layout::default().direction(Direction::Vertical).constraints([Constraint::Length(3), Constraint::Min(4)]).split(area)[0]
-        };
+    if state.input_mode == InputMode::Editing && !state.search_suggestions.is_empty() && search_bar_area.width > 0 {
+        let search_area = search_bar_area;
 
         let dropdown_height = std::cmp::min(state.search_suggestions.len() as u16 + 2, 10);
         

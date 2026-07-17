@@ -159,9 +159,6 @@ pub fn build_signed_headers(
     headers.insert("X-Client-Status", "0".parse().expect("Valid ASCII"));
 
     headers.insert("X-Forwarded-For", spoofed_ip.parse().expect("Valid ASCII"));
-    headers.insert("X-Real-IP", spoofed_ip.parse().expect("Valid ASCII"));
-    headers.insert("Client-IP", spoofed_ip.parse().expect("Valid ASCII"));
-    headers.insert("CF-Connecting-IP", spoofed_ip.parse().expect("Valid ASCII"));
 
     if let Some(token) = auth_token {
         headers.insert(
