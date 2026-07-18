@@ -259,19 +259,41 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .split(bottom_area)
     } else {
         let mut c = Vec::new();
-        if has_languages {
-            c.push(Constraint::Length(18));
+        if has_languages || is_series {
+            c.push(Constraint::Length(22)); // Left side panel
         }
-        if is_series {
-            c.push(Constraint::Length(15));
-            c.push(Constraint::Length(15));
-        }
-        c.push(Constraint::Min(1));
+        c.push(Constraint::Min(1)); // Streams panel
         Layout::default()
             .direction(Direction::Horizontal)
             .constraints(c)
             .split(bottom_area)
     };
+    
+    let mut left_panel_chunks: std::rc::Rc<[ratatui::layout::Rect]> = std::rc::Rc::new([]);
+    if (!has_languages || state.language_chosen) && (has_languages || is_series) {
+        let mut v_constraints = Vec::new();
+        if has_languages {
+            let mut h = 3;
+            if let Some(dubs) = details_json.get("dubs").and_then(|d| d.as_array()) {
+                h = (dubs.len() as u16) + 2;
+            }
+            v_constraints.push(Constraint::Max(h));
+        }
+        if is_series {
+            let seasons_count = state.available_seasons.len() as u16;
+            let mut eps_count = 1;
+            if let Some(season) = state.available_seasons.get(state.season_list_state.selected().unwrap_or(0)) {
+                eps_count = season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1) as u16;
+            }
+            v_constraints.push(Constraint::Max(seasons_count + 2));
+            v_constraints.push(Constraint::Max(eps_count + 2));
+        }
+        v_constraints.push(Constraint::Min(0));
+        left_panel_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(v_constraints)
+            .split(bottom_chunks[0]);
+    }
 
     if has_languages {
         use ratatui::widgets::{List, ListItem};
@@ -323,14 +345,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .split(bottom_chunks[1]);
             v_split[1]
         } else {
-            let v_split = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(list_height),
-                    Constraint::Min(0),
-                ])
-                .split(bottom_chunks[0]);
-            v_split[0]
+            left_panel_chunks[0]
         };
         frame.render_stateful_widget(lang_list, lang_area, &mut state.language_list_state);
     }
@@ -365,9 +380,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .highlight_symbol(">> ");
 
         let seasons_area = if has_languages {
-            bottom_chunks[1]
+            left_panel_chunks[1]
         } else {
-            bottom_chunks[0]
+            left_panel_chunks[0]
         };
         frame.render_stateful_widget(seasons_list, seasons_area, &mut state.season_list_state);
 
@@ -400,25 +415,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .highlight_symbol(">> ");
 
         let eps_area = if has_languages {
-            bottom_chunks[2]
+            left_panel_chunks[2]
         } else {
-            bottom_chunks[1]
+            left_panel_chunks[1]
         };
         frame.render_stateful_widget(eps_list, eps_area, &mut state.episode_list_state);
     }
 
-    let streams_area = if is_series {
-        if has_languages {
-            bottom_chunks[3]
-        } else {
-            bottom_chunks[2]
-        }
+    let streams_area = if has_languages || is_series {
+        bottom_chunks[1]
     } else {
-        if has_languages {
-            bottom_chunks[1]
-        } else {
-            bottom_chunks[0]
-        }
+        bottom_chunks[0]
     };
     let streams_border = if state.details_pane == crate::tui::state::DetailsPane::Streams {
         theme.border_focus

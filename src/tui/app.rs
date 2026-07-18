@@ -9,6 +9,7 @@ use crate::tui::{
     theme::Theme,
 };
 use crate::v3::client::MovieBoxClient;
+use update_informer::Check;
 
 pub struct App {
     state: AppState,
@@ -99,6 +100,16 @@ impl App {
             }
         });
 
+        let update_sender = self.action_sender.clone();
+        tokio::task::spawn_blocking(move || {
+            let pkg_name = env!("CARGO_PKG_NAME");
+            let current_version = env!("CARGO_PKG_VERSION");
+            let informer = update_informer::new(update_informer::registry::Crates, pkg_name, current_version);
+            if let Ok(Some(version)) = informer.check_version() {
+                update_sender.send(Action::UpdateAvailable(version.to_string())).ok();
+            }
+        });
+
         loop {
             terminal.draw(|frame| self.draw(frame))?;
 
@@ -171,6 +182,11 @@ impl App {
                     return Some(());
                 }
 
+                if key.code == KeyCode::F(1) {
+                    self.action_sender.send(Action::ToggleHelp).ok();
+                    return Some(());
+                }
+
                 match self.state.input_mode {
                     InputMode::Editing => match key.code {
                         KeyCode::Esc => {
@@ -235,9 +251,6 @@ impl App {
                             KeyCode::Char('q') => {
                                 self.action_sender.send(Action::Quit).ok();
                             }
-                            KeyCode::Char('/') => {
-                                self.state.input_mode = InputMode::Editing;
-                            }
                             KeyCode::Char(c)
                                 if (key.modifiers.is_empty()
                                     || key.modifiers == KeyModifiers::SHIFT) =>
@@ -266,6 +279,9 @@ impl App {
                             }
                             KeyCode::Char('b') | KeyCode::Esc => {
                                 self.action_sender.send(Action::GoBack).ok();
+                            }
+                            KeyCode::Tab => {
+                                self.action_sender.send(Action::TabPane).ok();
                             }
                             KeyCode::Up | KeyCode::Char('k') => {
                                 self.action_sender.send(Action::MoveUp).ok();
@@ -366,8 +382,6 @@ impl App {
                             self.state.search_query.clear();
                             self.state.search_preview = None;
                             self.state.status_message = "Search cleared.".to_string(); self.state.status_timer = 150;
-                        } else {
-                            self.action_sender.send(Action::Quit).ok();
                         }
                     }
                     Screen::Search => {
@@ -623,6 +637,33 @@ impl App {
                     _ => {}
                 }
             }
+            Action::TabPane => {
+                if self.state.active_screen == Screen::Details {
+                    use crate::tui::state::DetailsPane;
+                    let has_languages = self.state.selected_details.as_ref()
+                        .and_then(|d| d.get("dubs"))
+                        .and_then(|d| d.as_array())
+                        .is_some_and(|a| a.len() > 1);
+                    
+                    let is_series = self.state.selected_details.as_ref()
+                        .and_then(|d| d.get("stype").or_else(|| d.get("subjectType")))
+                        .and_then(|t| t.as_i64())
+                        .is_some_and(|t| t == 2);
+                        
+                    self.state.details_pane = match self.state.details_pane {
+                        DetailsPane::Languages => {
+                            if is_series { DetailsPane::Seasons } else { DetailsPane::Streams }
+                        }
+                        DetailsPane::Seasons => DetailsPane::Episodes,
+                        DetailsPane::Episodes => DetailsPane::Streams,
+                        DetailsPane::Streams => {
+                            if has_languages { DetailsPane::Languages }
+                            else if is_series { DetailsPane::Seasons }
+                            else { DetailsPane::Streams }
+                        }
+                    };
+                }
+            }
             Action::MoveDown => {
                 if self.state.subtitle_popup {
                     let current = self.state.subtitle_list_state.selected().unwrap_or(0);
@@ -827,12 +868,15 @@ impl App {
                 });
             }
             Action::PreviewSuccess(id, json) => {
-                let current_id = self
-                    .state
-                    .search_list_state
-                    .selected()
-                    .and_then(|idx| self.state.search_results.get(idx))
-                    .map(|res| res.id.clone());
+                let current_id = if self.state.active_screen == Screen::Details {
+                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_str()).map(|s| s.to_string())
+                } else {
+                    self.state
+                        .search_list_state
+                        .selected()
+                        .and_then(|idx| self.state.search_results.get(idx))
+                        .map(|res| res.id.clone())
+                };
 
                 if current_id.as_deref() != Some(id.as_str()) {
                     return None;
@@ -842,14 +886,17 @@ impl App {
                 self.state.search_preview = Some(json.clone());
                 self.state.poster_image = None;
                 self.state.poster_protocol = None;
-                if let Some(cover_val) = json.get("cover")
+                if let Some(cached_img) = self.state.image_cache.get(&id) {
+                    self.state.poster_image = Some((**cached_img).clone());
+                } else if let Some(cover_val) = json.get("cover")
                     && let Some(url) = cover_val.get("url").and_then(|u| u.as_str())
                 {
                     let url_clone = url.to_string();
                     let action_tx = self.action_sender.clone();
                     let id_clone = id.clone();
                     tokio::spawn(async move {
-                        if let Ok(resp) = reqwest::get(&url_clone).await
+                        let client = reqwest::Client::new();
+                        if let Ok(resp) = client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await
                             && let Ok(bytes) = resp.bytes().await
                             && let Ok(img) = image::load_from_memory(&bytes)
                         {
@@ -860,12 +907,17 @@ impl App {
                 }
             }
             Action::PosterSuccess(id, img) => {
-                let current_id = self
-                    .state
-                    .search_list_state
-                    .selected()
-                    .and_then(|idx| self.state.search_results.get(idx))
-                    .map(|res| res.id.clone());
+                self.state.image_cache.put(id.clone(), img.clone());
+                
+                let current_id = if self.state.active_screen == Screen::Details {
+                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_str()).map(|s| s.to_string())
+                } else {
+                    self.state
+                        .search_list_state
+                        .selected()
+                        .and_then(|idx| self.state.search_results.get(idx))
+                        .map(|res| res.id.clone())
+                };
 
                 if current_id.as_deref() == Some(id.as_str()) {
                     self.state.poster_image = Some((*img).clone());
@@ -881,18 +933,12 @@ impl App {
                 if self.state.active_screen == Screen::Details
                     && let Some(link) = self.get_selected_link()
                 {
-                    use std::io::Write;
-                    use std::process::{Command, Stdio};
-                    let child = Command::new("pbcopy").stdin(Stdio::piped()).spawn();
-                    if let Ok(mut child) = child {
-                        if let Some(mut stdin) = child.stdin.take() {
-                            let _ = stdin.write_all(link.as_bytes());
-                        }
-                        let _ = child.wait();
+                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                        let _ = clipboard.set_text(link.clone());
                         self.state.toast_message = Some("[ ✓ ] Copied stream link!".to_string());
                         self.state.toast_timer = 30;
                         self.state.add_log(
-                            "Stream link successfully copied to macOS clipboard.".to_string(),
+                            "Stream link successfully copied to clipboard.".to_string(),
                         );
                     } else {
                         self.state.status_message = format!("Link: {}", link); self.state.status_timer = 150;
@@ -966,7 +1012,7 @@ impl App {
                 if cmd.spawn().is_ok() {
                     self.state.add_log("MPV started successfully.".to_string());
                 } else {
-                    self.state.toast_message = Some("[ ✗ ] Failed to launch MPV!".to_string());
+                    self.state.toast_message = Some("[ ! ] Error: mpv player not found in PATH".to_string());
                     self.state.toast_timer = 60;
                     self.state.add_log("Error starting mpv process. Command failed.".to_string());
                 }
@@ -993,9 +1039,8 @@ impl App {
                         ext
                     );
 
-                    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-                    let filepath = std::path::PathBuf::from(home)
-                        .join("Downloads")
+                    let filepath = dirs::download_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("."))
                         .join(&filename);
 
                     if let Some(link) = link_opt {
@@ -1415,11 +1460,29 @@ impl App {
                 }
             }
             Action::DetailsSuccess(id, payload) => {
-                let _ = std::fs::write(
-                    "debug_details.json",
-                    serde_json::to_string_pretty(&payload).unwrap(),
-                );
                 self.state.selected_details = Some(payload.clone());
+                
+                if self.state.poster_image.is_none() {
+                    if let Some(cached_img) = self.state.image_cache.get(&id) {
+                        self.state.poster_image = Some((**cached_img).clone());
+                    } else if let Some(cover_val) = payload.get("cover")
+                        && let Some(url) = cover_val.get("url").and_then(|u| u.as_str())
+                    {
+                        let url_clone = url.to_string();
+                        let action_tx = self.action_sender.clone();
+                        let id_clone = id.clone();
+                        tokio::spawn(async move {
+                            let client = reqwest::Client::new();
+                            if let Ok(resp) = client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await
+                                && let Ok(bytes) = resp.bytes().await
+                                && let Ok(img) = image::load_from_memory(&bytes)
+                            {
+                                let _ = action_tx.send(Action::PosterSuccess(id_clone, std::sync::Arc::new(img)));
+                            }
+                        });
+                    }
+                }
+
                 let stype = payload
                     .get("subjectType")
                     .and_then(|s| s.as_i64())
@@ -1573,6 +1636,9 @@ impl App {
             }
             Action::Log(msg) => {
                 self.state.add_log(msg);
+            }
+            Action::UpdateAvailable(version) => {
+                self.state.update_available = Some(version);
             }
         }
         None

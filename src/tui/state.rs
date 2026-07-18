@@ -60,6 +60,7 @@ pub struct AppState {
     pub poster_image: Option<image::DynamicImage>,
     pub poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
     pub image_picker: Option<ratatui_image::picker::Picker>,
+    pub image_cache: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
 
     pub show_logs: bool,
     pub show_help: bool,
@@ -70,9 +71,9 @@ pub struct AppState {
     pub is_loading: bool,
     pub status_message: String,
     pub status_timer: usize,
-
     pub toast_message: Option<String>,
     pub toast_timer: usize,
+    pub update_available: Option<String>,
 
     pub download_progress: Option<f64>,
     pub download_status: Option<String>,
@@ -118,6 +119,7 @@ impl Default for AppState {
             poster_image: None,
             poster_protocol: None,
             image_picker: None,
+            image_cache: lru::LruCache::new(std::num::NonZeroUsize::new(10).unwrap()),
             show_logs: false,
             show_help: false,
             logs: vec!["MovieBox-Tui started.".to_string()],
@@ -128,6 +130,7 @@ impl Default for AppState {
             status_timer: 0,
             toast_message: None,
             toast_timer: 0,
+            update_available: None,
             download_progress: None,
             download_status: None,
             cancel_download: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),

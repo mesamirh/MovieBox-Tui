@@ -171,10 +171,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
             frame.render_widget(search_bar, search_bar_area);
 
-            let legend = Paragraph::new("/ Search   ↑↓ Browse   ? Help")
+            let legend = Paragraph::new("Type to Search   ↑↓ Browse   F1/? Help")
                 .alignment(Alignment::Center)
                 .style(theme.text_dim);
             frame.render_widget(legend, vertical_chunks[6]);
+
+            if let Some(version_str) = &state.update_available {
+                let update_text = Paragraph::new(format!("Update v{} available! Run: cargo install moviebox-tui", version_str))
+                    .alignment(Alignment::Center)
+                    .style(theme.highlight);
+                frame.render_widget(update_text, vertical_chunks[7]);
+            }
         }
     } else {
         let desired_height = if state.is_loading {

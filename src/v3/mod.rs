@@ -5,20 +5,8 @@ use client::{ScraperError, MovieBoxClient};
 use serde_json::{Value, json};
 
 impl MovieBoxClient {
-    pub async fn get_homepage(&self, page: usize) -> Result<Value, ScraperError> {
-        let path = format!(
-            "/wefeed-mobile-bff/tab-operating?page={}&tabId=0&version=",
-            page
-        );
-        self.get(&path).await
-    }
-
     pub async fn search(&self, query: &str, page: usize) -> Result<Value, ScraperError> {
         self.search_with_tab(query, page, "All").await
-    }
-
-    pub async fn search_movies(&self, query: &str, page: usize) -> Result<Value, ScraperError> {
-        self.search_with_tab(query, page, "MovieTV").await
     }
 
     pub async fn suggest(&self, query: &str) -> Result<Value, ScraperError> {
@@ -84,25 +72,6 @@ impl MovieBoxClient {
         self.get(&path).await
     }
 
-    pub async fn get_play_info(
-        &self,
-        subject_id: &str,
-        season: usize,
-        episode: usize,
-    ) -> Result<Value, ScraperError> {
-        let path = if season == 0 && episode == 0 {
-            format!(
-                "/wefeed-mobile-bff/subject-api/play-info?subjectId={}",
-                subject_id
-            )
-        } else {
-            format!(
-                "/wefeed-mobile-bff/subject-api/play-info?subjectId={}&se={}&ep={}",
-                subject_id, season, episode
-            )
-        };
-        self.get(&path).await
-    }
 
     pub async fn get_all_resources(
         &self,
@@ -118,7 +87,10 @@ impl MovieBoxClient {
             let sid = subject_id.to_string();
             let r = res.to_string();
             handles.push(tokio::spawn(async move {
-                c.get_resources(&sid, season, episode, 1, Some(&r)).await
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(4),
+                    c.get_resources(&sid, season, episode, 1, Some(&r))
+                ).await.unwrap_or(Err(ScraperError::ApiStatus(408)))
             }));
         }
 

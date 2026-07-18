@@ -66,17 +66,6 @@ impl MovieBoxClient {
         }
     }
 
-    pub fn user_agent(&self) -> &str {
-        &self.user_agent
-    }
-
-    pub fn client_info(&self) -> &str {
-        &self.client_info
-    }
-
-    pub fn spoofed_ip(&self) -> &str {
-        &self.spoofed_ip
-    }
 
     pub async fn init(&self) -> Result<(), ScraperError> {
         let path = "/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=";
@@ -163,11 +152,12 @@ impl MovieBoxClient {
                     let mut active_idx = self.active_base_idx.write().await;
                     *active_idx = idx;
 
-                    return self.parse_response(resp).await;
+                    match self.parse_response(resp).await {
+                        Ok(val) => return Ok(val),
+                        Err(_) => continue,
+                    }
                 }
-                Err(_) => {
-                    continue;
-                }
+                Err(_) => continue,
             }
         }
 
@@ -180,7 +170,17 @@ impl MovieBoxClient {
             return Err(ScraperError::ApiStatus(status.as_u16()));
         }
 
-        let body_val: Value = resp.json().await?;
+        let raw_text = match resp.text().await {
+            Ok(t) => t,
+            Err(e) => return Err(ScraperError::Reqwest(e)),
+        };
+
+        let body_val: Value = match serde_json::from_str(&raw_text) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(ScraperError::Json(e));
+            }
+        };
 
         if let Some(data) = body_val.get("data") {
             Ok(data.clone())

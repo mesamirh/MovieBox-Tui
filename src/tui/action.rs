@@ -17,6 +17,7 @@ pub enum Action {
     MoveLeft,
     MoveRight,
     Submit,
+    TabPane,
     FetchPreview(String),
     PreviewSuccess(String, serde_json::Value),
     PreviewFailure(String),
@@ -40,4 +41,5 @@ pub enum Action {
     ResourcesFailure(String),
     PosterSuccess(String, std::sync::Arc<image::DynamicImage>),
     Log(String),
+    UpdateAvailable(String),
 }
