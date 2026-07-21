@@ -22,7 +22,6 @@ lru = "0.18.1"
 md-5 = "0.11.0"
 rand = "0.10.2"
 ratatui = "0.30.2"
-ratatui-image = "11.0.6"
 reqwest = { version = "0.13.4", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
@@ -30,6 +29,16 @@ thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["full"] }
 update-informer = "1.3.0"
 url = "2.5.8"
+
+# On Windows there's no standard pkg-config/libchafa install path, and the
+# app never calls into chafa directly (only the crate's native kitty/iterm2/
+# sixel/halfblocks protocols via Picker::from_query_stdio/halfblocks), so the
+# chafa-dyn default feature is dropped for windows builds only.
+[target.'cfg(windows)'.dependencies]
+ratatui-image = { version = "11.0.6", default-features = false, features = ["image-defaults", "crossterm"] }
+
+[target.'cfg(not(windows))'.dependencies]
+ratatui-image = "11.0.6"
 
 [lib]
 name = "moviebox_tui"

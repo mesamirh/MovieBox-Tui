@@ -11,6 +11,71 @@ use crate::tui::{
 use crate::v3::client::MovieBoxClient;
 use update_informer::Check;
 
+/// Strips characters that are illegal in Windows filenames (also invalid or
+/// awkward on macOS/Linux) so downloaded titles never break `fs::write`.
+fn sanitize_filename(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+
+    let trimmed = cleaned.trim().trim_end_matches(['.', ' ']);
+    let result = if trimmed.is_empty() {
+        "MovieBox-Tui_Stream".to_string()
+    } else {
+        trimmed.to_string()
+    };
+
+    const RESERVED: &[&str] = &[
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+        "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    if RESERVED.contains(&result.to_uppercase().as_str()) {
+        format!("_{}", result)
+    } else {
+        result
+    }
+}
+
+/// Downloads a (possibly remote) subtitle file to a local temp path.
+///
+/// mpv can load subtitles straight from an HTTP(S) URL, but VLC's
+/// `--sub-file` only accepts a local filesystem path and silently ignores
+/// URLs, so subtitles must be fetched down first for VLC to pick them up.
+async fn download_subtitle_to_temp(url: &str) -> Result<String, String> {
+    let ext = url
+        .rsplit('/')
+        .next()
+        .and_then(|last| last.rsplit_once('.'))
+        .map(|(_, ext)| ext.split(['?', '#']).next().unwrap_or("srt"))
+        .filter(|ext| ext.len() <= 5 && !ext.is_empty())
+        .unwrap_or("srt");
+
+    let bytes = reqwest::get(url)
+        .await
+        .map_err(|e| e.to_string())?
+        .bytes()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let filename = format!(
+        "moviebox-tui_sub_{}.{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+        ext
+    );
+    let path = std::env::temp_dir().join(filename);
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+
+    Ok(path.to_string_lossy().into_owned())
+}
+
 pub struct App {
     state: AppState,
     theme: Theme,
@@ -997,24 +1062,50 @@ impl App {
             }
             Action::LaunchMpv(link, subtitle_url) => {
                 use std::process::{Command, Stdio};
-                self.state.toast_message = Some("[ i ] Launching MPV...".to_string());
+                self.state.toast_message = Some("[ i ] Launching VLC...".to_string());
                 self.state.toast_timer = 40;
-                
-                let mut cmd = Command::new("mpv");
-                cmd.arg(&link).stdout(Stdio::null()).stderr(Stdio::null());
-                
-                if let Some(sub) = subtitle_url {
-                    if !sub.is_empty() {
-                        cmd.arg(format!("--sub-file={}", sub));
+
+                // VLC's --sub-file only accepts a local path (unlike mpv,
+                // which can stream subtitles straight from a URL), so fetch
+                // it locally first whenever one was selected.
+                let local_subtitle_path = match subtitle_url.as_deref() {
+                    Some(sub) if !sub.is_empty() => match download_subtitle_to_temp(sub).await {
+                        Ok(path) => Some(path),
+                        Err(e) => {
+                            self.state
+                                .add_log(format!("Failed to download subtitle: {}", e));
+                            None
+                        }
+                    },
+                    _ => None,
+                };
+
+                // VLC is tried first (preferred default); mpv is kept as a
+                // fallback for setups that only have mpv installed.
+                let players: [(&str, &str); 2] = [("vlc", "VLC"), ("mpv", "MPV")];
+                let mut launched = false;
+
+                for (bin, label) in players {
+                    let mut cmd = Command::new(bin);
+                    cmd.arg(&link).stdout(Stdio::null()).stderr(Stdio::null());
+
+                    if let Some(sub_path) = &local_subtitle_path {
+                        cmd.arg(format!("--sub-file={}", sub_path));
+                    }
+
+                    if cmd.spawn().is_ok() {
+                        self.state.add_log(format!("{} started successfully.", label));
+                        launched = true;
+                        break;
                     }
                 }
-                
-                if cmd.spawn().is_ok() {
-                    self.state.add_log("MPV started successfully.".to_string());
-                } else {
-                    self.state.toast_message = Some("[ ! ] Error: mpv player not found in PATH".to_string());
+
+                if !launched {
+                    self.state.toast_message = Some(
+                        "[ ! ] Error: neither vlc nor mpv found in PATH".to_string(),
+                    );
                     self.state.toast_timer = 60;
-                    self.state.add_log("Error starting mpv process. Command failed.".to_string());
+                    self.state.add_log("Error starting player process. Command failed.".to_string());
                 }
             }
             Action::DownloadStream => {
@@ -1031,7 +1122,7 @@ impl App {
                     let ext = "mp4";
                     let filename = format!(
                         "{}_{}.{}",
-                        title.replace(" ", "_").replace("/", "_"),
+                        sanitize_filename(&title.replace(" ", "_")),
                         std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap()
