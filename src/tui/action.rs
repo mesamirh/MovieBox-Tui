@@ -40,6 +40,7 @@ pub enum Action {
     ResourcesSuccess(serde_json::Value),
     ResourcesFailure(String),
     PosterSuccess(String, std::sync::Arc<image::DynamicImage>),
+    PosterFailure(String),
     Log(String),
     UpdateAvailable(String),
 }
