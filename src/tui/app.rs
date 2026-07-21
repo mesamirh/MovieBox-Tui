@@ -251,6 +251,10 @@ impl App {
                             KeyCode::Char('q') => {
                                 self.action_sender.send(Action::Quit).ok();
                             }
+                            KeyCode::Char('/') if key.modifiers.is_empty() => {
+                                self.state.input_mode = InputMode::Editing;
+                                self.state.status_message = String::new(); self.state.status_timer = 150;
+                            }
                             KeyCode::Char(c)
                                 if (key.modifiers.is_empty()
                                     || key.modifiers == KeyModifiers::SHIFT) =>
