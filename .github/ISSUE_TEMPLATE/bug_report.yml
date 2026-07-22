@@ -1,0 +1,50 @@
+name: Bug report
+description: Something is broken or not working as expected.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `moviebox-tui`
+        2. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Find it with `cargo install --list`.
+      placeholder: "0.1.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      placeholder: "Ghostty, iTerm2, Kitty, WezTerm, Alacritty, ..."
+    validations:
+      required: true

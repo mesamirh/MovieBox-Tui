@@ -13,7 +13,7 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
             theme.header.add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![
-            Span::styled("    [?]        ", theme.header),
+            Span::styled("    [?] / [F1] ", theme.header),
             Span::styled("Toggle Help Menu", theme.text),
         ]),
         Line::from(vec![
@@ -47,6 +47,10 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
             theme.header.add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![
+            Span::styled("    /discover  ", theme.header),
+            Span::styled("Trending & Featured", theme.text),
+        ]),
+        Line::from(vec![
             Span::styled("    /movies    ", theme.header),
             Span::styled("Discover Movies", theme.text),
         ]),
@@ -68,8 +72,12 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
             Span::styled("Play Video in mpv", theme.text),
         ]),
         Line::from(vec![
-            Span::styled("    [⇧+Enter]  ", theme.header),
+            Span::styled("    [o]        ", theme.header),
             Span::styled("Open Player Picker", theme.text),
+        ]),
+        Line::from(vec![
+            Span::styled("    [R]        ", theme.header),
+            Span::styled("Refresh Streams", theme.text),
         ]),
         Line::from(vec![
             Span::styled("    [d]        ", theme.header),

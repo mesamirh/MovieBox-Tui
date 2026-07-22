@@ -28,11 +28,12 @@ impl EventHandler {
                         Ok(CrosstermEvent::FocusGained) => {
                             let _ = event_sender.send(Action::FocusChange);
                         }
-                        Ok(CrosstermEvent::Resize(w, h)) => {
-                            if event_sender.send(Action::Resize(w, h)).is_err() {
-                                break;
-                            }
+                        Ok(CrosstermEvent::Resize(w, h))
+                            if event_sender.send(Action::Resize(w, h)).is_err() =>
+                        {
+                            break;
                         }
+                        Ok(CrosstermEvent::Resize(_, _)) => {}
                         _ => {}
                     }
                 }

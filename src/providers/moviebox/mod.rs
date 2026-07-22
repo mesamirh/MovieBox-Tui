@@ -112,8 +112,15 @@ impl MovieBoxClient {
             let sid = subject_id.to_string();
             let r = res.to_string();
             handles.push(tokio::spawn(async move {
-                c.get_resources(&sid, season, episode, 1, Some(&r), 20)
-                    .await
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(8),
+                    c.get_resources(&sid, season, episode, 1, Some(&r), 20),
+                )
+                .await
+                {
+                    Ok(res) => res,
+                    Err(_) => Err(ScraperError::ApiStatus(408)),
+                }
             }));
         }
 

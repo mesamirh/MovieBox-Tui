@@ -51,6 +51,9 @@ impl MovieBoxClient {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(12))
             .connect_timeout(std::time::Duration::from_secs(3))
+            .tcp_keepalive(std::time::Duration::from_secs(30))
+            .pool_idle_timeout(std::time::Duration::from_secs(90))
+            .pool_max_idle_per_host(4)
             .build()
             .expect("Failed to build reqwest client; TLS backend may be missing");
 

@@ -316,7 +316,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                 if is_selected {
                     let indicator = Paragraph::new(ratatui::text::Line::from(vec![
-                        ratatui::text::Span::styled("▌ ", theme.accent.clone()),
+                        ratatui::text::Span::styled("▌ ", theme.accent),
                     ]));
 
                     let v_layout = Layout::default()
@@ -425,8 +425,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             .or_else(|| meta.get("imdbRatingValue"))
                             .and_then(|v| v.as_str());
                         if let Some(r) = rating {
-                            info_spans
-                                .push(ratatui::text::Span::styled("★ ", theme.rating.clone()));
+                            info_spans.push(ratatui::text::Span::styled("★ ", theme.rating));
                             info_spans.push(ratatui::text::Span::styled(r, theme.text));
                             info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
                         }

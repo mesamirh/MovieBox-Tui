@@ -166,17 +166,29 @@ impl Default for AppState {
             available_players: {
                 let mut players = Vec::new();
                 if std::path::Path::new("/Applications/IINA.app").exists()
-                    || std::process::Command::new("which").arg("iina").output().map(|o| o.status.success()).unwrap_or(false)
+                    || std::process::Command::new("which")
+                        .arg("iina")
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false)
                 {
                     players.push(PlayerKind::Iina);
                 }
                 if std::path::Path::new("/Applications/mpv.app").exists()
-                    || std::process::Command::new("which").arg("mpv").output().map(|o| o.status.success()).unwrap_or(false)
+                    || std::process::Command::new("which")
+                        .arg("mpv")
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false)
                 {
                     players.push(PlayerKind::Mpv);
                 }
                 if std::path::Path::new("/Applications/VLC.app").exists()
-                    || std::process::Command::new("which").arg("vlc").output().map(|o| o.status.success()).unwrap_or(false)
+                    || std::process::Command::new("which")
+                        .arg("vlc")
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false)
                 {
                     players.push(PlayerKind::Vlc);
                 }

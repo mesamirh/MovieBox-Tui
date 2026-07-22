@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest a new feature or improvement.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that MovieBox-Tui makes hard or impossible?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Optional. How could it work?
+    validations:
+      required: false

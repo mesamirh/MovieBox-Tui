@@ -1,12 +1,12 @@
 [package]
 name = "moviebox-tui"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
-description = "A terminal user interface (TUI) client for MovieBox API."
+description = "A terminal client for finding and streaming movies, TV shows, and anime from the MovieBox catalog."
 repository = "https://github.com/mesamirh/MovieBox-Tui"
 homepage = "https://github.com/mesamirh/MovieBox-Tui"
 license = "MIT OR Apache-2.0"
-keywords = ["tui", "moviebox", "scraper", "streaming", "cli"]
+keywords = ["tui", "moviebox", "streaming", "movies", "cli"]
 categories = ["command-line-utilities", "multimedia"]
 readme = "README.md"
 rust-version = "1.85.0"

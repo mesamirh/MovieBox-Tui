@@ -449,9 +449,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                         let pointer = if is_selected { "▌ " } else { "  " };
 
                         let stream_style = if is_selected {
-                            theme.highlight.clone()
+                            theme.highlight
                         } else {
-                            theme.text_dim.clone()
+                            theme.text_dim
                         };
 
                         let stream_line = ratatui::text::Line::from(vec![

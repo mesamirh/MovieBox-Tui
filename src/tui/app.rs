@@ -29,7 +29,7 @@ pub fn clean_moviebox_title(raw_title: &str) -> String {
         let is_season = suffix
             .chars()
             .all(|c| c.is_ascii_digit() || c == '-' || c == 'S');
-        if is_season && suffix.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if is_season && suffix.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             clean = clean[..s_idx].trim_end().to_string();
         }
     }
@@ -115,7 +115,8 @@ impl App {
             match ratatui_image::picker::Picker::from_query_stdio() {
                 Ok(mut picker) => {
                     let size = picker.font_size();
-                    let fallback = format!("{:?}", size).contains("8") && format!("{:?}", size).contains("16");
+                    let fallback =
+                        format!("{:?}", size).contains("8") && format!("{:?}", size).contains("16");
                     let empty = format!("{:?}", size).contains("0");
                     if fallback || empty {
                         if let Ok(picker2) = ratatui_image::picker::Picker::from_query_stdio() {
@@ -123,7 +124,7 @@ impl App {
                         }
                     }
                     self.state.image_picker = Some(picker);
-                    
+
                     tokio::time::sleep(std::time::Duration::from_millis(30)).await;
                     while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
                         let _ = crossterm::event::read();
@@ -140,14 +141,11 @@ impl App {
         let _init_sender = self.action_sender.clone();
         let client_clone = self.client.clone();
         tokio::spawn(async move {
-
             match client_clone.init().await {
                 Ok(_) => {
                     let _ = _init_sender;
                 }
-                Err(_e) => {
-
-                }
+                Err(_e) => {}
             }
         });
 
@@ -275,12 +273,9 @@ impl App {
                 use crossterm::event::{KeyCode, KeyModifiers};
 
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
-                    match key.code {
-                        KeyCode::Char('c') => {
-                            self.action_sender.send(Action::Quit).ok();
-                            return Some(());
-                        }
-                        _ => {}
+                    if let KeyCode::Char('c') = key.code {
+                        self.action_sender.send(Action::Quit).ok();
+                        return Some(());
                     }
                 }
 
@@ -402,18 +397,38 @@ impl App {
                                 self.action_sender.send(Action::CopyLink).ok();
                             }
                             KeyCode::Char('o') | KeyCode::Char('O') => {
-                                if let crate::tui::state::DetailsPane::Streams = self.state.details_pane {
-                                    self.action_sender.send(Action::PlayStream(true)).ok();
+                                if !self.state.subtitle_popup && !self.state.player_picker_popup {
+                                    if let crate::tui::state::DetailsPane::Streams =
+                                        self.state.details_pane
+                                    {
+                                        self.action_sender.send(Action::PlayStream(true)).ok();
+                                    }
                                 }
                             }
                             KeyCode::Char('d') | KeyCode::Char('D') => {
-                                self.action_sender.send(Action::DownloadStream).ok();
+                                if !self.state.subtitle_popup && !self.state.player_picker_popup {
+                                    self.action_sender.send(Action::DownloadStream).ok();
+                                }
                             }
                             KeyCode::Char('R') => {
                                 if let Some(id) = self.state.active_subject_id.clone() {
-                                    let se = if self.state.available_seasons.is_empty() { 0 } else { self.state.selected_season };
-                                    let ep = if self.state.available_seasons.is_empty() { 0 } else { self.state.selected_episode };
-                                    self.action_sender.send(Action::FetchResources { subject_id: id, season: se, episode: ep }).ok();
+                                    let se = if self.state.available_seasons.is_empty() {
+                                        0
+                                    } else {
+                                        self.state.selected_season
+                                    };
+                                    let ep = if self.state.available_seasons.is_empty() {
+                                        0
+                                    } else {
+                                        self.state.selected_episode
+                                    };
+                                    self.action_sender
+                                        .send(Action::FetchResources {
+                                            subject_id: id,
+                                            season: se,
+                                            episode: ep,
+                                        })
+                                        .ok();
                                 }
                             }
                             KeyCode::Char('?') => {
@@ -436,13 +451,17 @@ impl App {
                                 self.action_sender.send(Action::MoveRight).ok();
                             }
                             KeyCode::Enter => {
-                                let open_with = key.modifiers.contains(crossterm::event::KeyModifiers::SHIFT);
+                                let open_with = key
+                                    .modifiers
+                                    .contains(crossterm::event::KeyModifiers::SHIFT);
                                 if self.state.subtitle_popup || self.state.player_picker_popup {
                                     self.action_sender.send(Action::Submit).ok();
                                 } else {
                                     match self.state.details_pane {
                                         crate::tui::state::DetailsPane::Streams => {
-                                            self.action_sender.send(Action::PlayStream(open_with)).ok();
+                                            self.action_sender
+                                                .send(Action::PlayStream(open_with))
+                                                .ok();
                                         }
                                         crate::tui::state::DetailsPane::Seasons => {
                                             self.action_sender.send(Action::MoveRight).ok();
@@ -669,7 +688,7 @@ impl App {
                 }
                 self.state.search_suggestions.clear();
                 self.state.suggest_index = None;
-                self.state.status_message = format!("Loading discover tab...");
+                self.state.status_message = "Loading discover tab...".to_string();
                 self.state.status_timer = 150;
 
                 let client = self.client.clone();
@@ -1339,7 +1358,9 @@ impl App {
                     if let Some(player) = self.state.available_players.get(idx).copied() {
                         if let Some(link) = self.state.player_picker_link.take() {
                             let sub = self.state.player_picker_subtitle.take();
-                            self.action_sender.send(Action::LaunchPlayer(player, link, sub)).ok();
+                            self.action_sender
+                                .send(Action::LaunchPlayer(player, link, sub))
+                                .ok();
                         }
                     }
                     return None;
@@ -1351,9 +1372,13 @@ impl App {
                     if let Some(link) = self.state.pending_play_link.take() {
                         let open_with = self.state.pending_open_with;
                         if open_with {
-                            self.action_sender.send(Action::ShowPlayerPicker(link, sub_url)).ok();
+                            self.action_sender
+                                .send(Action::ShowPlayerPicker(link, sub_url))
+                                .ok();
                         } else {
-                            self.action_sender.send(Action::LaunchMpv(link, sub_url)).ok();
+                            self.action_sender
+                                .send(Action::LaunchMpv(link, sub_url))
+                                .ok();
                         }
                     }
                     return None;
@@ -1415,21 +1440,27 @@ impl App {
                         let url = url.to_string();
                         let tx = self.action_sender.clone();
                         let id2 = id.clone();
+                        let client = self.client.http_client().clone();
                         tokio::spawn(async move {
-                            let client = reqwest::Client::builder()
-                                .timeout(std::time::Duration::from_secs(5))
-                                .build()
-                                .unwrap_or_default();
                             if let Ok(resp) = client
                                 .get(&url)
                                 .header("User-Agent", "MovieBox-Tui/1.0")
                                 .send()
                                 .await
-                                && let Ok(bytes) = resp.bytes().await
-                                && let Ok(img) = image::load_from_memory(&bytes)
                             {
-                                tx.send(Action::PosterSuccess(id2, std::sync::Arc::new(img)))
-                                    .ok();
+                                if let Ok(bytes) = resp.bytes().await {
+                                    if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || {
+                                        image::load_from_memory(&bytes)
+                                    })
+                                    .await
+                                    {
+                                        tx.send(Action::PosterSuccess(
+                                            id2,
+                                            std::sync::Arc::new(img),
+                                        ))
+                                        .ok();
+                                    }
+                                }
                             }
                         });
                     }
@@ -1568,7 +1599,9 @@ impl App {
                         let link_clone = link.clone();
                         tokio::spawn(async move {
                             if let Ok(res) = client.get_ext_captions(&subject_id, &rid).await {
-                                sender.send(Action::ShowSubtitlePopup(link_clone, res, open_with)).ok();
+                                sender
+                                    .send(Action::ShowSubtitlePopup(link_clone, res, open_with))
+                                    .ok();
                             } else {
                                 if open_with {
                                     sender.send(Action::ShowPlayerPicker(link_clone, None)).ok();
@@ -1579,7 +1612,9 @@ impl App {
                         });
                     } else {
                         if open_with {
-                            self.action_sender.send(Action::ShowPlayerPicker(link, None)).ok();
+                            self.action_sender
+                                .send(Action::ShowPlayerPicker(link, None))
+                                .ok();
                         } else {
                             self.action_sender.send(Action::LaunchMpv(link, None)).ok();
                         }
@@ -1617,7 +1652,9 @@ impl App {
                     self.state.pending_open_with = open_with;
                 } else {
                     if open_with {
-                        self.action_sender.send(Action::ShowPlayerPicker(link, None)).ok();
+                        self.action_sender
+                            .send(Action::ShowPlayerPicker(link, None))
+                            .ok();
                     } else {
                         self.action_sender.send(Action::LaunchMpv(link, None)).ok();
                     }
@@ -2393,7 +2430,7 @@ impl App {
                     use std::os::unix::process::CommandExt;
                     cmd.process_group(0);
                 }
-                
+
                 if cmd.spawn().is_err() {
                     self.state.toast_message = Some("✗ Failed to launch player".to_string());
                     self.state.toast_timer = 60;
@@ -2450,10 +2487,7 @@ impl App {
             Screen::Details => {
                 super::screens::details::draw(frame, area, &mut self.state, &self.theme);
             }
-
         }
-
-
 
         if self.state.show_help {
             super::screens::help::draw(frame, area, &self.state, &self.theme);
@@ -2494,7 +2528,10 @@ impl App {
 
             use ratatui::widgets::Paragraph;
 
-            let inner_area = area.inner(ratatui::layout::Margin { vertical: 1, horizontal: 2 });
+            let inner_area = area.inner(ratatui::layout::Margin {
+                vertical: 1,
+                horizontal: 2,
+            });
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(1), Constraint::Min(0)])
