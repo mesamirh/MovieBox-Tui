@@ -141,8 +141,19 @@ impl MovieBoxClient {
                 Err(ScraperError::ApiStatus(404))
             }
         } else {
+            let mut seen_links = std::collections::HashSet::new();
+            let mut unique_list = Vec::new();
+            for item in all_list {
+                if let Some(link) = item.get("resourceLink").and_then(|l| l.as_str()) {
+                    if seen_links.insert(link.to_string()) {
+                        unique_list.push(item);
+                    }
+                } else {
+                    unique_list.push(item);
+                }
+            }
             let mut combined = serde_json::Map::new();
-            combined.insert("list".to_string(), serde_json::Value::Array(all_list));
+            combined.insert("list".to_string(), serde_json::Value::Array(unique_list));
             Ok(serde_json::Value::Object(combined))
         }
     }

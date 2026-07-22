@@ -49,7 +49,7 @@ impl Default for MovieBoxClient {
 impl MovieBoxClient {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(12))
             .connect_timeout(std::time::Duration::from_secs(3))
             .build()
             .expect("Failed to build reqwest client; TLS backend may be missing");

@@ -124,7 +124,7 @@ impl App {
                     }
                     self.state.image_picker = Some(picker);
                     
-                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
                     while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
                         let _ = crossterm::event::read();
                     }
@@ -254,10 +254,8 @@ impl App {
             Action::FocusChange => {
                 self.state.poster_protocol = None;
                 self.state.search_poster_protocols.clear();
-                self.state.selected_resources = None;
-                self.state.resource_list_state.select(None);
                 if self.state.image_picker.is_some() {
-                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
                     while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
                         let _ = crossterm::event::read();
                     }
@@ -267,7 +265,7 @@ impl App {
                 self.state.poster_protocol = None;
                 self.state.search_poster_protocols.clear();
                 if self.state.image_picker.is_some() {
-                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
                     while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
                         let _ = crossterm::event::read();
                     }
@@ -281,9 +279,6 @@ impl App {
                         KeyCode::Char('c') => {
                             self.action_sender.send(Action::Quit).ok();
                             return Some(());
-                        }
-                        KeyCode::Char('l') => {
-
                         }
                         _ => {}
                     }
@@ -409,6 +404,13 @@ impl App {
                             KeyCode::Char('d') | KeyCode::Char('D') => {
                                 self.action_sender.send(Action::DownloadStream).ok();
                             }
+                            KeyCode::Char('R') => {
+                                if let Some(id) = self.state.active_subject_id.clone() {
+                                    let se = if self.state.available_seasons.is_empty() { 0 } else { self.state.selected_season };
+                                    let ep = if self.state.available_seasons.is_empty() { 0 } else { self.state.selected_episode };
+                                    self.action_sender.send(Action::FetchResources { subject_id: id, season: se, episode: ep }).ok();
+                                }
+                            }
                             KeyCode::Char('?') => {
                                 self.action_sender.send(Action::ToggleHelp).ok();
                             }
@@ -470,7 +472,6 @@ impl App {
                             }
                             _ => {}
                         },
-                        _ => {}
                     },
                 }
             }
@@ -509,6 +510,7 @@ impl App {
                     }
                     Screen::Details => {
                         self.state.active_screen = Screen::Home;
+                        self.state.is_loading = false;
                         self.state.language_chosen = false;
                         self.state.status_message =
                             "Select a movie/series and press Enter".to_string();
@@ -1057,7 +1059,6 @@ impl App {
                             }
                         }
                     },
-                    _ => {}
                 }
             }
             Action::TabPane => {
@@ -1217,7 +1218,6 @@ impl App {
                             }
                         }
                     },
-                    _ => {}
                 }
             }
             Action::MoveLeft => {
@@ -1367,7 +1367,6 @@ impl App {
             Action::FetchDetails(id) => {
                 self.state.poster_protocol = None;
                 self.state.is_loading = true;
-                self.state.stream_cache.clear();
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 let id_clone = id.clone();
@@ -1511,6 +1510,8 @@ impl App {
             }
             Action::PreviewFailure(err) => {
                 self.state.preview_loading = false;
+                self.state.status_message = format!("Preview failed: {}", err);
+                self.state.status_timer = 150;
             }
 
             Action::CopyLink => {
@@ -1632,6 +1633,9 @@ impl App {
                 }
             }
             Action::DownloadStream => {
+                if self.state.download_progress.is_some() {
+                    return None;
+                }
                 if self.state.active_screen == Screen::Details {
                     let link_opt = self.get_selected_link();
                     let title = self
@@ -2323,30 +2327,12 @@ impl App {
             }
 
             Action::ShowPlayerPicker(link, subtitle) => {
-                let mut players = Vec::new();
-                if std::path::Path::new("/Applications/IINA.app").exists()
-                    || std::process::Command::new("which").arg("iina").output().map(|o| o.status.success()).unwrap_or(false)
-                {
-                    players.push(crate::tui::state::PlayerKind::Iina);
-                }
-                if std::path::Path::new("/Applications/mpv.app").exists()
-                    || std::process::Command::new("which").arg("mpv").output().map(|o| o.status.success()).unwrap_or(false)
-                {
-                    players.push(crate::tui::state::PlayerKind::Mpv);
-                }
-                if std::path::Path::new("/Applications/VLC.app").exists()
-                    || std::process::Command::new("which").arg("vlc").output().map(|o| o.status.success()).unwrap_or(false)
-                {
-                    players.push(crate::tui::state::PlayerKind::Vlc);
-                }
-                
-                if players.is_empty() {
+                if self.state.available_players.is_empty() {
                     self.state.toast_message =
                         Some("✗ No media player found. Install mpv, IINA, or VLC.".to_string());
                     self.state.toast_timer = 150;
                     return None;
                 }
-                self.state.available_players = players;
                 self.state.player_picker_popup = true;
                 self.state.player_picker_link = Some(link);
                 self.state.player_picker_subtitle = subtitle;

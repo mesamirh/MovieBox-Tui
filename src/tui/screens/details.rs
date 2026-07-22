@@ -102,11 +102,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         .and_then(|c| c.as_str())
         .filter(|s| !s.is_empty())
         .unwrap_or("N/A");
-    let _content_rating = details_json
-        .get("contentRating")
-        .and_then(|c| c.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or("N/A");
+
     let imdb_rating = details_json
         .get("imdbRatingValue")
         .and_then(|r| {

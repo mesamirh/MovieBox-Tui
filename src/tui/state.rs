@@ -163,7 +163,25 @@ impl Default for AppState {
             player_picker_state: ListState::default(),
             player_picker_link: None,
             player_picker_subtitle: None,
-            available_players: Vec::new(),
+            available_players: {
+                let mut players = Vec::new();
+                if std::path::Path::new("/Applications/IINA.app").exists()
+                    || std::process::Command::new("which").arg("iina").output().map(|o| o.status.success()).unwrap_or(false)
+                {
+                    players.push(PlayerKind::Iina);
+                }
+                if std::path::Path::new("/Applications/mpv.app").exists()
+                    || std::process::Command::new("which").arg("mpv").output().map(|o| o.status.success()).unwrap_or(false)
+                {
+                    players.push(PlayerKind::Mpv);
+                }
+                if std::path::Path::new("/Applications/VLC.app").exists()
+                    || std::process::Command::new("which").arg("vlc").output().map(|o| o.status.success()).unwrap_or(false)
+                {
+                    players.push(PlayerKind::Vlc);
+                }
+                players
+            },
             is_loading: false,
             status_message: String::new(),
             status_timer: 0,
