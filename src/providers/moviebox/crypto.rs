@@ -246,6 +246,13 @@ fn random_uuid() -> String {
 pub(crate) fn random_spoofed_ip() -> String {
     use rand::RngExt;
     let mut rng = rand::rng();
-    let host: u8 = rng.random_range(1..254);
-    format!("103.241.224.{}", host)
+
+    let prefixes: &[&str] = &[
+        "103.241", "49.36", "117.195", "106.198", "122.162", "157.32", "182.70", "103.58", "27.60",
+        "59.90",
+    ];
+    let prefix = prefixes[rng.random_range(0..prefixes.len())];
+    let c: u8 = rng.random_range(1..254);
+    let d: u8 = rng.random_range(1..254);
+    format!("{}.{}.{}", prefix, c, d)
 }

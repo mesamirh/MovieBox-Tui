@@ -11,6 +11,31 @@ use crate::tui::{
 };
 use update_informer::Check;
 
+pub fn clean_moviebox_title(raw_title: &str) -> String {
+    let mut clean = raw_title.to_string();
+    if let Some(start) = clean.find(" [") {
+        clean = clean[..start].to_string();
+    }
+    if let Some(start) = clean.find(" (") {
+        let lower = clean.to_lowercase();
+        let inside = &lower[start..];
+        if inside.contains("dub") || inside.contains("hindi") {
+            clean = clean[..start].to_string();
+        }
+    }
+
+    if let Some(s_idx) = clean.rfind(" S") {
+        let suffix = &clean[s_idx + 2..];
+        let is_season = suffix
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-' || c == 'S');
+        if is_season && suffix.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+            clean = clean[..s_idx].trim_end().to_string();
+        }
+    }
+    clean
+}
+
 pub struct App {
     state: AppState,
     theme: Theme,
@@ -62,19 +87,10 @@ impl App {
                 let ep = ep_idx + 1;
                 self.state.selected_season = se;
                 self.state.selected_episode = ep;
-                self.state.resource_list_state.select(None); // Reset stream selection
+                self.state.resource_list_state.select(None);
 
-                let abs_idx = self.get_absolute_episode_index();
-
-                self.action_sender
-                    .send(Action::FetchResources {
-                        subject_id: id.clone(),
-                        season: se,
-                        episode: ep,
-                        absolute_episode_index: abs_idx,
-                        resolution: "".to_string(),
-                    })
-                    .ok();
+                self.state.pending_episode_fetch = Some((id.clone(), se, ep));
+                self.state.last_episode_nav = std::time::Instant::now();
             }
         }
     }
@@ -121,7 +137,7 @@ impl App {
             }
         }
 
-        let mut events = EventHandler::new(Duration::from_millis(60));
+        let mut events = EventHandler::new(Duration::from_millis(100));
 
         let init_sender = self.action_sender.clone();
         let client_clone = self.client.clone();
@@ -207,10 +223,53 @@ impl App {
                         self.state.search_suggestions.clear();
                     }
                 }
+
+                if self.state.pending_episode_fetch.is_some()
+                    && self.state.last_episode_nav.elapsed()
+                        >= std::time::Duration::from_millis(300)
+                {
+                    if let Some((subject_id, se, ep)) = self.state.pending_episode_fetch.take() {
+                        if let Some(cached) = self
+                            .state
+                            .stream_cache
+                            .get(&(subject_id.clone(), se, ep))
+                            .cloned()
+                        {
+                            let count = cached.len();
+                            let mut result = serde_json::Map::new();
+                            result.insert("list".to_string(), serde_json::Value::Array(cached));
+                            self.state.selected_resources = Some(serde_json::Value::Object(result));
+                            self.state.is_loading = false;
+                            self.state.resource_list_state.select(if count > 0 {
+                                Some(0)
+                            } else {
+                                None
+                            });
+                            self.state.status_message =
+                                format!("Resolved {} direct stream sources (cached).", count);
+                            self.state.status_timer = 150;
+                        } else {
+                            self.action_sender
+                                .send(Action::FetchResources {
+                                    subject_id,
+                                    season: se,
+                                    episode: ep,
+                                    absolute_episode_index: 0,
+                                    resolution: "".to_string(),
+                                })
+                                .ok();
+                        }
+                    }
+                }
             }
             Action::Quit => {
                 self.state.add_log("Quitting...".to_string());
                 return Some(());
+            }
+            Action::Resize(_w, _h) => {
+                self.state.image_picker = ratatui_image::picker::Picker::from_query_stdio().ok();
+
+                self.state.poster_protocol = None;
             }
             Action::Key(key) => {
                 use crossterm::event::{KeyCode, KeyModifiers};
@@ -545,6 +604,27 @@ impl App {
                 self.action_sender.send(Action::Search { query }).ok();
             }
             Action::Search { query } => {
+                let lower_query = query.trim().to_lowercase();
+                let tab_id = match lower_query.as_str() {
+                    "/home" | "/discover" => Some("0"),
+                    "/movies" => Some("2"),
+                    "/shows" => Some("5"),
+                    "/anime" => Some("8"),
+                    _ => None,
+                };
+
+                if let Some(tid) = tab_id {
+                    self.action_sender
+                        .send(Action::FetchHomepage {
+                            tab_id: tid.to_string(),
+                            page: 1,
+                        })
+                        .ok();
+                    return None;
+                }
+
+                self.state.is_homepage_mode = false;
+                self.state.current_page = 1;
                 self.state.active_screen = Screen::Home;
                 self.state.selected_details = None;
                 self.state.selected_resources = None;
@@ -576,12 +656,56 @@ impl App {
                     }
                 });
             }
+            Action::FetchHomepage { tab_id, page } => {
+                self.state.is_homepage_mode = true;
+                self.state.current_tab_id = tab_id.clone();
+                self.state.current_page = page;
+                self.state.active_screen = Screen::Home;
+                self.state.selected_details = None;
+                self.state.selected_resources = None;
+                self.state.is_loading = true;
+                if page == 1 {
+                    self.state.search_results.clear();
+                    self.state.search_list_state.select(Some(0));
+                }
+                self.state.search_suggestions.clear();
+                self.state.suggest_index = None;
+                self.state.status_message = format!("Loading discover tab...");
+                self.state.status_timer = 150;
+                self.state.add_log(format!(
+                    "API Homepage request: tab_id={} page={}",
+                    tab_id, page
+                ));
+
+                let client = self.client.clone();
+                let sender = self.action_sender.clone();
+                tokio::spawn(async move {
+                    match client.get_homepage(&tab_id, page).await {
+                        Ok(res) => {
+                            sender
+                                .send(Action::HomepageSuccess {
+                                    tab_id,
+                                    page,
+                                    payload: res,
+                                })
+                                .ok();
+                        }
+                        Err(e) => {
+                            sender
+                                .send(Action::HomepageFailure(format!("{:?}", e)))
+                                .ok();
+                        }
+                    }
+                });
+            }
             Action::SearchSuccess { query, payload } => {
                 if query != self.state.search_query.trim() {
                     return None;
                 }
                 self.state.is_loading = false;
-                self.state.search_results.clear();
+                if self.state.current_page <= 1 {
+                    self.state.search_results.clear();
+                }
                 let mut count = 0;
                 let subjects_opt = payload
                     .get("results")
@@ -603,12 +727,7 @@ impl App {
                             .unwrap_or("Unknown")
                             .to_string();
 
-                        let clean_title = raw_title
-                            .split('[')
-                            .next()
-                            .unwrap_or(&raw_title)
-                            .trim()
-                            .to_string();
+                        let clean_title = crate::tui::app::clean_moviebox_title(&raw_title);
 
                         let normalized_query = query
                             .to_lowercase()
@@ -687,37 +806,33 @@ impl App {
                         .collect::<Vec<_>>();
 
                     let sender = self.action_sender.clone();
+                    let req_client = self.client.http_client().clone();
                     tokio::spawn(async move {
-                        for (id, stype, cover_url) in results_to_fetch {
-                            let mut url_to_fetch = cover_url;
-                            if url_to_fetch.is_none() {
-                                let type_str = if stype == 2 { "series" } else { "movie" };
-                                if let Ok(resp) = reqwest::get(&format!(
-                                    "https://v3-cinemeta.strem.io/meta/{}/{}.json",
-                                    type_str, id
-                                ))
-                                .await
-                                {
-                                    if let Ok(json) = resp.json::<serde_json::Value>().await {
-                                        url_to_fetch = json
-                                            .get("meta")
-                                            .and_then(|m| m.get("poster"))
-                                            .and_then(|p| p.as_str())
-                                            .map(|s| s.to_string());
-                                    }
-                                }
-                            }
-                            if let Some(url) = url_to_fetch {
-                                if let Ok(resp) = reqwest::get(&url).await {
-                                    if let Ok(bytes) = resp.bytes().await {
-                                        if let Ok(img) = image::load_from_memory(&bytes) {
-                                            let _ = sender.send(Action::SearchPosterLoaded(
-                                                id,
-                                                Some(std::sync::Arc::new(img)),
-                                            ));
+                        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
+                        for (id, _stype, cover_url) in results_to_fetch {
+                            if let Some(url) = cover_url {
+                                let permit = sem.clone().acquire_owned().await.ok();
+                                let tx = sender.clone();
+                                let client = req_client.clone();
+                                tokio::spawn(async move {
+                                    let _permit = permit; // hold until block ends
+                                    if let Ok(resp) = client
+                                        .get(&url)
+                                        .header("User-Agent", "MovieBox-Tui/1.0")
+                                        .send()
+                                        .await
+                                    {
+                                        if let Ok(bytes) = resp.bytes().await {
+                                            if let Ok(img) = image::load_from_memory(&bytes) {
+                                                tx.send(Action::SearchPosterLoaded(
+                                                    id,
+                                                    Some(std::sync::Arc::new(img)),
+                                                ))
+                                                .ok();
+                                            }
                                         }
                                     }
-                                }
+                                });
                             }
                         }
                     });
@@ -728,17 +843,15 @@ impl App {
                 self.state
                     .add_log(format!("Search completed: {} items loaded.", count));
 
-                self.state.search_list_state.select(Some(0));
-
-                self.state.last_search_edit = std::time::Instant::now();
-
-                if let Some(res) = self.state.search_results.first() {
-                    self.state.search_list_state.select(Some(0));
-                    self.action_sender
-                        .send(Action::FetchPreview(res.id.clone()))
-                        .ok();
-                } else {
-                    self.state.search_list_state.select(None);
+                if self.state.current_page <= 1 {
+                    if let Some(res) = self.state.search_results.first() {
+                        self.state.search_list_state.select(Some(0));
+                        self.action_sender
+                            .send(Action::FetchPreview(res.id.clone()))
+                            .ok();
+                    } else {
+                        self.state.search_list_state.select(None);
+                    }
                 }
             }
             Action::SearchFailure(err) => {
@@ -746,6 +859,159 @@ impl App {
                 self.state.status_message = format!("Search failed: {}", err);
                 self.state.status_timer = 150;
                 self.state.add_log(format!("Search API Error: {}", err));
+            }
+            Action::HomepageSuccess {
+                tab_id,
+                page,
+                payload,
+            } => {
+                if !self.state.is_homepage_mode || self.state.current_tab_id != tab_id {
+                    return None;
+                }
+                self.state.is_loading = false;
+                if page == 1 {
+                    self.state.search_results.clear();
+                }
+
+                let mut extracted_subjects = Vec::new();
+                if let Some(items) = payload.get("items").and_then(|i| i.as_array()) {
+                    for item in items {
+                        if let Some(banner) = item
+                            .get("banner")
+                            .and_then(|b| b.get("banners"))
+                            .and_then(|b| b.as_array())
+                        {
+                            for b in banner {
+                                if let Some(subject) = b.get("subject") {
+                                    extracted_subjects.push(subject.clone());
+                                }
+                            }
+                        }
+                        if let Some(custom_data) = item
+                            .get("customData")
+                            .and_then(|c| c.get("items"))
+                            .and_then(|i| i.as_array())
+                        {
+                            for c in custom_data {
+                                if let Some(subject) = c.get("subject") {
+                                    extracted_subjects.push(subject.clone());
+                                }
+                            }
+                        }
+                        if let Some(subjects) = item.get("subjects").and_then(|s| s.as_array()) {
+                            for subject in subjects {
+                                extracted_subjects.push(subject.clone());
+                            }
+                        }
+                    }
+                }
+
+                let mut count = 0;
+                for item in extracted_subjects {
+                    let id = item
+                        .get("subjectId")
+                        .and_then(|si| si.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let raw_title = item
+                        .get("title")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("Unknown")
+                        .to_string();
+                    let clean_title = crate::tui::app::clean_moviebox_title(&raw_title);
+                    let stype = item
+                        .get("subjectType")
+                        .and_then(|st| st.as_i64())
+                        .unwrap_or(0);
+                    let release_year = item
+                        .get("releaseDate")
+                        .and_then(|rd| rd.as_str())
+                        .unwrap_or("")
+                        .split('-')
+                        .next()
+                        .unwrap_or("")
+                        .to_string();
+                    let cover_url = item
+                        .get("cover")
+                        .and_then(|c| c.get("url"))
+                        .and_then(|u| u.as_str())
+                        .map(|s| s.to_string());
+
+                    if !id.is_empty() {
+                        self.state.search_results.push(SearchResult {
+                            id,
+                            title: clean_title,
+                            stype,
+                            release_year,
+                            cover_url,
+                        });
+                        count += 1;
+                    }
+                }
+
+                if count > 0 {
+                    let results_to_fetch = self
+                        .state
+                        .search_results
+                        .iter()
+                        .skip(if page == 1 { 0 } else { (page - 1) * 20 })
+                        .take(20)
+                        .map(|r| (r.id.clone(), r.stype, r.cover_url.clone()))
+                        .collect::<Vec<_>>();
+
+                    let sender = self.action_sender.clone();
+                    let req_client = self.client.http_client().clone();
+                    tokio::spawn(async move {
+                        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
+                        for (id, _stype, cover_url) in results_to_fetch {
+                            if let Some(url) = cover_url {
+                                let permit = sem.clone().acquire_owned().await.ok();
+                                let tx = sender.clone();
+                                let client = req_client.clone();
+                                tokio::spawn(async move {
+                                    let _permit = permit;
+                                    if let Ok(resp) = client
+                                        .get(&url)
+                                        .header("User-Agent", "MovieBox-Tui/1.0")
+                                        .send()
+                                        .await
+                                    {
+                                        if let Ok(bytes) = resp.bytes().await {
+                                            if let Ok(img) = image::load_from_memory(&bytes) {
+                                                tx.send(Action::SearchPosterLoaded(
+                                                    id,
+                                                    Some(std::sync::Arc::new(img)),
+                                                ))
+                                                .ok();
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+
+                if count > 0 && self.state.current_page <= 1 {
+                    self.state.search_list_state.select(Some(0));
+                    if let Some(first) = self.state.search_results.first() {
+                        self.action_sender
+                            .send(Action::FetchPreview(first.id.clone()))
+                            .ok();
+                    }
+                } else if count == 0 && self.state.current_page <= 1 {
+                    self.state.search_list_state.select(None);
+                }
+
+                self.state.status_message =
+                    format!("Found {} discover items", self.state.search_results.len());
+                self.state.status_timer = 150;
+            }
+            Action::HomepageFailure(err) => {
+                self.state.is_loading = false;
+                self.state.status_message = format!("Discover failed: {}", err);
+                self.state.status_timer = 150;
+                self.state.add_log(format!("Homepage API Error: {}", err));
             }
             Action::MoveUp => {
                 if self.state.subtitle_popup {
@@ -857,6 +1123,41 @@ impl App {
                                 self.action_sender
                                     .send(Action::FetchPreview(res.id.clone()))
                                     .ok();
+                            }
+                        } else if !self.state.is_loading && !self.state.search_results.is_empty() {
+                            let next_page = self.state.current_page + 1;
+                            if self.state.is_homepage_mode {
+                                self.action_sender
+                                    .send(Action::FetchHomepage {
+                                        tab_id: self.state.current_tab_id.clone(),
+                                        page: next_page,
+                                    })
+                                    .ok();
+                            } else {
+                                self.state.current_page = next_page;
+                                let query = self.state.search_query.clone();
+                                let client = self.client.clone();
+                                let sender = self.action_sender.clone();
+                                self.state.is_loading = true;
+                                self.state.status_message =
+                                    format!("Loading page {}...", next_page);
+                                tokio::spawn(async move {
+                                    match client.search(&query, next_page).await {
+                                        Ok(res) => {
+                                            sender
+                                                .send(Action::SearchSuccess {
+                                                    query,
+                                                    payload: res,
+                                                })
+                                                .ok();
+                                        }
+                                        Err(e) => {
+                                            sender
+                                                .send(Action::SearchFailure(format!("{:?}", e)))
+                                                .ok();
+                                        }
+                                    }
+                                });
                             }
                         }
                     }
@@ -1056,6 +1357,7 @@ impl App {
             }
             Action::FetchDetails(id) => {
                 self.state.is_loading = true;
+                self.state.stream_cache.clear();
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 let id_clone = id.clone();
@@ -1071,6 +1373,41 @@ impl App {
                 });
             }
             Action::FetchPreview(id) => {
+                if let Some(cached) = self.state.preview_cache.get(&id).cloned() {
+                    self.state.preview_loading = false;
+                    self.state.search_preview = Some(cached.clone());
+                    self.state.poster_image = None;
+                    self.state.poster_protocol = None;
+                    if let Some(img) = self.state.image_cache.get(&id) {
+                        self.state.poster_image = Some((**img).clone());
+                    } else if let Some(url) = cached
+                        .get("cover")
+                        .and_then(|c| c.get("url"))
+                        .and_then(|u| u.as_str())
+                    {
+                        let url = url.to_string();
+                        let tx = self.action_sender.clone();
+                        let id2 = id.clone();
+                        tokio::spawn(async move {
+                            let client = reqwest::Client::builder()
+                                .timeout(std::time::Duration::from_secs(5))
+                                .build()
+                                .unwrap_or_default();
+                            if let Ok(resp) = client
+                                .get(&url)
+                                .header("User-Agent", "MovieBox-Tui/1.0")
+                                .send()
+                                .await
+                                && let Ok(bytes) = resp.bytes().await
+                                && let Ok(img) = image::load_from_memory(&bytes)
+                            {
+                                tx.send(Action::PosterSuccess(id2, std::sync::Arc::new(img)))
+                                    .ok();
+                            }
+                        });
+                    }
+                    return None;
+                }
                 self.state.preview_loading = true;
                 self.state.selected_poster = None;
                 let client = self.client.clone();
@@ -1111,6 +1448,8 @@ impl App {
                 }
 
                 self.state.preview_loading = false;
+
+                self.state.preview_cache.insert(id.clone(), json.clone());
                 self.state.search_preview = Some(json.clone());
                 self.state.poster_image = None;
                 self.state.poster_protocol = None;
@@ -1123,7 +1462,10 @@ impl App {
                     let action_tx = self.action_sender.clone();
                     let id_clone = id.clone();
                     tokio::spawn(async move {
-                        let client = reqwest::Client::new();
+                        let client = reqwest::Client::builder()
+                            .timeout(std::time::Duration::from_secs(5))
+                            .build()
+                            .unwrap_or_default();
                         if let Ok(resp) = client
                             .get(&url_clone)
                             .header("User-Agent", "MovieBox-Tui/1.0")
@@ -1183,8 +1525,6 @@ impl App {
                 if self.state.active_screen == Screen::Details
                     && let Some(link) = self.get_selected_link()
                 {
-                    self.state.toast_message = Some("✓ Fetching subtitles...".to_string());
-                    self.state.toast_timer = 40;
                     let subject_id = self
                         .state
                         .selected_details
@@ -1193,18 +1533,24 @@ impl App {
                         .and_then(|i| i.as_str())
                         .unwrap_or("")
                         .to_string();
-                    let resource_id = self.get_selected_resource_id().unwrap_or("".to_string());
+                    let resource_id = self.get_selected_resource_id();
 
-                    let client = self.client.clone();
-                    let sender = self.action_sender.clone();
-                    let link_clone = link.clone();
-                    tokio::spawn(async move {
-                        if let Ok(res) = client.get_ext_captions(&subject_id, &resource_id).await {
-                            sender.send(Action::ShowSubtitlePopup(link_clone, res)).ok();
-                        } else {
-                            sender.send(Action::LaunchMpv(link_clone, None)).ok();
-                        }
-                    });
+                    if let Some(rid) = resource_id {
+                        self.state.toast_message = Some("✓ Fetching subtitles...".to_string());
+                        self.state.toast_timer = 40;
+                        let client = self.client.clone();
+                        let sender = self.action_sender.clone();
+                        let link_clone = link.clone();
+                        tokio::spawn(async move {
+                            if let Ok(res) = client.get_ext_captions(&subject_id, &rid).await {
+                                sender.send(Action::ShowSubtitlePopup(link_clone, res)).ok();
+                            } else {
+                                sender.send(Action::LaunchMpv(link_clone, None)).ok();
+                            }
+                        });
+                    } else {
+                        self.action_sender.send(Action::LaunchMpv(link, None)).ok();
+                    }
                 }
             }
             Action::ShowSubtitlePopup(link, ext_captions) => {
@@ -1302,7 +1648,10 @@ impl App {
                         let cancel_token = self.state.cancel_download.clone();
                         let sender = self.action_sender.clone();
                         tokio::spawn(async move {
-                            let client = reqwest::Client::new();
+                            let client = reqwest::Client::builder()
+                                .timeout(std::time::Duration::from_secs(30))
+                                .build()
+                                .unwrap_or_default();
                             let head_res = client.head(&link).send().await;
                             let (total_size, supports_ranges) = match head_res {
                                 Ok(r) => {
@@ -1705,6 +2054,7 @@ impl App {
                     }
                 }
             }
+
             Action::DetailsSuccess(id, payload) => {
                 self.state.active_subject_id = Some(id.clone());
                 self.state.selected_details = Some(payload.clone());
@@ -1841,48 +2191,85 @@ impl App {
                 subject_id,
                 season,
                 episode,
-                absolute_episode_index,
+                absolute_episode_index: _,
                 resolution: _,
             } => {
-                self.state.is_loading = true;
-                self.state.selected_resources = None;
-
+                self.state.active_resource_request =
+                    self.state.active_resource_request.wrapping_add(1);
+                let req_id = self.state.active_resource_request;
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
+                self.state.is_loading = true;
+                self.state.selected_resources = None;
                 tokio::spawn(async move {
-                    match client
-                        .get_all_resources(&subject_id, season, episode, absolute_episode_index)
-                        .await
-                    {
+                    match client.get_all_resources(&subject_id, season, episode).await {
                         Ok(res) => {
-                            sender.send(Action::ResourcesSuccess(res)).ok();
+                            sender
+                                .send(Action::ResourcesSuccess(req_id, season, episode, res))
+                                .ok();
                         }
                         Err(e) => {
                             sender
-                                .send(Action::ResourcesFailure(format!("{:?}", e)))
+                                .send(Action::ResourcesFailure(req_id, format!("{:?}", e)))
                                 .ok();
                         }
                     }
                 });
             }
-            Action::ResourcesSuccess(payload) => {
-                let mut sorted_payload = payload.clone();
-                if let Some(obj) = sorted_payload.as_object_mut()
-                    && let Some(list) = obj.get_mut("list").and_then(|l| l.as_array_mut())
-                {
-                    list.sort_by(|a, b| {
-                        let res_a = a.get("resolution").and_then(|r| r.as_i64()).unwrap_or(0);
-                        let res_b = b.get("resolution").and_then(|r| r.as_i64()).unwrap_or(0);
-                        res_b.cmp(&res_a)
-                    });
+            Action::ResourcesSuccess(req_id, target_se, target_ep, payload) => {
+                if req_id != self.state.active_resource_request {
+                    return None;
                 }
-                self.state.is_loading = false;
-                self.state.selected_resources = Some(sorted_payload);
 
-                let mut count = 0;
-                if let Some(list) = payload.get("list").and_then(|l| l.as_array()) {
-                    count = list.len();
+                let raw_list = payload
+                    .get("list")
+                    .and_then(|l| l.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+
+                let mut filtered: Vec<serde_json::Value> = if target_se == 0 && target_ep == 0 {
+                    raw_list
+                } else {
+                    raw_list
+                        .into_iter()
+                        .filter(|stream| {
+                            let s = stream
+                                .get("se")
+                                .and_then(|v| {
+                                    v.as_i64()
+                                        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                                })
+                                .unwrap_or(0) as usize;
+                            let e = stream
+                                .get("ep")
+                                .and_then(|v| {
+                                    v.as_i64()
+                                        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                                })
+                                .unwrap_or(0) as usize;
+                            s == target_se && e == target_ep
+                        })
+                        .collect()
+                };
+
+                filtered.sort_by(|a, b| {
+                    let res_a = a.get("resolution").and_then(|r| r.as_i64()).unwrap_or(0);
+                    let res_b = b.get("resolution").and_then(|r| r.as_i64()).unwrap_or(0);
+                    res_b.cmp(&res_a)
+                });
+
+                let count = filtered.len();
+
+                if let Some(ref subject_id) = self.state.active_subject_id {
+                    self.state
+                        .stream_cache
+                        .insert((subject_id.clone(), target_se, target_ep), filtered.clone());
                 }
+
+                let mut result = serde_json::Map::new();
+                result.insert("list".to_string(), serde_json::Value::Array(filtered));
+                self.state.selected_resources = Some(serde_json::Value::Object(result));
+                self.state.is_loading = false;
 
                 self.state
                     .resource_list_state
@@ -1890,7 +2277,10 @@ impl App {
                 self.state.status_message = format!("Resolved {} direct stream sources.", count);
                 self.state.status_timer = 150;
             }
-            Action::ResourcesFailure(err) => {
+            Action::ResourcesFailure(req_id, err) => {
+                if req_id != self.state.active_resource_request {
+                    return None;
+                }
                 self.state.is_loading = false;
                 if err.contains("406") || err.to_lowercase().contains("exhausted") {
                     self.state.status_message =
@@ -1925,6 +2315,39 @@ impl App {
 
     fn draw(&mut self, frame: &mut Frame) {
         let area = frame.area();
+
+        if area.width < 85 || area.height < 24 {
+            use ratatui::layout::Alignment;
+            use ratatui::text::Line;
+            use ratatui::widgets::{Block, Borders, Paragraph};
+
+            let msg_lines = vec![
+                Line::from(format!(
+                    "Terminal too small ({}x{}).",
+                    area.width, area.height
+                )),
+                Line::from("Minimum required size: 85x24"),
+                Line::from("Please enlarge your terminal window."),
+            ];
+
+            let padding_top = area.height.saturating_sub(2).saturating_sub(3) / 2;
+            let mut msg = Vec::new();
+            for _ in 0..padding_top {
+                msg.push(Line::from(""));
+            }
+            msg.extend(msg_lines);
+
+            let p = Paragraph::new(msg)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(self.theme.border),
+                )
+                .alignment(Alignment::Center);
+
+            frame.render_widget(p, area);
+            return;
+        }
 
         match self.state.active_screen {
             Screen::Home => {

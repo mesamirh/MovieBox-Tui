@@ -30,10 +30,7 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
     let help_text = vec![
         Line::from(vec![Span::styled(
             "  Global",
-            theme
-                .header
-                .add_modifier(ratatui::style::Modifier::BOLD)
-                .add_modifier(ratatui::style::Modifier::UNDERLINED),
+            theme.header.add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![
             Span::styled("    [?]        ", theme.header),
@@ -50,10 +47,7 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
         Line::from(vec![]),
         Line::from(vec![Span::styled(
             "  Navigation",
-            theme
-                .header
-                .add_modifier(ratatui::style::Modifier::BOLD)
-                .add_modifier(ratatui::style::Modifier::UNDERLINED),
+            theme.header.add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![
             Span::styled("    [↑] / [↓]  ", theme.header),
@@ -69,11 +63,25 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
         ]),
         Line::from(vec![]),
         Line::from(vec![Span::styled(
+            "  Discover & Search",
+            theme.header.add_modifier(ratatui::style::Modifier::BOLD),
+        )]),
+        Line::from(vec![
+            Span::styled("    /movies    ", theme.header),
+            Span::styled("Discover Movies", theme.text),
+        ]),
+        Line::from(vec![
+            Span::styled("    /shows     ", theme.header),
+            Span::styled("Discover TV Shows", theme.text),
+        ]),
+        Line::from(vec![
+            Span::styled("    /anime     ", theme.header),
+            Span::styled("Discover Anime", theme.text),
+        ]),
+        Line::from(vec![]),
+        Line::from(vec![Span::styled(
             "  Stream Controls",
-            theme
-                .header
-                .add_modifier(ratatui::style::Modifier::BOLD)
-                .add_modifier(ratatui::style::Modifier::UNDERLINED),
+            theme.header.add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![
             Span::styled("    [p]        ", theme.header),

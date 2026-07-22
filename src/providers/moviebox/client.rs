@@ -50,6 +50,7 @@ impl MovieBoxClient {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
+            .connect_timeout(std::time::Duration::from_secs(3))
             .build()
             .expect("Failed to build reqwest client; TLS backend may be missing");
 
@@ -65,6 +66,10 @@ impl MovieBoxClient {
             client_info,
             spoofed_ip,
         }
+    }
+
+    pub fn http_client(&self) -> &reqwest::Client {
+        &self.client
     }
 
     pub async fn init(&self) -> Result<(), ScraperError> {

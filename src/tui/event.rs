@@ -18,15 +18,19 @@ impl EventHandler {
             loop {
                 let polled = crossterm::event::poll(Duration::from_millis(50)).unwrap_or(false);
                 if polled {
-                    let key_opt = match crossterm::event::read() {
-                        Ok(CrosstermEvent::Key(key)) => Some(key),
-                        _ => None,
-                    };
-                    if let Some(key) = key_opt {
-                        let is_press = key.kind == KeyEventKind::Press;
-                        if is_press && event_sender.send(Action::Key(key)).is_err() {
-                            break;
+                    match crossterm::event::read() {
+                        Ok(CrosstermEvent::Key(key)) => {
+                            let is_press = key.kind == KeyEventKind::Press;
+                            if is_press && event_sender.send(Action::Key(key)).is_err() {
+                                break;
+                            }
                         }
+                        Ok(CrosstermEvent::Resize(w, h)) => {
+                            if event_sender.send(Action::Resize(w, h)).is_err() {
+                                break;
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 tokio::task::yield_now().await;

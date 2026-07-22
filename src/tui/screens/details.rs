@@ -45,10 +45,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         }
     };
 
-    let title = details_json
+    let raw_title = details_json
         .get("title")
         .and_then(|t| t.as_str())
-        .unwrap_or("Unknown");
+        .unwrap_or("Unknown Title");
+    let title = crate::tui::app::clean_moviebox_title(raw_title);
     let intro = details_json
         .get("description")
         .and_then(|d| d.as_str())
@@ -246,8 +247,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         c.push(Constraint::Length(22));
     }
     if is_series {
-        c.push(Constraint::Length(15));
-        c.push(Constraint::Length(15));
+        c.push(Constraint::Length(18));
+        c.push(Constraint::Length(18));
     }
     c.push(Constraint::Min(1));
 

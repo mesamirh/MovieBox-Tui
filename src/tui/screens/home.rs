@@ -470,6 +470,26 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                 current_y += row_height;
             }
+
+            let content_len = state.search_results.len();
+            if content_len > state.visible_items {
+                let scrollbar = ratatui::widgets::Scrollbar::default()
+                    .orientation(ratatui::widgets::ScrollbarOrientation::VerticalRight)
+                    .begin_symbol(Some("▲"))
+                    .end_symbol(Some("▼"))
+                    .track_symbol(Some("│"))
+                    .thumb_symbol("█");
+
+                let mut scrollbar_state = ratatui::widgets::ScrollbarState::default()
+                    .content_length(content_len.saturating_sub(state.visible_items))
+                    .position(offset);
+
+                let mut sb_area = chunks[1];
+                sb_area.y += 1;
+                sb_area.height = sb_area.height.saturating_sub(2);
+
+                frame.render_stateful_widget(scrollbar, sb_area, &mut scrollbar_state);
+            }
         } else {
             let inner_area = list_block.inner(chunks[1]);
             frame.render_widget(list_block, chunks[1]);
