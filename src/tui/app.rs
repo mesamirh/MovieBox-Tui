@@ -1728,11 +1728,8 @@ impl App {
 
                         let cancel_token = self.state.cancel_download.clone();
                         let sender = self.action_sender.clone();
+                        let client = self.client.http_client().clone();
                         tokio::spawn(async move {
-                            let client = reqwest::Client::builder()
-                                .timeout(std::time::Duration::from_secs(30))
-                                .build()
-                                .unwrap_or_default();
                             let head_res = client.head(&link).send().await;
                             let (total_size, supports_ranges) = match head_res {
                                 Ok(r) => {
