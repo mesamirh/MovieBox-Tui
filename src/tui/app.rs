@@ -312,7 +312,7 @@ impl App {
                                     }
                                     crate::tui::state::DetailsPane::Episodes => {
                                         if let Some(res) = &self.state.selected_details
-                                            && let Some(id) = res.get("id").and_then(|i| i.as_str())
+                                            && let Some(id) = res.get("subjectId").and_then(|i| i.as_str())
                                         {
                                             let se_idx = self
                                                 .state
@@ -1605,8 +1605,9 @@ impl App {
                     self.state.language_list_state.select(Some(0));
                 }
 
-                self.state.selected_season = 1;
-                self.state.selected_episode = 1;
+                let (se, ep) = if stype == 2 { (1usize, 1usize) } else { (0usize, 0usize) };
+                self.state.selected_season = se;
+                self.state.selected_episode = ep;
 
                 let has_multiple_dubs = payload
                     .get("dubs")
@@ -1624,11 +1625,6 @@ impl App {
                         self.state.details_pane = crate::tui::state::DetailsPane::Streams;
                     }
 
-                    let (se, ep) = if stype == 2 {
-                        (1usize, 1usize)
-                    } else {
-                        (0usize, 0usize)
-                    };
                     let sender = self.action_sender.clone();
                     sender
                         .send(Action::FetchResources {
@@ -1650,22 +1646,29 @@ impl App {
                 episode,
                 resolution: _,
             } => {
+                self.state.selected_resources = None;
+                self.state.resource_list_state.select(None);
+                self.state.is_loading = true;
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 tokio::spawn(async move {
                     match client.get_all_resources(&subject_id, season, episode).await {
                         Ok(res) => {
-                            sender.send(Action::ResourcesSuccess(res)).ok();
+                            sender.send(Action::ResourcesSuccess(season, episode, res)).ok();
                         }
                         Err(e) => {
                             sender
-                                .send(Action::ResourcesFailure(format!("{:?}", e)))
+                                .send(Action::ResourcesFailure(season, episode, format!("{:?}", e)))
                                 .ok();
                         }
                     }
                 });
             }
-            Action::ResourcesSuccess(payload) => {
+            Action::ResourcesSuccess(season, episode, payload) => {
+                if season != self.state.selected_season || episode != self.state.selected_episode {
+                    return None;
+                }
+
                 let mut sorted_payload = payload.clone();
                 if let Some(obj) = sorted_payload.as_object_mut()
                     && let Some(list) = obj.get_mut("list").and_then(|l| l.as_array_mut())
@@ -1689,7 +1692,11 @@ impl App {
                     .select(if count > 0 { Some(0) } else { None });
                 self.state.status_message = format!("Resolved {} direct stream sources.", count); self.state.status_timer = 150;
             }
-            Action::ResourcesFailure(err) => {
+            Action::ResourcesFailure(season, episode, err) => {
+                if season != self.state.selected_season || episode != self.state.selected_episode {
+                    return None;
+                }
+
                 self.state.is_loading = false;
                 if err.contains("406") || err.to_lowercase().contains("exhausted") {
                     self.state.status_message =
