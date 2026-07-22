@@ -149,6 +149,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         if let Some((_, proto)) = &state.poster_protocol {
             frame.render_widget(ratatui_image::Image::new(proto), poster_area);
         }
+    } else if state.poster_unavailable {
+        let placeholder = Paragraph::new("\n\n\n\n\n  No poster available".to_string())
+            .style(theme.text_dim)
+            .alignment(Alignment::Center);
+        frame.render_widget(placeholder, poster_area);
     } else {
         let current_spinner = if state.basic_terminal {
             let frames = ['-', '\\', '|', '/'];

@@ -59,6 +59,7 @@ pub struct AppState {
     pub tick_count: u64,
     pub poster_image: Option<image::DynamicImage>,
     pub poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
+    pub poster_unavailable: bool,
     pub image_picker: Option<ratatui_image::picker::Picker>,
     pub image_cache: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
 
@@ -118,6 +119,7 @@ impl Default for AppState {
             tick_count: 0,
             poster_image: None,
             poster_protocol: None,
+            poster_unavailable: false,
             image_picker: None,
             image_cache: lru::LruCache::new(std::num::NonZeroUsize::new(10).unwrap()),
             show_logs: false,

@@ -37,9 +37,10 @@ pub enum Action {
         episode: usize,
         resolution: String,
     },
-    ResourcesSuccess(serde_json::Value),
-    ResourcesFailure(String),
+    ResourcesSuccess(usize, usize, serde_json::Value),
+    ResourcesFailure(usize, usize, String),
     PosterSuccess(String, std::sync::Arc<image::DynamicImage>),
+    PosterFailure(String),
     Log(String),
     UpdateAvailable(String),
 }

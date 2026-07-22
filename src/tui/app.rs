@@ -251,6 +251,10 @@ impl App {
                             KeyCode::Char('q') => {
                                 self.action_sender.send(Action::Quit).ok();
                             }
+                            KeyCode::Char('/') if key.modifiers.is_empty() => {
+                                self.state.input_mode = InputMode::Editing;
+                                self.state.status_message = String::new(); self.state.status_timer = 150;
+                            }
                             KeyCode::Char(c)
                                 if (key.modifiers.is_empty()
                                     || key.modifiers == KeyModifiers::SHIFT) =>
@@ -308,7 +312,7 @@ impl App {
                                     }
                                     crate::tui::state::DetailsPane::Episodes => {
                                         if let Some(res) = &self.state.selected_details
-                                            && let Some(id) = res.get("id").and_then(|i| i.as_str())
+                                            && let Some(id) = res.get("subjectId").and_then(|i| i.as_str())
                                         {
                                             let se_idx = self
                                                 .state
@@ -869,7 +873,7 @@ impl App {
             }
             Action::PreviewSuccess(id, json) => {
                 let current_id = if self.state.active_screen == Screen::Details {
-                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_str()).map(|s| s.to_string())
+                    self.state.selected_details.as_ref().and_then(|d| d.get("subjectId")).and_then(|i| i.as_str()).map(|s| s.to_string())
                 } else {
                     self.state
                         .search_list_state
@@ -886,6 +890,7 @@ impl App {
                 self.state.search_preview = Some(json.clone());
                 self.state.poster_image = None;
                 self.state.poster_protocol = None;
+                self.state.poster_unavailable = false;
                 if let Some(cached_img) = self.state.image_cache.get(&id) {
                     self.state.poster_image = Some((**cached_img).clone());
                 } else if let Some(cover_val) = json.get("cover")
@@ -895,22 +900,49 @@ impl App {
                     let action_tx = self.action_sender.clone();
                     let id_clone = id.clone();
                     tokio::spawn(async move {
-                        let client = reqwest::Client::new();
-                        if let Ok(resp) = client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await
-                            && let Ok(bytes) = resp.bytes().await
-                            && let Ok(img) = image::load_from_memory(&bytes)
+                        let client = match reqwest::Client::builder()
+                            .timeout(std::time::Duration::from_secs(15))
+                            .build()
                         {
-                            let _ = action_tx
-                                .send(Action::PosterSuccess(id_clone, std::sync::Arc::new(img)));
+                            Ok(c) => c,
+                            Err(e) => {
+                                let _ = action_tx.send(Action::Log(format!("Poster client build failed: {}", e)));
+                                let _ = action_tx.send(Action::PosterFailure(id_clone));
+                                return;
+                            }
+                        };
+                        match client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await {
+                            Ok(resp) => match resp.bytes().await {
+                                Ok(bytes) => match image::load_from_memory(&bytes) {
+                                    Ok(img) => {
+                                        let _ = action_tx.send(Action::PosterSuccess(id_clone, std::sync::Arc::new(img)));
+                                    }
+                                    Err(e) => {
+                                        let _ = action_tx.send(Action::Log(format!("Poster decode failed: {}", e)));
+                                        let _ = action_tx.send(Action::PosterFailure(id_clone));
+                                    }
+                                },
+                                Err(e) => {
+                                    let _ = action_tx.send(Action::Log(format!("Poster fetch failed: {}", e)));
+                                    let _ = action_tx.send(Action::PosterFailure(id_clone));
+                                }
+                            },
+                            Err(e) => {
+                                let _ = action_tx.send(Action::Log(format!("Poster request failed: {}", e)));
+                                let _ = action_tx.send(Action::PosterFailure(id_clone));
+                            }
                         }
                     });
+                } else {
+                    self.state.add_log("No poster art available for this title.".to_string());
+                    self.state.poster_unavailable = true;
                 }
             }
             Action::PosterSuccess(id, img) => {
                 self.state.image_cache.put(id.clone(), img.clone());
                 
                 let current_id = if self.state.active_screen == Screen::Details {
-                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_str()).map(|s| s.to_string())
+                    self.state.selected_details.as_ref().and_then(|d| d.get("subjectId")).and_then(|i| i.as_str()).map(|s| s.to_string())
                 } else {
                     self.state
                         .search_list_state
@@ -922,6 +954,22 @@ impl App {
                 if current_id.as_deref() == Some(id.as_str()) {
                     self.state.poster_image = Some((*img).clone());
                     self.state.poster_protocol = None;
+                    self.state.poster_unavailable = false;
+                }
+            }
+            Action::PosterFailure(id) => {
+                let current_id = if self.state.active_screen == Screen::Details {
+                    self.state.selected_details.as_ref().and_then(|d| d.get("subjectId")).and_then(|i| i.as_str()).map(|s| s.to_string())
+                } else {
+                    self.state
+                        .search_list_state
+                        .selected()
+                        .and_then(|idx| self.state.search_results.get(idx))
+                        .map(|res| res.id.clone())
+                };
+
+                if current_id.as_deref() == Some(id.as_str()) {
+                    self.state.poster_unavailable = true;
                 }
             }
             Action::PreviewFailure(err) => {
@@ -955,7 +1003,7 @@ impl App {
                         .state
                         .selected_details
                         .as_ref()
-                        .and_then(|d| d.get("id"))
+                        .and_then(|d| d.get("subjectId"))
                         .and_then(|i| i.as_str())
                         .unwrap_or("")
                         .to_string();
@@ -1461,7 +1509,7 @@ impl App {
             }
             Action::DetailsSuccess(id, payload) => {
                 self.state.selected_details = Some(payload.clone());
-                
+
                 if self.state.poster_image.is_none() {
                     if let Some(cached_img) = self.state.image_cache.get(&id) {
                         self.state.poster_image = Some((**cached_img).clone());
@@ -1472,14 +1520,42 @@ impl App {
                         let action_tx = self.action_sender.clone();
                         let id_clone = id.clone();
                         tokio::spawn(async move {
-                            let client = reqwest::Client::new();
-                            if let Ok(resp) = client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await
-                                && let Ok(bytes) = resp.bytes().await
-                                && let Ok(img) = image::load_from_memory(&bytes)
+                            let client = match reqwest::Client::builder()
+                                .timeout(std::time::Duration::from_secs(15))
+                                .build()
                             {
-                                let _ = action_tx.send(Action::PosterSuccess(id_clone, std::sync::Arc::new(img)));
+                                Ok(c) => c,
+                                Err(e) => {
+                                    let _ = action_tx.send(Action::Log(format!("Poster client build failed: {}", e)));
+                                    let _ = action_tx.send(Action::PosterFailure(id_clone));
+                                    return;
+                                }
+                            };
+                            match client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await {
+                                Ok(resp) => match resp.bytes().await {
+                                    Ok(bytes) => match image::load_from_memory(&bytes) {
+                                        Ok(img) => {
+                                            let _ = action_tx.send(Action::PosterSuccess(id_clone, std::sync::Arc::new(img)));
+                                        }
+                                        Err(e) => {
+                                            let _ = action_tx.send(Action::Log(format!("Poster decode failed: {}", e)));
+                                            let _ = action_tx.send(Action::PosterFailure(id_clone));
+                                        }
+                                    },
+                                    Err(e) => {
+                                        let _ = action_tx.send(Action::Log(format!("Poster fetch failed: {}", e)));
+                                        let _ = action_tx.send(Action::PosterFailure(id_clone));
+                                    }
+                                },
+                                Err(e) => {
+                                    let _ = action_tx.send(Action::Log(format!("Poster request failed: {}", e)));
+                                    let _ = action_tx.send(Action::PosterFailure(id_clone));
+                                }
                             }
                         });
+                    } else {
+                        self.state.add_log("No poster art available for this title.".to_string());
+                        self.state.poster_unavailable = true;
                     }
                 }
 
@@ -1518,7 +1594,7 @@ impl App {
 
                 if let Some(dubs) = payload.get("dubs").and_then(|d| d.as_array()) {
                     let mut current_idx = 0;
-                    let current_id = payload.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                    let current_id = payload.get("subjectId").and_then(|i| i.as_str()).unwrap_or("");
                     for (i, dub) in dubs.iter().enumerate() {
                         if dub.get("subjectId").and_then(|i| i.as_str()) == Some(current_id) {
                             current_idx = i;
@@ -1529,8 +1605,9 @@ impl App {
                     self.state.language_list_state.select(Some(0));
                 }
 
-                self.state.selected_season = 1;
-                self.state.selected_episode = 1;
+                let (se, ep) = if stype == 2 { (1usize, 1usize) } else { (0usize, 0usize) };
+                self.state.selected_season = se;
+                self.state.selected_episode = ep;
 
                 let has_multiple_dubs = payload
                     .get("dubs")
@@ -1548,11 +1625,6 @@ impl App {
                         self.state.details_pane = crate::tui::state::DetailsPane::Streams;
                     }
 
-                    let (se, ep) = if stype == 2 {
-                        (1usize, 1usize)
-                    } else {
-                        (0usize, 0usize)
-                    };
                     let sender = self.action_sender.clone();
                     sender
                         .send(Action::FetchResources {
@@ -1574,22 +1646,29 @@ impl App {
                 episode,
                 resolution: _,
             } => {
+                self.state.selected_resources = None;
+                self.state.resource_list_state.select(None);
+                self.state.is_loading = true;
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 tokio::spawn(async move {
                     match client.get_all_resources(&subject_id, season, episode).await {
                         Ok(res) => {
-                            sender.send(Action::ResourcesSuccess(res)).ok();
+                            sender.send(Action::ResourcesSuccess(season, episode, res)).ok();
                         }
                         Err(e) => {
                             sender
-                                .send(Action::ResourcesFailure(format!("{:?}", e)))
+                                .send(Action::ResourcesFailure(season, episode, format!("{:?}", e)))
                                 .ok();
                         }
                     }
                 });
             }
-            Action::ResourcesSuccess(payload) => {
+            Action::ResourcesSuccess(season, episode, payload) => {
+                if season != self.state.selected_season || episode != self.state.selected_episode {
+                    return None;
+                }
+
                 let mut sorted_payload = payload.clone();
                 if let Some(obj) = sorted_payload.as_object_mut()
                     && let Some(list) = obj.get_mut("list").and_then(|l| l.as_array_mut())
@@ -1613,7 +1692,11 @@ impl App {
                     .select(if count > 0 { Some(0) } else { None });
                 self.state.status_message = format!("Resolved {} direct stream sources.", count); self.state.status_timer = 150;
             }
-            Action::ResourcesFailure(err) => {
+            Action::ResourcesFailure(season, episode, err) => {
+                if season != self.state.selected_season || episode != self.state.selected_episode {
+                    return None;
+                }
+
                 self.state.is_loading = false;
                 if err.contains("406") || err.to_lowercase().contains("exhausted") {
                     self.state.status_message =
