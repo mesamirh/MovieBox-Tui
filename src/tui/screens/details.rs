@@ -603,7 +603,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     }
 
     if state.player_picker_popup {
-        let popup_width = 40;
+        let popup_width = 24;
         let popup_height = std::cmp::min(15, state.available_players.len() as u16 + 2);
 
         let area = frame.area();
@@ -621,9 +621,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .iter()
             .map(|k| {
                 let text = match k {
-                    crate::tui::state::PlayerKind::Mpv => "mpv         (terminal)",
-                    crate::tui::state::PlayerKind::Iina => "IINA        (macOS)",
-                    crate::tui::state::PlayerKind::Vlc => "VLC         (cross-platform)",
+                    crate::tui::state::PlayerKind::Mpv => "mpv",
+                    crate::tui::state::PlayerKind::Iina => "IINA",
+                    crate::tui::state::PlayerKind::Vlc => "VLC",
                 };
                 ratatui::widgets::ListItem::new(text)
             })
@@ -645,7 +645,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     }
 
     let footer_text =
-        "Enter Play      ⇧+Enter Open With...      D Download      C Copy Link      Esc Back";
+        "Enter Play      o Open With...      D Download      C Copy Link      Esc Back";
     let footer_p = Paragraph::new(footer_text)
         .alignment(Alignment::Center)
         .style(theme.muted);

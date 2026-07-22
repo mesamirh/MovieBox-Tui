@@ -401,6 +401,11 @@ impl App {
                             KeyCode::Char('y') | KeyCode::Char('c') => {
                                 self.action_sender.send(Action::CopyLink).ok();
                             }
+                            KeyCode::Char('o') | KeyCode::Char('O') => {
+                                if let crate::tui::state::DetailsPane::Streams = self.state.details_pane {
+                                    self.action_sender.send(Action::PlayStream(true)).ok();
+                                }
+                            }
                             KeyCode::Char('d') | KeyCode::Char('D') => {
                                 self.action_sender.send(Action::DownloadStream).ok();
                             }
@@ -432,7 +437,7 @@ impl App {
                             }
                             KeyCode::Enter => {
                                 let open_with = key.modifiers.contains(crossterm::event::KeyModifiers::SHIFT);
-                                if self.state.subtitle_popup {
+                                if self.state.subtitle_popup || self.state.player_picker_popup {
                                     self.action_sender.send(Action::Submit).ok();
                                 } else {
                                     match self.state.details_pane {
@@ -1011,6 +1016,7 @@ impl App {
                         None => 0,
                     };
                     self.state.player_picker_state.select(Some(i));
+                    return None;
                 } else if self.state.subtitle_popup {
                     let current = self.state.subtitle_list_state.selected().unwrap_or(0);
                     if current > 0 {
@@ -1115,6 +1121,7 @@ impl App {
                         None => 0,
                     };
                     self.state.player_picker_state.select(Some(i));
+                    return None;
                 } else if self.state.subtitle_popup {
                     let current = self.state.subtitle_list_state.selected().unwrap_or(0);
                     if current + 1 < self.state.subtitle_list.len() {
@@ -1324,6 +1331,17 @@ impl App {
                     return None;
                 }
                 if self.state.last_search_edit.elapsed().as_millis() < 500 {
+                    return None;
+                }
+                if self.state.player_picker_popup {
+                    self.state.player_picker_popup = false;
+                    let idx = self.state.player_picker_state.selected().unwrap_or(0);
+                    if let Some(player) = self.state.available_players.get(idx).copied() {
+                        if let Some(link) = self.state.player_picker_link.take() {
+                            let sub = self.state.player_picker_subtitle.take();
+                            self.action_sender.send(Action::LaunchPlayer(player, link, sub)).ok();
+                        }
+                    }
                     return None;
                 }
                 if self.state.subtitle_popup {
@@ -2476,10 +2494,11 @@ impl App {
 
             use ratatui::widgets::Paragraph;
 
+            let inner_area = area.inner(ratatui::layout::Margin { vertical: 1, horizontal: 2 });
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(1), Constraint::Min(0)])
-                .split(area);
+                .split(inner_area);
 
             let toast_area = Layout::default()
                 .direction(Direction::Horizontal)
