@@ -104,9 +104,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let details_block = Block::default()
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
-        .title(" Subject Info ")
-        .title_style(theme.title)
-        .border_style(theme.border);
+        .border_style(theme.border)
+        .padding(ratatui::widgets::Padding::new(2, 2, 1, 1));
 
     let inner_area = details_block.inner(chunks[0]);
     frame.render_widget(details_block.clone(), chunks[0]);
@@ -117,7 +116,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Length(poster_width),
-            Constraint::Length(2),
+            Constraint::Length(4),
             Constraint::Min(1),
         ])
         .split(inner_area);
@@ -176,25 +175,18 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         frame.render_widget(placeholder, poster_area);
     }
 
-    let num_rating = imdb_rating.parse::<f32>().unwrap_or(0.0);
 
-    let filled_stars = (num_rating / 2.0).round() as usize;
-    let filled_stars = filled_stars.clamp(0, 5);
-    let empty_stars = 5 - filled_stars;
-    let stars_str = format!("{}{}", "★".repeat(filled_stars), "☆".repeat(empty_stars));
 
     let title_line = Line::from(vec![
-        Span::styled(format!("{}", title), theme.text.add_modifier(ratatui::style::Modifier::BOLD)),
-    ]);
-    
-    let rating_line = Line::from(vec![
-        Span::styled(format!("{} {} IMDb", stars_str, imdb_rating), theme.rating),
+        Span::styled(title.to_string(), theme.text.add_modifier(ratatui::style::Modifier::BOLD)),
+        Span::styled("   ", theme.text),
+        Span::styled(format!("★ IMDb {}", imdb_rating), theme.rating),
     ]);
 
     let duration_str = if duration.is_empty() || duration == "N/A" {
         "".to_string()
     } else {
-        format!(" │ {}", duration)
+        format!(" • {}", duration)
     };
 
     let meta_line = Line::from(vec![
@@ -205,15 +197,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         Span::styled(genres.to_string(), theme.text_dim),
     ]);
     
-
     let top_meta = vec![
         title_line,
-        rating_line,
         meta_line,
         genre_line,
+        Line::from(vec![]),
+        Line::from(vec![Span::styled("Synopsis", theme.text)]),
     ];
     
-
     let meta_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -222,11 +213,10 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         ])
         .split(right_area);
 
-    let meta_p = Paragraph::new(top_meta);
+    let meta_p = Paragraph::new(top_meta).wrap(Wrap { trim: true });
     frame.render_widget(meta_p, meta_chunks[0]);
 
     let syn_lines = vec![
-        Line::from(vec![Span::styled("Synopsis", theme.title)]),
         Line::from(vec![Span::styled(intro, theme.text_dim.add_modifier(ratatui::style::Modifier::DIM))])
     ];
     let intro_p = Paragraph::new(syn_lines).wrap(Wrap { trim: true });
@@ -239,48 +229,38 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     };
 
     let is_series = type_val == 2 && !state.available_seasons.is_empty();
-    let bottom_chunks = if has_languages && !state.language_chosen {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(0), Constraint::Length(20), Constraint::Min(0)])
-            .split(bottom_area)
-    } else {
-        let mut c = Vec::new();
-        if has_languages || is_series {
-            c.push(Constraint::Length(22)); // Left side panel
-        }
-        c.push(Constraint::Min(1)); // Streams panel
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(c)
-            .split(bottom_area)
-    };
-    
-    let mut left_panel_chunks: std::rc::Rc<[ratatui::layout::Rect]> = std::rc::Rc::new([]);
-    if (!has_languages || state.language_chosen) && (has_languages || is_series) {
-        let mut v_constraints = Vec::new();
-        if has_languages {
-            let mut h = 3;
-            if let Some(dubs) = details_json.get("dubs").and_then(|d| d.as_array()) {
-                h = (dubs.len() as u16) + 2;
-            }
-            v_constraints.push(Constraint::Max(h));
-        }
-        if is_series {
-            let seasons_count = state.available_seasons.len() as u16;
-            let mut eps_count = 1;
-            if let Some(season) = state.available_seasons.get(state.season_list_state.selected().unwrap_or(0)) {
-                eps_count = season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1) as u16;
-            }
-            v_constraints.push(Constraint::Max(seasons_count + 2));
-            v_constraints.push(Constraint::Max(eps_count + 2));
-        }
-        v_constraints.push(Constraint::Min(0));
-        left_panel_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(v_constraints)
-            .split(bottom_chunks[0]);
+
+    let mut c = Vec::new();
+    if has_languages {
+        c.push(Constraint::Length(22));
     }
+    if is_series {
+        c.push(Constraint::Length(15));
+        c.push(Constraint::Length(15));
+    }
+    c.push(Constraint::Min(1));
+    
+    let bottom_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(c)
+        .split(bottom_area);
+        
+    let mut chunk_idx = 0;
+    let mut lang_area = None;
+    let mut seasons_area = None;
+    let mut eps_area = None;
+    
+    if has_languages {
+        lang_area = Some(bottom_chunks[chunk_idx]);
+        chunk_idx += 1;
+    }
+    if is_series {
+        seasons_area = Some(bottom_chunks[chunk_idx]);
+        chunk_idx += 1;
+        eps_area = Some(bottom_chunks[chunk_idx]);
+        chunk_idx += 1;
+    }
+    let streams_area = bottom_chunks[chunk_idx];
 
     if has_languages {
         use ratatui::widgets::{List, ListItem};
@@ -303,7 +283,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 }
             }
         }
-        let list_height = (lang_items.len() as u16).saturating_add(2);
         
         let lang_border = if state.details_pane == crate::tui::state::DetailsPane::Languages {
             theme.border_focus
@@ -316,28 +295,16 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .title(" Audio ")
-                    .border_style(lang_border),
+                    .border_style(lang_border)
+                    .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
             .highlight_symbol("▌ ");
 
-        let lang_area = if !state.language_chosen {
-            let v_split = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(0),
-                    Constraint::Length(list_height),
-                    Constraint::Min(0),
-                ])
-                .split(bottom_chunks[1]);
-            v_split[1]
-        } else {
-            left_panel_chunks[0]
-        };
-        frame.render_stateful_widget(lang_list, lang_area, &mut state.language_list_state);
+        if let Some(area) = lang_area {
+            frame.render_stateful_widget(lang_list, area, &mut state.language_list_state);
+        }
     }
-
-    if !has_languages || state.language_chosen {
 
     if is_series {
         use ratatui::widgets::{List, ListItem};
@@ -361,17 +328,15 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .title(" Seasons ")
-                    .border_style(seasons_border),
+                    .border_style(seasons_border)
+                    .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
             .highlight_symbol("▌ ");
 
-        let seasons_area = if has_languages {
-            left_panel_chunks[1]
-        } else {
-            left_panel_chunks[0]
-        };
-        frame.render_stateful_widget(seasons_list, seasons_area, &mut state.season_list_state);
+        if let Some(area) = seasons_area {
+            frame.render_stateful_widget(seasons_list, area, &mut state.season_list_state);
+        }
 
         let ep_items: Vec<ListItem> = if let Some(season) = state
             .available_seasons
@@ -396,24 +361,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .title(" Episodes ")
-                    .border_style(eps_border),
+                    .border_style(eps_border)
+                    .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
             .highlight_symbol("▌ ");
 
-        let eps_area = if has_languages {
-            left_panel_chunks[2]
-        } else {
-            left_panel_chunks[1]
-        };
-        frame.render_stateful_widget(eps_list, eps_area, &mut state.episode_list_state);
+        if let Some(area) = eps_area {
+            frame.render_stateful_widget(eps_list, area, &mut state.episode_list_state);
+        }
     }
 
-    let streams_area = if has_languages || is_series {
-        bottom_chunks[1]
-    } else {
-        bottom_chunks[0]
-    };
     let streams_border = if state.details_pane == crate::tui::state::DetailsPane::Streams {
         theme.border_focus
     } else {
@@ -438,7 +396,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         .border_type(ratatui::widgets::BorderType::Rounded)
         .title(ratatui::text::Line::from(streams_title).alignment(Alignment::Left))
         .title_style(theme.title)
-        .border_style(streams_border);
+        .border_style(streams_border)
+        .padding(ratatui::widgets::Padding::horizontal(1));
 
     let mut render_list = None;
     match &state.selected_resources {
@@ -526,6 +485,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 let p = Paragraph::new(format!("{}{}", pad, msg))
                     .style(theme.text_dim)
                     .alignment(Alignment::Center)
+                    .wrap(Wrap { trim: true })
                     .block(streams_block.clone());
                 frame.render_widget(p, streams_area);
             }
@@ -543,7 +503,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
                 format!("{} Loading streams...", spinner)
             } else if has_multiple_dubs && !state.language_chosen {
-                "Please select a language dubbing from the right panel to view streams.".to_string()
+                "Please select a language dubbing from the Audio panel to view streams.".to_string()
             } else if state.status_message.to_lowercase().contains("failed")
                 || state.status_message.to_lowercase().contains("error")
             {
@@ -563,6 +523,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             let p = Paragraph::new(format!("{}{}", pad, msg))
                 .style(style)
                 .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true })
                 .block(streams_block.clone());
             frame.render_widget(p, streams_area);
         }
@@ -573,7 +534,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     } else {
         frame.render_widget(streams_block, streams_area);
     }
-    }
+
 
     if state.subtitle_popup {
         let popup_width = 50;

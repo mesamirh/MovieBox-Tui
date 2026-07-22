@@ -187,7 +187,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),
+                Constraint::Length(1),
                 Constraint::Min(0),
             ])
             .split(area);
@@ -198,7 +198,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .style(match state.input_mode {
                 InputMode::Editing => theme.title,
                 InputMode::Normal => theme.text,
-            });
+            })
+            .block(ratatui::widgets::Block::default().padding(ratatui::widgets::Padding::left(1)));
         frame.render_widget(search_bar, search_bar_area);
 
         let list_block = Block::default();
@@ -289,7 +290,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     let indicator = Paragraph::new(ratatui::text::Line::from(vec![
                         ratatui::text::Span::styled("▌ ", theme.accent.clone())
                     ]));
-                    frame.render_widget(indicator, highlight_area);
+                    
+                    let v_layout = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(item_area.height.saturating_sub(1) / 2),
+                            Constraint::Length(1),
+                            Constraint::Min(0),
+                        ])
+                        .split(highlight_area);
+                        
+                    frame.render_widget(indicator, v_layout[1]);
                 }
                 
                 let mut poster_rendered = false;

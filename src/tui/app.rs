@@ -305,9 +305,7 @@ impl App {
                             KeyCode::Char('b') | KeyCode::Esc => {
                                 self.action_sender.send(Action::GoBack).ok();
                             }
-                            KeyCode::Tab => {
-                                self.action_sender.send(Action::TabPane).ok();
-                            }
+
                             KeyCode::Up | KeyCode::Char('k') => {
                                 self.action_sender.send(Action::MoveUp).ok();
                             }
@@ -839,36 +837,25 @@ impl App {
                         self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
                     }
                 } else if self.state.active_screen == Screen::Details {
+                    let has_languages = self.state.selected_details.as_ref()
+                        .and_then(|d| d.get("dubs"))
+                        .and_then(|d| d.as_array())
+                        .is_some_and(|a| a.len() > 1);
+                    let is_series = !self.state.available_seasons.is_empty();
+                    
                     match self.state.details_pane {
                         crate::tui::state::DetailsPane::Streams => {
-                            if !self.state.available_seasons.is_empty() {
+                            if is_series {
                                 self.state.details_pane = crate::tui::state::DetailsPane::Episodes;
-                            } else {
-                                if let Some(dubs) = self
-                                    .state
-                                    .selected_details
-                                    .as_ref()
-                                    .and_then(|d| d.get("dubs"))
-                                    .and_then(|d| d.as_array())
-                                    && dubs.len() > 1
-                                {
-                                    self.state.details_pane =
-                                        crate::tui::state::DetailsPane::Languages;
-                                }
+                            } else if has_languages {
+                                self.state.details_pane = crate::tui::state::DetailsPane::Languages;
                             }
                         }
                         crate::tui::state::DetailsPane::Episodes => {
                             self.state.details_pane = crate::tui::state::DetailsPane::Seasons;
                         }
                         crate::tui::state::DetailsPane::Seasons => {
-                            if let Some(dubs) = self
-                                .state
-                                .selected_details
-                                .as_ref()
-                                .and_then(|d| d.get("dubs"))
-                                .and_then(|d| d.as_array())
-                                && dubs.len() > 1
-                            {
+                            if has_languages {
                                 self.state.details_pane = crate::tui::state::DetailsPane::Languages;
                             }
                         }
@@ -890,7 +877,22 @@ impl App {
                         self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
                     }
                 } else if self.state.active_screen == Screen::Details {
+                    let has_languages = self.state.selected_details.as_ref()
+                        .and_then(|d| d.get("dubs"))
+                        .and_then(|d| d.as_array())
+                        .is_some_and(|a| a.len() > 1);
+                    let is_series = !self.state.available_seasons.is_empty();
+                    
                     match self.state.details_pane {
+                        crate::tui::state::DetailsPane::Languages => {
+                            if !has_languages || self.state.language_chosen {
+                                if is_series {
+                                    self.state.details_pane = crate::tui::state::DetailsPane::Seasons;
+                                } else {
+                                    self.state.details_pane = crate::tui::state::DetailsPane::Streams;
+                                }
+                            }
+                        }
                         crate::tui::state::DetailsPane::Seasons => {
                             self.state.details_pane = crate::tui::state::DetailsPane::Episodes;
                         }
@@ -898,24 +900,6 @@ impl App {
                             self.state.details_pane = crate::tui::state::DetailsPane::Streams;
                         }
                         crate::tui::state::DetailsPane::Streams => {}
-                        crate::tui::state::DetailsPane::Languages => {
-                            let has_multiple = self
-                                .state
-                                .selected_details
-                                .as_ref()
-                                .and_then(|d| d.get("dubs"))
-                                .and_then(|d| d.as_array())
-                                .is_some_and(|a| a.len() > 1);
-                            if !has_multiple || self.state.language_chosen {
-                                if !self.state.available_seasons.is_empty() {
-                                    self.state.details_pane =
-                                        crate::tui::state::DetailsPane::Seasons;
-                                } else {
-                                    self.state.details_pane =
-                                        crate::tui::state::DetailsPane::Streams;
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -944,7 +928,13 @@ impl App {
                         self.state.selected_details = None;
                         self.state.selected_resources = None;
                         self.state.resource_list_state.select(None);
+                        self.state.language_list_state.select(Some(0));
+                        self.state.season_list_state.select(Some(0));
+                        self.state.episode_list_state.select(Some(0));
                         self.state.language_chosen = false;
+                        self.state.poster_image = None;
+                        self.state.poster_protocol = None;
+                        self.state.available_seasons.clear();
                         self.state.status_message =
                             format!("Loading details for {}...", item.title); self.state.status_timer = 150;
 
@@ -1820,7 +1810,7 @@ impl App {
 
         if let Some(msg) = &self.state.toast_message {
             use ratatui::layout::{Constraint, Direction, Layout};
-            use ratatui::style::{Color, Style};
+
             use ratatui::widgets::Paragraph;
 
             let chunks = Layout::default()
