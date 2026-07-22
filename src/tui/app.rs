@@ -2,13 +2,13 @@ use ratatui::{DefaultTerminal, Frame};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+use crate::providers::moviebox::client::MovieBoxClient;
 use crate::tui::{
     action::Action,
     event::EventHandler,
     state::{AppState, InputMode, Screen, SearchResult},
     theme::Theme,
 };
-use crate::providers::moviebox::client::MovieBoxClient;
 use update_informer::Check;
 
 pub struct App {
@@ -34,6 +34,48 @@ impl App {
             client: MovieBoxClient::new(),
             action_sender,
             action_receiver,
+        }
+    }
+
+    fn get_absolute_episode_index(&self) -> usize {
+        let mut absolute_episode_index = 0;
+        let selected_season_idx = self.state.season_list_state.selected().unwrap_or(0);
+        for (i, season) in self.state.available_seasons.iter().enumerate() {
+            if i < selected_season_idx {
+                absolute_episode_index +=
+                    season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1) as usize;
+            } else {
+                break;
+            }
+        }
+        absolute_episode_index += self.state.episode_list_state.selected().unwrap_or(0);
+        absolute_episode_index
+    }
+
+    fn trigger_episode_fetch(&mut self) {
+        if let Some(id) = &self.state.active_subject_id {
+            let se_idx = self.state.season_list_state.selected().unwrap_or(0);
+            let ep_idx = self.state.episode_list_state.selected().unwrap_or(0);
+
+            if let Some(season) = self.state.available_seasons.get(se_idx) {
+                let se = season.get("se").and_then(|s| s.as_i64()).unwrap_or(1) as usize;
+                let ep = ep_idx + 1;
+                self.state.selected_season = se;
+                self.state.selected_episode = ep;
+                self.state.resource_list_state.select(None); // Reset stream selection
+
+                let abs_idx = self.get_absolute_episode_index();
+
+                self.action_sender
+                    .send(Action::FetchResources {
+                        subject_id: id.clone(),
+                        season: se,
+                        episode: ep,
+                        absolute_episode_index: abs_idx,
+                        resolution: "".to_string(),
+                    })
+                    .ok();
+            }
         }
     }
 
@@ -109,9 +151,12 @@ impl App {
         tokio::task::spawn_blocking(move || {
             let pkg_name = env!("CARGO_PKG_NAME");
             let current_version = env!("CARGO_PKG_VERSION");
-            let informer = update_informer::new(update_informer::registry::Crates, pkg_name, current_version);
+            let informer =
+                update_informer::new(update_informer::registry::Crates, pkg_name, current_version);
             if let Ok(Some(version)) = informer.check_version() {
-                update_sender.send(Action::UpdateAvailable(version.to_string())).ok();
+                update_sender
+                    .send(Action::UpdateAvailable(version.to_string()))
+                    .ok();
             }
         });
 
@@ -149,9 +194,12 @@ impl App {
                         self.state.status_message.clear();
                     }
                 }
-                
+
                 let current_query = self.state.search_query.trim().to_string();
-                if current_query != self.state.last_suggest_query && self.state.last_search_edit.elapsed() >= std::time::Duration::from_millis(250) {
+                if current_query != self.state.last_suggest_query
+                    && self.state.last_search_edit.elapsed()
+                        >= std::time::Duration::from_millis(250)
+                {
                     self.state.last_suggest_query = current_query.clone();
                     if !current_query.is_empty() {
                         self.action_sender.send(Action::Suggest(current_query)).ok();
@@ -196,7 +244,8 @@ impl App {
                     InputMode::Editing => match key.code {
                         KeyCode::Esc => {
                             self.state.input_mode = InputMode::Normal;
-                            self.state.status_message = String::new(); self.state.status_timer = 150;
+                            self.state.status_message = String::new();
+                            self.state.status_timer = 150;
                         }
                         KeyCode::Enter => {
                             let query = self.state.search_query.trim().to_string();
@@ -233,7 +282,8 @@ impl App {
                                 Some(i) => i - 1,
                             };
                             self.state.suggest_index = Some(next_idx);
-                            self.state.search_query = self.state.search_suggestions[next_idx].clone();
+                            self.state.search_query =
+                                self.state.search_suggestions[next_idx].clone();
                         }
                         KeyCode::Down if !self.state.search_suggestions.is_empty() => {
                             let max_idx = self.state.search_suggestions.len() - 1;
@@ -243,7 +293,8 @@ impl App {
                                 Some(i) => i + 1,
                             };
                             self.state.suggest_index = Some(next_idx);
-                            self.state.search_query = self.state.search_suggestions[next_idx].clone();
+                            self.state.search_query =
+                                self.state.search_suggestions[next_idx].clone();
                         }
                         _ => {}
                     },
@@ -282,7 +333,8 @@ impl App {
 
                                 self.state.search_suggestions.clear();
                                 self.state.suggest_index = None;
-                                self.state.status_message = String::new(); self.state.status_timer = 150;
+                                self.state.status_message = String::new();
+                                self.state.status_timer = 150;
                             }
                             _ => {}
                         },
@@ -327,53 +379,37 @@ impl App {
                                             self.action_sender.send(Action::PlayStream).ok();
                                         }
                                         crate::tui::state::DetailsPane::Seasons => {
-                                        self.action_sender.send(Action::MoveRight).ok();
-                                    }
-                                    crate::tui::state::DetailsPane::Episodes => {
-                                        if let Some(res) = &self.state.selected_details
-                                            && let Some(id) = res.get("id").and_then(|i| i.as_str())
-                                        {
-                                            let se_idx = self
+                                            self.action_sender.send(Action::MoveRight).ok();
+                                        }
+                                        crate::tui::state::DetailsPane::Episodes => {
+                                            self.trigger_episode_fetch();
+                                            self.action_sender.send(Action::MoveRight).ok();
+                                        }
+                                        crate::tui::state::DetailsPane::Languages => {
+                                            let idx = self
                                                 .state
-                                                .season_list_state
+                                                .language_list_state
                                                 .selected()
                                                 .unwrap_or(0);
-                                            let ep_idx = self
-                                                .state
-                                                .episode_list_state
-                                                .selected()
-                                                .unwrap_or(0);
-
-                                            if let Some(season) =
-                                                self.state.available_seasons.get(se_idx)
-                                            {
-                                                let se = season
-                                                    .get("se")
-                                                    .and_then(|s| s.as_i64())
-                                                    .unwrap_or(1)
-                                                    as usize;
-                                                let ep = ep_idx + 1;
-                                                self.state.selected_season = se;
-                                                self.state.selected_episode = ep;
-                                                self.state.resource_list_state.select(None); // Reset stream selection
-                                                self.action_sender
-                                                    .send(Action::FetchResources {
-                                                        subject_id: id.to_string(),
-                                                        season: se,
-                                                        episode: ep,
-                                                        resolution: "".to_string(),
-                                                    })
-                                                    .ok();
-                                                self.action_sender.send(Action::MoveRight).ok();
-                                            }
+                                            self.action_sender
+                                                .send(Action::FetchResources {
+                                                    subject_id: self
+                                                        .state
+                                                        .active_subject_id
+                                                        .clone()
+                                                        .unwrap_or("".to_string()),
+                                                    season: self.state.selected_season,
+                                                    episode: self.state.selected_episode,
+                                                    absolute_episode_index: self
+                                                        .get_absolute_episode_index(),
+                                                    resolution: "".to_string(),
+                                                })
+                                                .ok();
+                                            self.action_sender
+                                                .send(Action::SelectLanguage(idx))
+                                                .ok();
                                         }
                                     }
-                                    crate::tui::state::DetailsPane::Languages => {
-                                        let idx =
-                                            self.state.language_list_state.selected().unwrap_or(0);
-                                        self.action_sender.send(Action::SelectLanguage(idx)).ok();
-                                    }
-                                }
                                 }
                             }
                             _ => {}
@@ -413,7 +449,8 @@ impl App {
                             self.state.search_results.clear();
                             self.state.search_query.clear();
                             self.state.search_preview = None;
-                            self.state.status_message = "Search cleared.".to_string(); self.state.status_timer = 150;
+                            self.state.status_message = "Search cleared.".to_string();
+                            self.state.status_timer = 150;
                         }
                     }
                     Screen::Search => {
@@ -422,7 +459,8 @@ impl App {
                     Screen::Details => {
                         self.state.active_screen = Screen::Home;
                         self.state.status_message =
-                            "Select a movie/series and press Enter".to_string(); self.state.status_timer = 150;
+                            "Select a movie/series and press Enter".to_string();
+                        self.state.status_timer = 150;
                     }
                 }
             }
@@ -437,7 +475,8 @@ impl App {
                     self.state.selected_resources = None;
                     self.state.resource_list_state.select(None);
                     self.state.language_chosen = true;
-                    self.state.status_message = "Switching language...".to_string(); self.state.status_timer = 150;
+                    self.state.status_message = "Switching language...".to_string();
+                    self.state.status_timer = 150;
                     self.action_sender.send(Action::FetchDetails(next_id)).ok();
                 }
             }
@@ -455,14 +494,14 @@ impl App {
                 if self.state.suggest_index.is_some() {
                     return None;
                 }
-                
+
                 let matches = query == self.state.search_query.trim();
                 if !matches {
                     return None;
                 }
-                
+
                 self.state.search_suggestions.clear();
-                
+
                 let subjects_opt = payload
                     .get("results")
                     .and_then(|r| r.as_array())
@@ -483,10 +522,16 @@ impl App {
                             .unwrap_or(&raw_title)
                             .trim()
                             .to_string();
-                        
-                        let normalized_query = query.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
-                        let normalized_title = clean_title.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
-                        if !normalized_title.contains(&normalized_query) && !normalized_query.is_empty() {
+
+                        let normalized_query = query
+                            .to_lowercase()
+                            .replace(|c: char| !c.is_alphanumeric(), "");
+                        let normalized_title = clean_title
+                            .to_lowercase()
+                            .replace(|c: char| !c.is_alphanumeric(), "");
+                        if !normalized_title.contains(&normalized_query)
+                            && !normalized_query.is_empty()
+                        {
                             continue;
                         }
 
@@ -508,7 +553,8 @@ impl App {
                 self.state.search_list_state.select(Some(0));
                 self.state.search_suggestions.clear();
                 self.state.suggest_index = None;
-                self.state.status_message = format!("Searching for '{}'...", query); self.state.status_timer = 150;
+                self.state.status_message = format!("Searching for '{}'...", query);
+                self.state.status_timer = 150;
                 self.state.add_log(format!("API Search request: {}", query));
 
                 let client = self.client.clone();
@@ -517,7 +563,12 @@ impl App {
                 tokio::spawn(async move {
                     match client.search(&query_clone, 1).await {
                         Ok(res) => {
-                            sender.send(Action::SearchSuccess { query: query_clone, payload: res }).ok();
+                            sender
+                                .send(Action::SearchSuccess {
+                                    query: query_clone,
+                                    payload: res,
+                                })
+                                .ok();
                         }
                         Err(e) => {
                             sender.send(Action::SearchFailure(format!("{:?}", e))).ok();
@@ -531,7 +582,6 @@ impl App {
                 }
                 self.state.is_loading = false;
                 self.state.search_results.clear();
-                let _ = std::fs::write("search_debug.json", serde_json::to_string_pretty(&payload).unwrap_or_default());
                 let mut count = 0;
                 let subjects_opt = payload
                     .get("results")
@@ -560,10 +610,15 @@ impl App {
                             .trim()
                             .to_string();
 
-
-                        let normalized_query = query.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
-                        let normalized_title = raw_title.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
-                        if !normalized_title.contains(&normalized_query) && !normalized_query.is_empty() {
+                        let normalized_query = query
+                            .to_lowercase()
+                            .replace(|c: char| !c.is_alphanumeric(), "");
+                        let normalized_title = raw_title
+                            .to_lowercase()
+                            .replace(|c: char| !c.is_alphanumeric(), "");
+                        if !normalized_title.contains(&normalized_query)
+                            && !normalized_query.is_empty()
+                        {
                             continue;
                         }
 
@@ -577,7 +632,8 @@ impl App {
                             .unwrap_or("N/A")
                             .to_string();
 
-                        let cover_url = item.get("poster")
+                        let cover_url = item
+                            .get("poster")
                             .or_else(|| item.get("cover"))
                             .or_else(|| item.get("pic"))
                             .and_then(|c| {
@@ -606,14 +662,15 @@ impl App {
                     self.state.search_results.sort_by(|a, b| {
                         let a_title = a.title.to_lowercase();
                         let b_title = b.title.to_lowercase();
-                        
+
                         let a_exact = a_title == query_lower;
                         let b_exact = b_title == query_lower;
-                        
+
                         let a_starts = a_title.starts_with(&query_lower);
                         let b_starts = b_title.starts_with(&query_lower);
-                        
-                        b_exact.cmp(&a_exact)
+
+                        b_exact
+                            .cmp(&a_exact)
                             .then_with(|| b_starts.cmp(&a_starts))
                             .then_with(|| b.stype.cmp(&a.stype))
                             .then_with(|| b.release_year.cmp(&a.release_year))
@@ -621,19 +678,32 @@ impl App {
                 }
 
                 if !self.state.search_results.is_empty() {
-                    let results_to_fetch = self.state.search_results.iter().take(15).map(|r| {
-                        (r.id.clone(), r.stype, r.cover_url.clone())
-                    }).collect::<Vec<_>>();
-                    
+                    let results_to_fetch = self
+                        .state
+                        .search_results
+                        .iter()
+                        .take(15)
+                        .map(|r| (r.id.clone(), r.stype, r.cover_url.clone()))
+                        .collect::<Vec<_>>();
+
                     let sender = self.action_sender.clone();
                     tokio::spawn(async move {
                         for (id, stype, cover_url) in results_to_fetch {
                             let mut url_to_fetch = cover_url;
                             if url_to_fetch.is_none() {
                                 let type_str = if stype == 2 { "series" } else { "movie" };
-                                if let Ok(resp) = reqwest::get(&format!("https://v3-cinemeta.strem.io/meta/{}/{}.json", type_str, id)).await {
+                                if let Ok(resp) = reqwest::get(&format!(
+                                    "https://v3-cinemeta.strem.io/meta/{}/{}.json",
+                                    type_str, id
+                                ))
+                                .await
+                                {
                                     if let Ok(json) = resp.json::<serde_json::Value>().await {
-                                        url_to_fetch = json.get("meta").and_then(|m| m.get("poster")).and_then(|p| p.as_str()).map(|s| s.to_string());
+                                        url_to_fetch = json
+                                            .get("meta")
+                                            .and_then(|m| m.get("poster"))
+                                            .and_then(|p| p.as_str())
+                                            .map(|s| s.to_string());
                                     }
                                 }
                             }
@@ -641,7 +711,10 @@ impl App {
                                 if let Ok(resp) = reqwest::get(&url).await {
                                     if let Ok(bytes) = resp.bytes().await {
                                         if let Ok(img) = image::load_from_memory(&bytes) {
-                                            let _ = sender.send(Action::SearchPosterLoaded(id, Some(std::sync::Arc::new(img))));
+                                            let _ = sender.send(Action::SearchPosterLoaded(
+                                                id,
+                                                Some(std::sync::Arc::new(img)),
+                                            ));
                                         }
                                     }
                                 }
@@ -650,7 +723,8 @@ impl App {
                     });
                 }
 
-                self.state.status_message = format!("Found {} results.", count); self.state.status_timer = 150;
+                self.state.status_message = format!("Found {} results.", count);
+                self.state.status_timer = 150;
                 self.state
                     .add_log(format!("Search completed: {} items loaded.", count));
 
@@ -660,14 +734,17 @@ impl App {
 
                 if let Some(res) = self.state.search_results.first() {
                     self.state.search_list_state.select(Some(0));
-                    self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
+                    self.action_sender
+                        .send(Action::FetchPreview(res.id.clone()))
+                        .ok();
                 } else {
                     self.state.search_list_state.select(None);
                 }
             }
             Action::SearchFailure(err) => {
                 self.state.is_loading = false;
-                self.state.status_message = format!("Search failed: {}", err); self.state.status_timer = 150;
+                self.state.status_message = format!("Search failed: {}", err);
+                self.state.status_timer = 150;
                 self.state.add_log(format!("Search API Error: {}", err));
             }
             Action::MoveUp => {
@@ -690,63 +767,75 @@ impl App {
                             }
                         }
                     }
-                    Screen::Details => {
-                        match self.state.details_pane {
-                            crate::tui::state::DetailsPane::Streams => {
-                                let current =
-                                    self.state.resource_list_state.selected().unwrap_or(0);
-                                if current > 0 {
-                                    self.state.resource_list_state.select(Some(current - 1));
-                                }
-                            }
-                            crate::tui::state::DetailsPane::Seasons => {
-                                let current = self.state.season_list_state.selected().unwrap_or(0);
-                                if current > 0 {
-                                    self.state.season_list_state.select(Some(current - 1));
-                                    self.state.selected_season = current;
-                                }
-                            }
-                            crate::tui::state::DetailsPane::Episodes => {
-                                let current = self.state.episode_list_state.selected().unwrap_or(0);
-                                if current > 0 {
-                                    self.state.episode_list_state.select(Some(current - 1));
-                                }
-                            }
-                            crate::tui::state::DetailsPane::Languages => {
-                                let current =
-                                    self.state.language_list_state.selected().unwrap_or(0);
-                                if current > 0 {
-                                    self.state.language_list_state.select(Some(current - 1));
-                                }
+                    Screen::Details => match self.state.details_pane {
+                        crate::tui::state::DetailsPane::Streams => {
+                            let current = self.state.resource_list_state.selected().unwrap_or(0);
+                            if current > 0 {
+                                self.state.resource_list_state.select(Some(current - 1));
                             }
                         }
-                    }
+                        crate::tui::state::DetailsPane::Seasons => {
+                            let current = self.state.season_list_state.selected().unwrap_or(0);
+                            if current > 0 {
+                                self.state.season_list_state.select(Some(current - 1));
+                                self.state.episode_list_state.select(Some(0));
+                                self.trigger_episode_fetch();
+                            }
+                        }
+                        crate::tui::state::DetailsPane::Episodes => {
+                            let current = self.state.episode_list_state.selected().unwrap_or(0);
+                            if current > 0 {
+                                self.state.episode_list_state.select(Some(current - 1));
+                                self.trigger_episode_fetch();
+                            }
+                        }
+                        crate::tui::state::DetailsPane::Languages => {
+                            let current = self.state.language_list_state.selected().unwrap_or(0);
+                            if current > 0 {
+                                self.state.language_list_state.select(Some(current - 1));
+                            }
+                        }
+                    },
                     _ => {}
                 }
             }
             Action::TabPane => {
                 if self.state.active_screen == Screen::Details {
                     use crate::tui::state::DetailsPane;
-                    let has_languages = self.state.selected_details.as_ref()
+                    let has_languages = self
+                        .state
+                        .selected_details
+                        .as_ref()
                         .and_then(|d| d.get("dubs"))
                         .and_then(|d| d.as_array())
                         .is_some_and(|a| a.len() > 1);
-                    
-                    let is_series = self.state.selected_details.as_ref()
+
+                    let is_series = self
+                        .state
+                        .selected_details
+                        .as_ref()
                         .and_then(|d| d.get("stype").or_else(|| d.get("subjectType")))
                         .and_then(|t| t.as_i64())
                         .is_some_and(|t| t == 2);
-                        
+
                     self.state.details_pane = match self.state.details_pane {
                         DetailsPane::Languages => {
-                            if is_series { DetailsPane::Seasons } else { DetailsPane::Streams }
+                            if is_series {
+                                DetailsPane::Seasons
+                            } else {
+                                DetailsPane::Streams
+                            }
                         }
                         DetailsPane::Seasons => DetailsPane::Episodes,
                         DetailsPane::Episodes => DetailsPane::Streams,
                         DetailsPane::Streams => {
-                            if has_languages { DetailsPane::Languages }
-                            else if is_series { DetailsPane::Seasons }
-                            else { DetailsPane::Streams }
+                            if has_languages {
+                                DetailsPane::Languages
+                            } else if is_series {
+                                DetailsPane::Seasons
+                            } else {
+                                DetailsPane::Streams
+                            }
                         }
                     };
                 }
@@ -771,56 +860,55 @@ impl App {
                             }
                         }
                     }
-                    Screen::Details => {
-                        match self.state.details_pane {
-                            crate::tui::state::DetailsPane::Streams => {
-                                let res_opt = &self.state.selected_resources;
-                                let list_opt = res_opt
-                                    .as_ref()
-                                    .and_then(|r| r.get("list"))
-                                    .and_then(|l| l.as_array());
-                                if let Some(list) = list_opt {
-                                    let current =
-                                        self.state.resource_list_state.selected().unwrap_or(0);
-                                    if current + 1 < list.len() {
-                                        self.state.resource_list_state.select(Some(current + 1));
-                                    }
-                                }
-                            }
-                            crate::tui::state::DetailsPane::Seasons => {
-                                let current = self.state.season_list_state.selected().unwrap_or(0);
-                                if current + 1 < self.state.available_seasons.len() {
-                                    self.state.season_list_state.select(Some(current + 1));
-                                }
-                            }
-                            crate::tui::state::DetailsPane::Episodes => {
-                                let current = self.state.episode_list_state.selected().unwrap_or(0);
-                                if let Some(season) = self
-                                    .state
-                                    .available_seasons
-                                    .get(self.state.season_list_state.selected().unwrap_or(0))
-                                {
-                                    let max_ep =
-                                        season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1)
-                                            as usize;
-                                    if current + 1 < max_ep {
-                                        self.state.episode_list_state.select(Some(current + 1));
-                                    }
-                                }
-                            }
-                            crate::tui::state::DetailsPane::Languages => {
+                    Screen::Details => match self.state.details_pane {
+                        crate::tui::state::DetailsPane::Streams => {
+                            let res_opt = &self.state.selected_resources;
+                            let list_opt = res_opt
+                                .as_ref()
+                                .and_then(|r| r.get("list"))
+                                .and_then(|l| l.as_array());
+                            if let Some(list) = list_opt {
                                 let current =
-                                    self.state.language_list_state.selected().unwrap_or(0);
-                                if let Some(details) = &self.state.selected_details
-                                    && let Some(dubs) =
-                                        details.get("dubs").and_then(|d| d.as_array())
-                                    && current + 1 < dubs.len()
-                                {
-                                    self.state.language_list_state.select(Some(current + 1));
+                                    self.state.resource_list_state.selected().unwrap_or(0);
+                                if current + 1 < list.len() {
+                                    self.state.resource_list_state.select(Some(current + 1));
                                 }
                             }
                         }
-                    }
+                        crate::tui::state::DetailsPane::Seasons => {
+                            let current = self.state.season_list_state.selected().unwrap_or(0);
+                            if current + 1 < self.state.available_seasons.len() {
+                                self.state.season_list_state.select(Some(current + 1));
+                                self.state.episode_list_state.select(Some(0));
+                                self.trigger_episode_fetch();
+                            }
+                        }
+                        crate::tui::state::DetailsPane::Episodes => {
+                            let current = self.state.episode_list_state.selected().unwrap_or(0);
+                            if let Some(season) = self
+                                .state
+                                .available_seasons
+                                .get(self.state.season_list_state.selected().unwrap_or(0))
+                            {
+                                let max_ep =
+                                    season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1)
+                                        as usize;
+                                if current + 1 < max_ep {
+                                    self.state.episode_list_state.select(Some(current + 1));
+                                    self.trigger_episode_fetch();
+                                }
+                            }
+                        }
+                        crate::tui::state::DetailsPane::Languages => {
+                            let current = self.state.language_list_state.selected().unwrap_or(0);
+                            if let Some(details) = &self.state.selected_details
+                                && let Some(dubs) = details.get("dubs").and_then(|d| d.as_array())
+                                && current + 1 < dubs.len()
+                            {
+                                self.state.language_list_state.select(Some(current + 1));
+                            }
+                        }
+                    },
                     _ => {}
                 }
             }
@@ -833,16 +921,25 @@ impl App {
                     } else {
                         self.state.search_list_state.select(Some(0));
                     }
-                    if let Some(res) = self.state.search_results.get(self.state.search_list_state.selected().unwrap_or(0)) {
-                        self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
+                    if let Some(res) = self
+                        .state
+                        .search_results
+                        .get(self.state.search_list_state.selected().unwrap_or(0))
+                    {
+                        self.action_sender
+                            .send(Action::FetchPreview(res.id.clone()))
+                            .ok();
                     }
                 } else if self.state.active_screen == Screen::Details {
-                    let has_languages = self.state.selected_details.as_ref()
+                    let has_languages = self
+                        .state
+                        .selected_details
+                        .as_ref()
                         .and_then(|d| d.get("dubs"))
                         .and_then(|d| d.as_array())
                         .is_some_and(|a| a.len() > 1);
                     let is_series = !self.state.available_seasons.is_empty();
-                    
+
                     match self.state.details_pane {
                         crate::tui::state::DetailsPane::Streams => {
                             if is_series {
@@ -873,23 +970,34 @@ impl App {
                     } else if total > 0 {
                         self.state.search_list_state.select(Some(total - 1));
                     }
-                    if let Some(res) = self.state.search_results.get(self.state.search_list_state.selected().unwrap_or(0)) {
-                        self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
+                    if let Some(res) = self
+                        .state
+                        .search_results
+                        .get(self.state.search_list_state.selected().unwrap_or(0))
+                    {
+                        self.action_sender
+                            .send(Action::FetchPreview(res.id.clone()))
+                            .ok();
                     }
                 } else if self.state.active_screen == Screen::Details {
-                    let has_languages = self.state.selected_details.as_ref()
+                    let has_languages = self
+                        .state
+                        .selected_details
+                        .as_ref()
                         .and_then(|d| d.get("dubs"))
                         .and_then(|d| d.as_array())
                         .is_some_and(|a| a.len() > 1);
                     let is_series = !self.state.available_seasons.is_empty();
-                    
+
                     match self.state.details_pane {
                         crate::tui::state::DetailsPane::Languages => {
                             if !has_languages || self.state.language_chosen {
                                 if is_series {
-                                    self.state.details_pane = crate::tui::state::DetailsPane::Seasons;
+                                    self.state.details_pane =
+                                        crate::tui::state::DetailsPane::Seasons;
                                 } else {
-                                    self.state.details_pane = crate::tui::state::DetailsPane::Streams;
+                                    self.state.details_pane =
+                                        crate::tui::state::DetailsPane::Streams;
                                 }
                             }
                         }
@@ -915,7 +1023,9 @@ impl App {
                     let idx = self.state.subtitle_list_state.selected().unwrap_or(0);
                     let sub_url = self.state.subtitle_list.get(idx).map(|(_, u)| u.clone());
                     if let Some(link) = self.state.pending_play_link.take() {
-                        self.action_sender.send(Action::LaunchMpv(link, sub_url)).ok();
+                        self.action_sender
+                            .send(Action::LaunchMpv(link, sub_url))
+                            .ok();
                     }
                     return None;
                 }
@@ -936,7 +1046,8 @@ impl App {
                         self.state.poster_protocol = None;
                         self.state.available_seasons.clear();
                         self.state.status_message =
-                            format!("Loading details for {}...", item.title); self.state.status_timer = 150;
+                            format!("Loading details for {}...", item.title);
+                        self.state.status_timer = 150;
 
                         let sender = self.action_sender.clone();
                         sender.send(Action::FetchDetails(item.id)).ok();
@@ -978,7 +1089,15 @@ impl App {
             }
             Action::PreviewSuccess(id, json) => {
                 let current_id = if self.state.active_screen == Screen::Details {
-                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_i64().map(|n| n.to_string()).or_else(|| i.as_str().map(|s| s.to_string())))
+                    self.state
+                        .selected_details
+                        .as_ref()
+                        .and_then(|d| d.get("id"))
+                        .and_then(|i| {
+                            i.as_i64()
+                                .map(|n| n.to_string())
+                                .or_else(|| i.as_str().map(|s| s.to_string()))
+                        })
                 } else {
                     self.state
                         .search_list_state
@@ -990,8 +1109,6 @@ impl App {
                 if current_id.as_deref() != Some(id.as_str()) {
                     return None;
                 }
-                
-                let _ = std::fs::write("preview_debug.json", serde_json::to_string_pretty(&json).unwrap_or_default());
 
                 self.state.preview_loading = false;
                 self.state.search_preview = Some(json.clone());
@@ -1007,7 +1124,11 @@ impl App {
                     let id_clone = id.clone();
                     tokio::spawn(async move {
                         let client = reqwest::Client::new();
-                        if let Ok(resp) = client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await
+                        if let Ok(resp) = client
+                            .get(&url_clone)
+                            .header("User-Agent", "MovieBox-Tui/1.0")
+                            .send()
+                            .await
                             && let Ok(bytes) = resp.bytes().await
                             && let Ok(img) = image::load_from_memory(&bytes)
                         {
@@ -1019,8 +1140,9 @@ impl App {
             }
             Action::PosterSuccess(id, img) => {
                 self.state.image_cache.put(id.clone(), img.clone());
-                
-                let current_id = self.state
+
+                let current_id = self
+                    .state
                     .search_list_state
                     .selected()
                     .and_then(|idx| self.state.search_results.get(idx))
@@ -1049,11 +1171,11 @@ impl App {
                         let _ = clipboard.set_text(link.clone());
                         self.state.toast_message = Some("✓ Copied stream link!".to_string());
                         self.state.toast_timer = 30;
-                        self.state.add_log(
-                            "Stream link successfully copied to clipboard.".to_string(),
-                        );
+                        self.state
+                            .add_log("Stream link successfully copied to clipboard.".to_string());
                     } else {
-                        self.state.status_message = format!("Link: {}", link); self.state.status_timer = 150;
+                        self.state.status_message = format!("Link: {}", link);
+                        self.state.status_timer = 150;
                     }
                 }
             }
@@ -1087,11 +1209,21 @@ impl App {
             }
             Action::ShowSubtitlePopup(link, ext_captions) => {
                 let mut options = vec![("None".to_string(), "".to_string())];
-                
-                if let Some(captions_list) = ext_captions.get("extCaptions").and_then(|c| c.as_array()) {
+
+                if let Some(captions_list) =
+                    ext_captions.get("extCaptions").and_then(|c| c.as_array())
+                {
                     for cap in captions_list {
-                        let name = cap.get("lanName").and_then(|n| n.as_str()).unwrap_or("Unknown").to_string();
-                        let url = cap.get("url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+                        let name = cap
+                            .get("lanName")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("Unknown")
+                            .to_string();
+                        let url = cap
+                            .get("url")
+                            .and_then(|u| u.as_str())
+                            .unwrap_or("")
+                            .to_string();
                         if !url.is_empty() {
                             options.push((name, url));
                         }
@@ -1111,22 +1243,24 @@ impl App {
                 use std::process::{Command, Stdio};
                 self.state.toast_message = Some("✓ Launching MPV...".to_string());
                 self.state.toast_timer = 40;
-                
+
                 let mut cmd = Command::new("mpv");
                 cmd.arg(&link).stdout(Stdio::null()).stderr(Stdio::null());
-                
+
                 if let Some(sub) = subtitle_url {
                     if !sub.is_empty() {
                         cmd.arg(format!("--sub-file={}", sub));
                     }
                 }
-                
+
                 if cmd.spawn().is_ok() {
                     self.state.add_log("MPV started successfully.".to_string());
                 } else {
-                    self.state.toast_message = Some("✗ Error: mpv player not found in PATH".to_string());
+                    self.state.toast_message =
+                        Some("✗ Error: mpv player not found in PATH".to_string());
                     self.state.toast_timer = 60;
-                    self.state.add_log("Error starting mpv process. Command failed.".to_string());
+                    self.state
+                        .add_log("Error starting mpv process. Command failed.".to_string());
                 }
             }
             Action::DownloadStream => {
@@ -1572,8 +1706,9 @@ impl App {
                 }
             }
             Action::DetailsSuccess(id, payload) => {
+                self.state.active_subject_id = Some(id.clone());
                 self.state.selected_details = Some(payload.clone());
-                
+
                 if self.state.poster_image.is_none() {
                     if let Some(cached_img) = self.state.image_cache.get(&id) {
                         self.state.poster_image = Some((**cached_img).clone());
@@ -1585,11 +1720,18 @@ impl App {
                         let id_clone = id.clone();
                         tokio::spawn(async move {
                             let client = reqwest::Client::new();
-                            if let Ok(resp) = client.get(&url_clone).header("User-Agent", "MovieBox-Tui/1.0").send().await
+                            if let Ok(resp) = client
+                                .get(&url_clone)
+                                .header("User-Agent", "MovieBox-Tui/1.0")
+                                .send()
+                                .await
                                 && let Ok(bytes) = resp.bytes().await
                                 && let Ok(img) = image::load_from_memory(&bytes)
                             {
-                                let _ = action_tx.send(Action::PosterSuccess(id_clone, std::sync::Arc::new(img)));
+                                let _ = action_tx.send(Action::PosterSuccess(
+                                    id_clone,
+                                    std::sync::Arc::new(img),
+                                ));
                             }
                         });
                     }
@@ -1630,9 +1772,20 @@ impl App {
 
                 if let Some(dubs) = payload.get("dubs").and_then(|d| d.as_array()) {
                     let mut current_idx = 0;
-                    let current_id = payload.get("id").and_then(|i| i.as_i64().map(|n| n.to_string()).or_else(|| i.as_str().map(|s| s.to_string()))).unwrap_or_default();
+                    let current_id = payload
+                        .get("id")
+                        .and_then(|i| {
+                            i.as_i64()
+                                .map(|n| n.to_string())
+                                .or_else(|| i.as_str().map(|s| s.to_string()))
+                        })
+                        .unwrap_or_default();
                     for (i, dub) in dubs.iter().enumerate() {
-                        let dub_id = dub.get("subjectId").and_then(|i| i.as_i64().map(|n| n.to_string()).or_else(|| i.as_str().map(|s| s.to_string())));
+                        let dub_id = dub.get("subjectId").and_then(|i| {
+                            i.as_i64()
+                                .map(|n| n.to_string())
+                                .or_else(|| i.as_str().map(|s| s.to_string()))
+                        });
                         if dub_id == Some(current_id.clone()) {
                             current_idx = i;
                         }
@@ -1653,7 +1806,8 @@ impl App {
                 if has_multiple_dubs && !self.state.language_chosen {
                     self.state.details_pane = crate::tui::state::DetailsPane::Languages;
                     self.state.is_loading = false;
-                    self.state.status_message = "Please select a language dubbing.".to_string(); self.state.status_timer = 150;
+                    self.state.status_message = "Please select a language dubbing.".to_string();
+                    self.state.status_timer = 150;
                 } else {
                     if stype == 2 && !self.state.available_seasons.is_empty() {
                         self.state.details_pane = crate::tui::state::DetailsPane::Episodes;
@@ -1672,6 +1826,7 @@ impl App {
                             subject_id: id,
                             season: se,
                             episode: ep,
+                            absolute_episode_index: self.get_absolute_episode_index(),
                             resolution: "".to_string(),
                         })
                         .ok();
@@ -1679,18 +1834,26 @@ impl App {
             }
             Action::DetailsFailure(err) => {
                 self.state.is_loading = false;
-                self.state.status_message = format!("Details fetch failed: {}", err); self.state.status_timer = 150;
+                self.state.status_message = format!("Details fetch failed: {}", err);
+                self.state.status_timer = 150;
             }
             Action::FetchResources {
                 subject_id,
                 season,
                 episode,
+                absolute_episode_index,
                 resolution: _,
             } => {
+                self.state.is_loading = true;
+                self.state.selected_resources = None;
+
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 tokio::spawn(async move {
-                    match client.get_all_resources(&subject_id, season, episode).await {
+                    match client
+                        .get_all_resources(&subject_id, season, episode, absolute_episode_index)
+                        .await
+                    {
                         Ok(res) => {
                             sender.send(Action::ResourcesSuccess(res)).ok();
                         }
@@ -1724,15 +1887,18 @@ impl App {
                 self.state
                     .resource_list_state
                     .select(if count > 0 { Some(0) } else { None });
-                self.state.status_message = format!("Resolved {} direct stream sources.", count); self.state.status_timer = 150;
+                self.state.status_message = format!("Resolved {} direct stream sources.", count);
+                self.state.status_timer = 150;
             }
             Action::ResourcesFailure(err) => {
                 self.state.is_loading = false;
                 if err.contains("406") || err.to_lowercase().contains("exhausted") {
                     self.state.status_message =
-                        "Error: No streams found on server (unreleased or removed).".to_string(); self.state.status_timer = 150;
+                        "Error: No streams found on server (unreleased or removed).".to_string();
+                    self.state.status_timer = 150;
                 } else {
-                    self.state.status_message = format!("Error: Links resolution failed: {}", err); self.state.status_timer = 150;
+                    self.state.status_message = format!("Error: Links resolution failed: {}", err);
+                    self.state.status_timer = 150;
                 }
             }
             Action::UpdateDownload(prog, stat) => {
@@ -1815,16 +1981,22 @@ impl App {
 
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(1)])
+                .constraints([Constraint::Length(1), Constraint::Min(0)])
                 .split(area);
 
             let toast_area = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Min(0), Constraint::Length(msg.chars().count() as u16 + 2)])
-                .split(chunks[1])[1];
+                .constraints([
+                    Constraint::Min(0),
+                    Constraint::Length(msg.chars().count() as u16 + 2),
+                ])
+                .split(chunks[0])[1];
 
-
-            let color = if self.state.toast_timer < 10 { self.theme.muted } else { self.theme.success };
+            let color = if self.state.toast_timer < 10 {
+                self.theme.muted
+            } else {
+                self.theme.success
+            };
 
             let p = Paragraph::new(msg.clone())
                 .style(color.add_modifier(ratatui::style::Modifier::BOLD));

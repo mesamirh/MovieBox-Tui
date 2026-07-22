@@ -149,7 +149,10 @@ pub fn build_signed_headers(
 
     let mut headers = reqwest::header::HeaderMap::new();
 
-    headers.insert(reqwest::header::USER_AGENT, user_agent.parse().expect("Valid ASCII"));
+    headers.insert(
+        reqwest::header::USER_AGENT,
+        user_agent.parse().expect("Valid ASCII"),
+    );
     headers.insert("Accept", accept.parse().expect("Valid ASCII"));
     headers.insert("Content-Type", content_type.parse().expect("Valid ASCII"));
     headers.insert("Connection", "keep-alive".parse().expect("Valid ASCII"));

@@ -41,14 +41,19 @@ pub struct AppState {
     pub suggest_index: Option<usize>,
     pub search_results: Vec<SearchResult>,
     pub search_posters: std::collections::HashMap<String, std::sync::Arc<image::DynamicImage>>,
-    pub search_poster_protocols: std::collections::HashMap<String, (ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
+    pub search_poster_protocols: std::collections::HashMap<
+        String,
+        (ratatui::layout::Rect, ratatui_image::protocol::Protocol),
+    >,
     pub search_list_state: TableState,
 
     pub selected_details: Option<serde_json::Value>,
+    pub active_subject_id: Option<String>,
     pub selected_resources: Option<serde_json::Value>,
     pub active_popup: Option<String>,
     pub selected_poster: Option<std::sync::Arc<image::DynamicImage>>,
-    pub selected_poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
+    pub selected_poster_protocol:
+        Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
     pub resource_list_state: ListState,
 
     pub details_pane: DetailsPane,
@@ -112,6 +117,7 @@ impl Default for AppState {
             search_list_state: TableState::default(),
             basic_terminal: std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal",
             selected_details: None,
+            active_subject_id: None,
             selected_resources: None,
             active_popup: None,
             selected_poster: None,

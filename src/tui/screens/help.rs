@@ -11,7 +11,7 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Percentage(25),
-            Constraint::Length(14),
+            Constraint::Length(16),
             Constraint::Percentage(25),
         ])
         .split(area);
@@ -20,7 +20,7 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(25),
-            Constraint::Min(40),
+            Constraint::Min(45),
             Constraint::Percentage(25),
         ])
         .split(popup_layout[1])[1];
@@ -28,41 +28,64 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
     frame.render_widget(Clear, popup_chunk);
 
     let help_text = vec![
+        Line::from(vec![Span::styled(
+            "  Global",
+            theme
+                .header
+                .add_modifier(ratatui::style::Modifier::BOLD)
+                .add_modifier(ratatui::style::Modifier::UNDERLINED),
+        )]),
         Line::from(vec![
-            Span::styled(" [q]      ", theme.header),
-            Span::styled("Quit Application", theme.text),
-        ]),
-        Line::from(vec![
-            Span::styled(" [?]      ", theme.header),
+            Span::styled("    [?]        ", theme.header),
             Span::styled("Toggle Help Menu", theme.text),
         ]),
         Line::from(vec![
-            Span::styled(" [/], [s] ", theme.header),
-            Span::styled("Search Movies/Series", theme.text),
+            Span::styled("    [q]        ", theme.header),
+            Span::styled("Quit Application", theme.text),
         ]),
         Line::from(vec![
-            Span::styled(" [l]      ", theme.header),
-            Span::styled("Toggle Logs", theme.text),
-        ]),
-        Line::from(vec![
-            Span::styled(" [b], ESC ", theme.header),
+            Span::styled("    [Esc]      ", theme.header),
             Span::styled("Go Back / Clear", theme.text),
         ]),
+        Line::from(vec![]),
+        Line::from(vec![Span::styled(
+            "  Navigation",
+            theme
+                .header
+                .add_modifier(ratatui::style::Modifier::BOLD)
+                .add_modifier(ratatui::style::Modifier::UNDERLINED),
+        )]),
         Line::from(vec![
-            Span::styled(" [↑]/[k]  ", theme.header),
-            Span::styled("Move Up", theme.text),
+            Span::styled("    [↑] / [↓]  ", theme.header),
+            Span::styled("Scroll Lists", theme.text),
         ]),
         Line::from(vec![
-            Span::styled(" [↓]/[j]  ", theme.header),
-            Span::styled("Move Down", theme.text),
+            Span::styled("    [←] / [→]  ", theme.header),
+            Span::styled("Switch Panels", theme.text),
         ]),
         Line::from(vec![
-            Span::styled(" [Enter]  ", theme.header),
+            Span::styled("    [Enter]    ", theme.header),
             Span::styled("Select / Submit", theme.text),
         ]),
+        Line::from(vec![]),
+        Line::from(vec![Span::styled(
+            "  Stream Controls",
+            theme
+                .header
+                .add_modifier(ratatui::style::Modifier::BOLD)
+                .add_modifier(ratatui::style::Modifier::UNDERLINED),
+        )]),
         Line::from(vec![
-            Span::styled(" [y]      ", theme.header),
-            Span::styled("Copy URL (Details Screen)", theme.text),
+            Span::styled("    [p]        ", theme.header),
+            Span::styled("Play Video", theme.text),
+        ]),
+        Line::from(vec![
+            Span::styled("    [d]        ", theme.header),
+            Span::styled("Download Video", theme.text),
+        ]),
+        Line::from(vec![
+            Span::styled("    [c]        ", theme.header),
+            Span::styled("Copy URL to Clipboard", theme.text),
         ]),
     ];
 

@@ -2,7 +2,7 @@ pub mod client;
 pub mod crypto;
 
 use client::{MovieBoxClient, ScraperError};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 impl MovieBoxClient {
     pub async fn search(&self, query: &str, page: usize) -> Result<Value, ScraperError> {
@@ -17,10 +17,16 @@ impl MovieBoxClient {
             "subjectType": "All",
             "tabId": "All"
         });
-        self.post("/wefeed-mobile-bff/subject-api/search/v2", &payload).await
+        self.post("/wefeed-mobile-bff/subject-api/search/v2", &payload)
+            .await
     }
 
-    async fn search_with_tab(&self, query: &str, page: usize, tab_id: &str) -> Result<Value, ScraperError> {
+    async fn search_with_tab(
+        &self,
+        query: &str,
+        page: usize,
+        tab_id: &str,
+    ) -> Result<Value, ScraperError> {
         let payload = json!({
             "keyword": query,
             "page": page,
@@ -43,8 +49,8 @@ impl MovieBoxClient {
     pub async fn get_resources(
         &self,
         subject_id: &str,
-        season: usize,
-        episode: usize,
+        _season: usize,
+        _episode: usize,
         page: usize,
         resolution: Option<&str>,
     ) -> Result<Value, ScraperError> {
@@ -58,17 +64,10 @@ impl MovieBoxClient {
             String::new()
         };
 
-        let path = if season == 0 && episode == 0 {
-            format!(
-                "/wefeed-mobile-bff/subject-api/resource?subjectId={}&page={}&perPage=20{}",
-                subject_id, page, res_param
-            )
-        } else {
-            format!(
-                "/wefeed-mobile-bff/subject-api/resource?subjectId={}&se={}&ep={}&page={}&perPage=20{}",
-                subject_id, season, episode, page, res_param
-            )
-        };
+        let path = format!(
+            "/wefeed-mobile-bff/subject-api/resource?subjectId={}&page={}&perPage=20{}",
+            subject_id, page, res_param
+        );
         self.get(&path).await
     }
 
@@ -77,9 +76,13 @@ impl MovieBoxClient {
         subject_id: &str,
         season: usize,
         episode: usize,
+        absolute_episode_index: usize,
     ) -> Result<Value, ScraperError> {
         let resolutions = ["1080", "720", "480", "360", ""];
         let mut handles = Vec::new();
+
+        let per_page = 20;
+        let page = (absolute_episode_index / per_page) + 1;
 
         for res in resolutions {
             let c = self.clone();
@@ -88,7 +91,7 @@ impl MovieBoxClient {
             handles.push(tokio::spawn(async move {
                 tokio::time::timeout(
                     std::time::Duration::from_secs(4),
-                    c.get_resources(&sid, season, episode, 1, Some(&r)),
+                    c.get_resources(&sid, season, episode, page, Some(&r)),
                 )
                 .await
                 .unwrap_or(Err(ScraperError::ApiStatus(408)))
@@ -102,7 +105,27 @@ impl MovieBoxClient {
                 match res_result {
                     Ok(res) => {
                         if let Some(list) = res.get("list").and_then(|l| l.as_array()) {
-                            all_list.extend(list.clone());
+                            let target_ep = episode;
+                            let mut found: Option<&Value> = None;
+                            for stream in list.iter() {
+                                let stream_ep =
+                                    stream.get("ep").and_then(|e| e.as_u64()).unwrap_or(1) as usize;
+                                let stream_se =
+                                    stream.get("se").and_then(|s| s.as_u64()).unwrap_or(1) as usize;
+
+                                if stream_ep == target_ep {
+                                    if stream_se == season {
+                                        found = Some(stream);
+                                        break;
+                                    } else if found.is_none() {
+                                        found = Some(stream);
+                                    }
+                                }
+                            }
+
+                            if let Some(stream) = found {
+                                all_list.push(stream.clone());
+                            }
                         }
                     }
                     Err(e) => {

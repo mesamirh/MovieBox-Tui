@@ -7,9 +7,16 @@ pub enum Action {
     SelectLanguage(usize),
     ToggleLogs,
     ToggleHelp,
-    Search { query: String },
-    SelectSuggestion { query: String },
-    SearchSuccess { query: String, payload: serde_json::Value },
+    Search {
+        query: String,
+    },
+    SelectSuggestion {
+        query: String,
+    },
+    SearchSuccess {
+        query: String,
+        payload: serde_json::Value,
+    },
     SearchFailure(String),
     Suggest(String),
     SuggestSuccess(String, serde_json::Value),
@@ -37,6 +44,7 @@ pub enum Action {
         subject_id: String,
         season: usize,
         episode: usize,
+        absolute_episode_index: usize,
         resolution: String,
     },
     ResourcesSuccess(serde_json::Value),

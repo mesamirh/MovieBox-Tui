@@ -53,7 +53,8 @@ impl MovieBoxClient {
             .build()
             .expect("Failed to build reqwest client; TLS backend may be missing");
 
-        let (user_agent, client_info) = crate::providers::moviebox::crypto::generate_client_info_and_ua();
+        let (user_agent, client_info) =
+            crate::providers::moviebox::crypto::generate_client_info_and_ua();
         let spoofed_ip = crate::providers::moviebox::crypto::random_spoofed_ip();
 
         Self {

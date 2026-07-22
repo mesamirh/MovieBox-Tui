@@ -3,7 +3,10 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{
+        Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Wrap,
+    },
 };
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) {
@@ -67,10 +70,22 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         .get("genre")
         .and_then(|g| {
             if let Some(a) = g.as_array() {
-                let joined = a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ");
-                if joined.is_empty() { None } else { Some(joined) }
+                let joined = a
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if joined.is_empty() {
+                    None
+                } else {
+                    Some(joined)
+                }
             } else if let Some(s) = g.as_str() {
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             } else {
                 None
             }
@@ -128,8 +143,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     };
     let right_area = h_chunks[2];
 
-
-
     if let Some(img) = &state.poster_image {
         if state.poster_protocol.as_ref().map(|(r, _)| *r) != Some(poster_area)
             && let Some(picker) = &mut state.image_picker
@@ -156,9 +169,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         let placeholder_block = Block::default()
             .borders(Borders::ALL)
             .border_style(theme.muted);
-            
+
         let inner = placeholder_block.inner(poster_area);
-        
+
         let (pad, msg) = if state.is_loading {
             let p = "\n".repeat((inner.height.saturating_sub(1) / 2) as usize);
             (p, format!("{}\nLoading Art", current_spinner))
@@ -166,7 +179,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             let p = "\n".repeat((inner.height.saturating_sub(1) / 2) as usize);
             (p, title.to_string())
         };
-        
+
         let placeholder = Paragraph::new(format!("{}{}", pad, msg))
             .style(theme.text_dim)
             .alignment(Alignment::Center)
@@ -175,10 +188,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         frame.render_widget(placeholder, poster_area);
     }
 
-
-
     let title_line = Line::from(vec![
-        Span::styled(title.to_string(), theme.text.add_modifier(ratatui::style::Modifier::BOLD)),
+        Span::styled(
+            title.to_string(),
+            theme.text.add_modifier(ratatui::style::Modifier::BOLD),
+        ),
         Span::styled("   ", theme.text),
         Span::styled(format!("★ IMDb {}", imdb_rating), theme.rating),
     ]);
@@ -189,14 +203,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         format!(" • {}", duration)
     };
 
-    let meta_line = Line::from(vec![
-        Span::styled(format!("{} • {} • {}{}", type_str, year, country, duration_str), theme.text),
-    ]);
+    let meta_line = Line::from(vec![Span::styled(
+        format!("{} • {} • {}{}", type_str, year, country, duration_str),
+        theme.text,
+    )]);
 
-    let genre_line = Line::from(vec![
-        Span::styled(genres.to_string(), theme.text_dim),
-    ]);
-    
+    let genre_line = Line::from(vec![Span::styled(genres.to_string(), theme.text_dim)]);
+
     let top_meta = vec![
         title_line,
         meta_line,
@@ -204,21 +217,19 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         Line::from(vec![]),
         Line::from(vec![Span::styled("Synopsis", theme.text)]),
     ];
-    
+
     let meta_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(5),
-            Constraint::Min(1),
-        ])
+        .constraints([Constraint::Length(5), Constraint::Min(1)])
         .split(right_area);
 
     let meta_p = Paragraph::new(top_meta).wrap(Wrap { trim: true });
     frame.render_widget(meta_p, meta_chunks[0]);
 
-    let syn_lines = vec![
-        Line::from(vec![Span::styled(intro, theme.text_dim.add_modifier(ratatui::style::Modifier::DIM))])
-    ];
+    let syn_lines = vec![Line::from(vec![Span::styled(
+        intro,
+        theme.text_dim.add_modifier(ratatui::style::Modifier::DIM),
+    )])];
     let intro_p = Paragraph::new(syn_lines).wrap(Wrap { trim: true });
     frame.render_widget(intro_p, meta_chunks[1]);
 
@@ -239,17 +250,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         c.push(Constraint::Length(15));
     }
     c.push(Constraint::Min(1));
-    
+
     let bottom_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(c)
         .split(bottom_area);
-        
+
     let mut chunk_idx = 0;
     let mut lang_area = None;
     let mut seasons_area = None;
     let mut eps_area = None;
-    
+
     if has_languages {
         lang_area = Some(bottom_chunks[chunk_idx]);
         chunk_idx += 1;
@@ -283,7 +294,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 }
             }
         }
-        
+
         let lang_border = if state.details_pane == crate::tui::state::DetailsPane::Languages {
             theme.border_focus
         } else {
@@ -384,7 +395,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             streams_count = list.len();
         }
     }
-    
+
     let streams_title = if streams_count > 0 {
         format!(" Streams • {} Available ", streams_count)
     } else {
@@ -399,7 +410,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         .border_style(streams_border)
         .padding(ratatui::widgets::Padding::horizontal(1));
 
-    let mut render_list = None;
     match &state.selected_resources {
         Some(res) => {
             if let Some(list) = res.get("list").and_then(|l| l.as_array()) {
@@ -410,16 +420,23 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .iter()
                     .enumerate()
                     .map(|(i, file)| {
-                        let resolution = file.get("resolution").and_then(|r| r.as_i64()).unwrap_or(0);
+                        let resolution =
+                            file.get("resolution").and_then(|r| r.as_i64()).unwrap_or(0);
                         let quality_str = format!("{}p", resolution);
-                        
+
                         let is_first_of_quality = quality_str != prev_quality;
                         prev_quality = quality_str.clone();
 
-                        let codec = file.get("codecName").and_then(|c| c.as_str()).unwrap_or("None");
-                        let _upload_by = file.get("uploadBy").and_then(|u| u.as_str()).unwrap_or("None");
+                        let codec = file
+                            .get("codecName")
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("None");
+                        let _upload_by = file
+                            .get("uploadBy")
+                            .and_then(|u| u.as_str())
+                            .unwrap_or("None");
                         let size_str = file.get("size").and_then(|s| s.as_str()).unwrap_or("0");
-                        
+
                         let size_formatted = if let Ok(bytes) = size_str.parse::<f64>() {
                             let mb = bytes / 1024.0 / 1024.0;
                             if mb > 1024.0 {
@@ -433,20 +450,21 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                         let is_selected = Some(i) == selected_idx;
                         let pointer = if is_selected { "▌ " } else { "  " };
-                        
+
                         let stream_style = if is_selected {
                             theme.highlight.clone()
                         } else {
                             theme.text_dim.clone()
                         };
-                        
 
-                        
                         let stream_line = ratatui::text::Line::from(vec![
                             ratatui::text::Span::styled(pointer, theme.accent),
-                            ratatui::text::Span::styled(format!("{:<7} {:<6} ", size_formatted, codec), stream_style),
+                            ratatui::text::Span::styled(
+                                format!("{:<7} {:<6} ", size_formatted, codec),
+                                stream_style,
+                            ),
                         ]);
-                        
+
                         let mut lines = vec![];
                         if is_first_of_quality {
                             if i > 0 {
@@ -454,10 +472,10 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             }
                             lines.push(ratatui::text::Line::from(ratatui::text::Span::styled(
                                 quality_str,
-                                theme.accent
+                                theme.accent,
                             )));
                         }
-                        
+
                         lines.push(stream_line);
                         ListItem::new(lines)
                     })
@@ -466,7 +484,28 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 let l = List::new(list_items)
                     .block(streams_block.clone())
                     .highlight_symbol("");
-                render_list = Some(l);
+
+                let mut scrollbar_state = ScrollbarState::default()
+                    .content_length(
+                        streams_count
+                            .saturating_sub(streams_area.height.saturating_sub(2) as usize),
+                    )
+                    .position(state.resource_list_state.selected().unwrap_or(0));
+
+                let scrollbar = Scrollbar::default()
+                    .orientation(ScrollbarOrientation::VerticalRight)
+                    .begin_symbol(Some("▲"))
+                    .end_symbol(Some("▼"));
+
+                frame.render_stateful_widget(l, streams_area, &mut state.resource_list_state);
+                frame.render_stateful_widget(
+                    scrollbar,
+                    streams_area.inner(ratatui::layout::Margin {
+                        vertical: 1,
+                        horizontal: 0,
+                    }),
+                    &mut scrollbar_state,
+                );
             } else {
                 let has_multiple_dubs = state
                     .selected_details
@@ -479,7 +518,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 } else {
                     "No streaming files available."
                 };
-                
+
                 let inner = streams_block.inner(streams_area);
                 let pad = "\n".repeat((inner.height.saturating_sub(1) / 2) as usize);
                 let p = Paragraph::new(format!("{}{}", pad, msg))
@@ -511,7 +550,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             } else {
                 "Failed to load streams.".to_string()
             };
-            
+
             let style = if state.is_loading || (has_multiple_dubs && !state.language_chosen) {
                 theme.text_dim
             } else {
@@ -528,18 +567,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             frame.render_widget(p, streams_area);
         }
     }
-
-    if let Some(l) = render_list {
-        frame.render_stateful_widget(l, streams_area, &mut state.resource_list_state);
-    } else {
+    if !state.selected_resources.is_some() {
         frame.render_widget(streams_block, streams_area);
     }
-
-
     if state.subtitle_popup {
         let popup_width = 50;
         let popup_height = std::cmp::min(15, state.subtitle_list.len() as u16 + 2);
-        
+
         let area = frame.area();
         let popup_area = ratatui::layout::Rect {
             x: area.width.saturating_sub(popup_width) / 2,
