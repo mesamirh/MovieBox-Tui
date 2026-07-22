@@ -5,7 +5,7 @@ use crate::tui::{
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Cell, Paragraph, Row, Table},
 };
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) {
@@ -68,7 +68,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         && !state.status_message.to_lowercase().contains("fail")
     {
         if state.tick_count < 1 {
-            return; // terminal opens black
+            return;
         }
 
         let is_narrow = area.width < 60;
@@ -125,9 +125,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .split(vertical_chunks[2]);
 
         let logo_style = if state.tick_count == 1 {
-            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(60, 60, 60))
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(49, 50, 68))
         } else if state.tick_count == 2 {
-            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(140, 140, 140))
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(108, 112, 134))
         } else {
             theme.title
         };
@@ -139,9 +139,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         frame.render_widget(title_art, horizontal_chunks[1]);
 
         let version_style = if state.tick_count == 1 {
-            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(40, 40, 40))
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(49, 50, 68))
         } else if state.tick_count == 2 {
-            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(90, 90, 90))
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(108, 112, 134))
         } else {
             theme.text_dim
         };
@@ -184,16 +184,10 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             }
         }
     } else {
-        let desired_height = if state.is_loading {
-            10
-        } else {
-            std::cmp::max(state.search_results.len() as u16 + 4, 6)
-        };
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),
-                Constraint::Length(desired_height),
                 Constraint::Min(0),
             ])
             .split(area);
@@ -207,12 +201,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             });
         frame.render_widget(search_bar, search_bar_area);
 
-        let list_block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .title(" Results ")
-            .title_style(theme.title)
-            .border_style(theme.border);
+        let list_block = Block::default();
 
         if state.is_loading {
             let spinner = if state.basic_terminal {
@@ -240,38 +229,171 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .style(theme.text_dim);
             frame.render_widget(p, v_chunks[1]);
         } else if !state.search_results.is_empty() {
+
+            let selected_idx = state.search_list_state.selected();
+            let offset = state.search_list_state.offset();
+            
+            
+            let row_height = 3;
+            state.visible_items = (chunks[1].height as usize) / (row_height as usize);
             let rows: Vec<Row> = state
                 .search_results
                 .iter()
-                .map(|res| {
-                    let type_tag = if res.stype == 1 {
-                        "MOVIE"
-                    } else if res.stype == 2 {
-                        "TV"
-                    } else {
-                        "OTHER"
-                    };
-                    Row::new(vec![
-                        Cell::from(type_tag).style(theme.header),
-                        Cell::from(res.title.as_str()).style(theme.text),
-                        Cell::from(res.release_year.as_str()).style(theme.text_dim),
-                    ])
-                })
+                .map(|_| Row::new(vec![Cell::from("")]).height(row_height))
                 .collect();
 
-            let widths = [
-                Constraint::Length(8),
-                Constraint::Percentage(70),
-                Constraint::Length(10),
-            ];
-
-            let table = Table::new(rows, widths)
-                .header(Row::new(vec!["Type", "Title", "Date"]).style(theme.title))
-                .block(list_block)
-                .row_highlight_style(theme.highlight.bg(ratatui::style::Color::Rgb(30, 30, 50)))
-                .highlight_symbol(">> ");
+            let table = Table::new(rows, [Constraint::Percentage(100)])
+                .block(list_block);
 
             frame.render_stateful_widget(table, chunks[1], &mut state.search_list_state);
+
+            let mut inner_area = chunks[1];
+            inner_area.x += 1;
+            inner_area.y += 1;
+            inner_area.width = inner_area.width.saturating_sub(2);
+            inner_area.height = inner_area.height.saturating_sub(2);
+
+            let mut current_y = inner_area.y;
+
+            for (i, res) in state.search_results.iter().enumerate().skip(offset) {
+                if current_y >= inner_area.y + inner_area.height {
+                    break;
+                }
+                
+                let item_area = Rect {
+                    x: inner_area.x,
+                    y: current_y,
+                    width: inner_area.width,
+                    height: 3.min(inner_area.y + inner_area.height.saturating_sub(current_y)),
+                };
+                
+                if item_area.height == 0 { break; }
+                
+                let is_selected = Some(i) == selected_idx;
+                
+                let layout = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Length(2),
+                        Constraint::Length(4),
+                        Constraint::Length(1),
+                        Constraint::Min(0),
+                    ])
+                    .split(item_area);
+                
+                let highlight_area = layout[0];
+                let poster_area = layout[1];
+                let text_area = layout[3];
+
+                if is_selected {
+                    let indicator = Paragraph::new(ratatui::text::Line::from(vec![
+                        ratatui::text::Span::styled("▌ ", theme.accent.clone())
+                    ]));
+                    frame.render_widget(indicator, highlight_area);
+                }
+                
+                let mut poster_rendered = false;
+                if let Some(img) = state.search_posters.get(&res.id) {
+                    if state.image_supported {
+                        let needs_protocol = state.search_poster_protocols.get(&res.id).map(|(r, _)| *r) != Some(poster_area);
+                        if needs_protocol {
+                            if let Some(picker) = &mut state.image_picker {
+                                let size = ratatui::layout::Size::new(poster_area.width, poster_area.height.min(3));
+                                if let Ok(proto) = picker.new_protocol((**img).clone(), size, ratatui_image::Resize::Fit(None)) {
+                                    state.search_poster_protocols.insert(res.id.clone(), (poster_area, proto));
+                                }
+                            }
+                        }
+                        if let Some((_, proto)) = state.search_poster_protocols.get(&res.id) {
+                            let p_area = Rect { height: poster_area.height.min(3), ..poster_area };
+                            frame.render_widget(ratatui_image::Image::new(proto), p_area);
+                            poster_rendered = true;
+                        }
+                    }
+                }
+                
+                if !poster_rendered {
+                    let p = Paragraph::new("████\n████\n████")
+                        .style(theme.muted);
+                    let p_area = Rect { height: poster_area.height.min(3), ..poster_area };
+                    frame.render_widget(p, p_area);
+                }
+                
+                let text_layout = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(1),
+                        Constraint::Length(1),
+                        Constraint::Min(0),
+                    ])
+                    .split(text_area);
+                    
+                let title_style = if is_selected { theme.title } else { theme.text };
+                let max_title_width = text_area.width.saturating_sub(4) as usize;
+                let mut display_title = res.title.clone();
+                if display_title.chars().count() > max_title_width && max_title_width > 3 {
+                    display_title = display_title.chars().take(max_title_width - 3).collect::<String>();
+                    display_title.push_str("...");
+                }
+                
+                let type_tag = if res.stype == 1 { "Movie" } else if res.stype == 2 { "TV Series" } else { "Other" };
+                
+                let title_line = ratatui::text::Line::from(vec![
+                    ratatui::text::Span::styled(display_title, title_style),
+                ]);
+                if text_layout[0].height > 0 {
+                    frame.render_widget(Paragraph::new(title_line), text_layout[0]);
+                }
+                
+                let mut info_spans = vec![];
+
+                if is_selected {
+                    if state.preview_loading || state.is_loading {
+                        info_spans.push(ratatui::text::Span::styled(&res.release_year, theme.text));
+                        info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        info_spans.push(ratatui::text::Span::styled(type_tag, theme.text));
+                        info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        info_spans.push(ratatui::text::Span::styled("Loading...", theme.text_dim));
+                    } else if let Some(meta) = &state.search_preview {
+                        let rating = meta.get("imdbRating").or_else(|| meta.get("imdbRatingValue")).and_then(|v| v.as_str());
+                        if let Some(r) = rating {
+                            info_spans.push(ratatui::text::Span::styled("★ ", theme.rating.clone()));
+                            info_spans.push(ratatui::text::Span::styled(r, theme.text));
+                            info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        }
+                        info_spans.push(ratatui::text::Span::styled(&res.release_year, theme.text));
+                        info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        
+                        let mut g_names = vec![];
+                        if let Some(genres) = meta.get("genres").and_then(|g| g.as_array()) {
+                            g_names = genres.iter()
+                                .filter_map(|g| g.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                                .collect();
+                        }
+                        if !g_names.is_empty() {
+                            info_spans.push(ratatui::text::Span::styled(g_names.join(" • "), theme.text));
+                            info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        }
+                        info_spans.push(ratatui::text::Span::styled(type_tag, theme.text));
+                    } else {
+                        info_spans.push(ratatui::text::Span::styled(&res.release_year, theme.text));
+                        info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        info_spans.push(ratatui::text::Span::styled(type_tag, theme.text));
+                    }
+                } else {
+                    info_spans.push(ratatui::text::Span::styled(&res.release_year, theme.text));
+                    info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                    info_spans.push(ratatui::text::Span::styled(type_tag, theme.text));
+                }
+                
+                if text_layout[1].height > 0 && !info_spans.is_empty() {
+                    frame.render_widget(Paragraph::new(ratatui::text::Line::from(info_spans)), text_layout[1]);
+                }
+                
+                current_y += row_height;
+
+            }
+
         } else {
             let inner_area = list_block.inner(chunks[1]);
             frame.render_widget(list_block, chunks[1]);
@@ -319,7 +441,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         if dropdown_area.y + dropdown_area.height <= area.height || search_area.y > area.height / 2 {
             frame.render_widget(ratatui::widgets::Clear, dropdown_area);
             let items: Vec<ratatui::widgets::ListItem> = state.search_suggestions.iter().enumerate().map(|(i, s)| {
-                let text = if Some(i) == state.suggest_index { format!(">> {}", s) } else { format!("   {}", s) };
+                let text = if Some(i) == state.suggest_index { format!("▌ {}", s) } else { format!("   {}", s) };
                 let style = if Some(i) == state.suggest_index { theme.highlight } else { theme.text };
                 ratatui::widgets::ListItem::new(ratatui::text::Line::from(ratatui::text::Span::styled(text, style)).alignment(ratatui::layout::Alignment::Left))
             }).collect();

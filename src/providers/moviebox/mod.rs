@@ -1,12 +1,12 @@
 pub mod client;
 pub mod crypto;
 
-use client::{ScraperError, MovieBoxClient};
-use serde_json::{Value, json};
+use client::{MovieBoxClient, ScraperError};
+use serde_json::{json, Value};
 
 impl MovieBoxClient {
     pub async fn search(&self, query: &str, page: usize) -> Result<Value, ScraperError> {
-        self.search_with_tab(query, page, "All").await
+        self.search_with_tab(query, page, "MovieTV").await
     }
 
     pub async fn suggest(&self, query: &str) -> Result<Value, ScraperError> {
@@ -72,7 +72,6 @@ impl MovieBoxClient {
         self.get(&path).await
     }
 
-
     pub async fn get_all_resources(
         &self,
         subject_id: &str,
@@ -89,8 +88,10 @@ impl MovieBoxClient {
             handles.push(tokio::spawn(async move {
                 tokio::time::timeout(
                     std::time::Duration::from_secs(4),
-                    c.get_resources(&sid, season, episode, 1, Some(&r))
-                ).await.unwrap_or(Err(ScraperError::ApiStatus(408)))
+                    c.get_resources(&sid, season, episode, 1, Some(&r)),
+                )
+                .await
+                .unwrap_or(Err(ScraperError::ApiStatus(408)))
             }));
         }
 

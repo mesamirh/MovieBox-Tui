@@ -1,4 +1,4 @@
-use crate::v3::crypto::build_signed_headers;
+use crate::providers::moviebox::crypto::build_signed_headers;
 use reqwest::Response;
 use serde_json::Value;
 use std::sync::Arc;
@@ -53,8 +53,8 @@ impl MovieBoxClient {
             .build()
             .expect("Failed to build reqwest client; TLS backend may be missing");
 
-        let (user_agent, client_info) = crate::v3::crypto::generate_client_info_and_ua();
-        let spoofed_ip = crate::v3::crypto::random_spoofed_ip();
+        let (user_agent, client_info) = crate::providers::moviebox::crypto::generate_client_info_and_ua();
+        let spoofed_ip = crate::providers::moviebox::crypto::random_spoofed_ip();
 
         Self {
             client,
@@ -65,7 +65,6 @@ impl MovieBoxClient {
             spoofed_ip,
         }
     }
-
 
     pub async fn init(&self) -> Result<(), ScraperError> {
         let path = "/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=";

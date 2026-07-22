@@ -28,6 +28,7 @@ pub struct SearchResult {
     pub title: String,
     pub stype: i64,
     pub release_year: String,
+    pub cover_url: Option<String>,
 }
 
 pub struct AppState {
@@ -39,11 +40,16 @@ pub struct AppState {
     pub search_suggestions: Vec<String>,
     pub suggest_index: Option<usize>,
     pub search_results: Vec<SearchResult>,
+    pub search_posters: std::collections::HashMap<String, std::sync::Arc<image::DynamicImage>>,
+    pub search_poster_protocols: std::collections::HashMap<String, (ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
     pub search_list_state: TableState,
 
     pub selected_details: Option<serde_json::Value>,
     pub selected_resources: Option<serde_json::Value>,
-    pub resource_list_state: TableState,
+    pub active_popup: Option<String>,
+    pub selected_poster: Option<std::sync::Arc<image::DynamicImage>>,
+    pub selected_poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
+    pub resource_list_state: ListState,
 
     pub details_pane: DetailsPane,
     pub selected_season: usize,
@@ -60,10 +66,12 @@ pub struct AppState {
     pub poster_image: Option<image::DynamicImage>,
     pub poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
     pub image_picker: Option<ratatui_image::picker::Picker>,
+    pub image_supported: bool,
     pub image_cache: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
 
     pub show_logs: bool,
     pub show_help: bool,
+    pub visible_items: usize,
     pub logs: Vec<String>,
     pub logs_scroll: usize,
 
@@ -99,11 +107,16 @@ impl Default for AppState {
             search_suggestions: Vec::new(),
             suggest_index: None,
             search_results: Vec::new(),
+            search_posters: std::collections::HashMap::new(),
+            search_poster_protocols: std::collections::HashMap::new(),
             search_list_state: TableState::default(),
             basic_terminal: std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal",
             selected_details: None,
             selected_resources: None,
-            resource_list_state: TableState::default(),
+            active_popup: None,
+            selected_poster: None,
+            selected_poster_protocol: None,
+            resource_list_state: ListState::default(),
 
             details_pane: DetailsPane::default(),
             selected_season: 1,
@@ -119,9 +132,11 @@ impl Default for AppState {
             poster_image: None,
             poster_protocol: None,
             image_picker: None,
+            image_supported: true,
             image_cache: lru::LruCache::new(std::num::NonZeroUsize::new(10).unwrap()),
             show_logs: false,
             show_help: false,
+            visible_items: 10,
             logs: vec!["MovieBox-Tui started.".to_string()],
             logs_scroll: 0,
             active_error: None,

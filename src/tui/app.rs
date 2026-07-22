@@ -8,7 +8,7 @@ use crate::tui::{
     state::{AppState, InputMode, Screen, SearchResult},
     theme::Theme,
 };
-use crate::v3::client::MovieBoxClient;
+use crate::providers::moviebox::client::MovieBoxClient;
 use update_informer::Check;
 
 pub struct App {
@@ -68,10 +68,15 @@ impl App {
     }
 
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
-        if self.state.image_picker.is_none() {
-            let picker = ratatui_image::picker::Picker::from_query_stdio()
-                .unwrap_or_else(|_| ratatui_image::picker::Picker::halfblocks());
-            self.state.image_picker = Some(picker);
+        if self.state.image_picker.is_none() && self.state.image_supported {
+            match ratatui_image::picker::Picker::from_query_stdio() {
+                Ok(picker) => {
+                    self.state.image_picker = Some(picker);
+                }
+                Err(_) => {
+                    self.state.image_supported = false;
+                }
+            }
         }
 
         let mut events = EventHandler::new(Duration::from_millis(60));
@@ -196,8 +201,19 @@ impl App {
                         KeyCode::Enter => {
                             let query = self.state.search_query.trim().to_string();
                             if !query.is_empty() {
+                                let selected_suggestion = self.state.suggest_index.is_some();
                                 self.state.input_mode = InputMode::Normal;
-                                self.action_sender.send(Action::Search(query)).ok();
+                                self.state.search_suggestions.clear();
+                                self.state.suggest_index = None;
+                                self.state.search_results.clear();
+                                self.state.search_list_state.select(None);
+                                self.state.last_search_edit = std::time::Instant::now();
+                                let action = if selected_suggestion {
+                                    Action::SelectSuggestion { query }
+                                } else {
+                                    Action::Search { query }
+                                };
+                                self.action_sender.send(action).ok();
                             }
                         }
                         KeyCode::Backspace => {
@@ -242,6 +258,12 @@ impl App {
                             KeyCode::Down => {
                                 self.action_sender.send(Action::MoveDown).ok();
                             }
+                            KeyCode::Left => {
+                                self.action_sender.send(Action::MoveLeft).ok();
+                            }
+                            KeyCode::Right => {
+                                self.action_sender.send(Action::MoveRight).ok();
+                            }
                             KeyCode::Enter => {
                                 self.action_sender.send(Action::Submit).ok();
                             }
@@ -257,6 +279,9 @@ impl App {
                             {
                                 self.state.input_mode = InputMode::Editing;
                                 self.state.search_query.push(c);
+
+                                self.state.search_suggestions.clear();
+                                self.state.suggest_index = None;
                                 self.state.status_message = String::new(); self.state.status_timer = 150;
                             }
                             _ => {}
@@ -363,7 +388,16 @@ impl App {
                 self.state.show_logs = !self.state.show_logs;
             }
             Action::ToggleHelp => {
-                self.state.show_help = !self.state.show_help;
+                if matches!(
+                    self.state.active_screen,
+                    Screen::Home | Screen::Search | Screen::Details
+                ) {
+                    self.state.show_help = !self.state.show_help;
+                }
+            }
+
+            Action::ClosePopup => {
+                self.state.active_popup = None;
             }
             Action::GoBack => {
                 if self.state.subtitle_popup {
@@ -451,14 +485,29 @@ impl App {
                             .unwrap_or(&raw_title)
                             .trim()
                             .to_string();
+                        
+                        let normalized_query = query.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
+                        let normalized_title = clean_title.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
+                        if !normalized_title.contains(&normalized_query) && !normalized_query.is_empty() {
+                            continue;
+                        }
+
                         if !self.state.search_suggestions.contains(&clean_title) {
                             self.state.search_suggestions.push(clean_title);
                         }
                     }
                 }
             }
-            Action::Search(query) => {
+            Action::SelectSuggestion { query } => {
+                self.action_sender.send(Action::Search { query }).ok();
+            }
+            Action::Search { query } => {
+                self.state.active_screen = Screen::Home;
+                self.state.selected_details = None;
+                self.state.selected_resources = None;
                 self.state.is_loading = true;
+                self.state.search_results.clear();
+                self.state.search_list_state.select(Some(0));
                 self.state.search_suggestions.clear();
                 self.state.suggest_index = None;
                 self.state.status_message = format!("Searching for '{}'...", query); self.state.status_timer = 150;
@@ -470,7 +519,7 @@ impl App {
                 tokio::spawn(async move {
                     match client.search(&query_clone, 1).await {
                         Ok(res) => {
-                            sender.send(Action::SearchSuccess(query_clone, res)).ok();
+                            sender.send(Action::SearchSuccess { query: query_clone, payload: res }).ok();
                         }
                         Err(e) => {
                             sender.send(Action::SearchFailure(format!("{:?}", e))).ok();
@@ -478,13 +527,13 @@ impl App {
                     }
                 });
             }
-            Action::SearchSuccess(query, payload) => {
+            Action::SearchSuccess { query, payload } => {
                 if query != self.state.search_query.trim() {
                     return None;
                 }
                 self.state.is_loading = false;
                 self.state.search_results.clear();
-
+                let _ = std::fs::write("search_debug.json", serde_json::to_string_pretty(&payload).unwrap_or_default());
                 let mut count = 0;
                 let subjects_opt = payload
                     .get("results")
@@ -494,7 +543,6 @@ impl App {
                     .and_then(|s| s.as_array());
 
                 if let Some(subjects) = subjects_opt {
-                    let query_lower = self.state.search_query.to_lowercase().trim().to_string();
                     for item in subjects {
                         let id = item
                             .get("subjectId")
@@ -514,9 +562,10 @@ impl App {
                             .trim()
                             .to_string();
 
-                        if !query_lower.is_empty()
-                            && !clean_title.to_lowercase().contains(&query_lower)
-                        {
+
+                        let normalized_query = query.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
+                        let normalized_title = raw_title.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
+                        if !normalized_title.contains(&normalized_query) && !normalized_query.is_empty() {
                             continue;
                         }
 
@@ -530,6 +579,14 @@ impl App {
                             .unwrap_or("N/A")
                             .to_string();
 
+                        let cover_url = item.get("poster")
+                            .or_else(|| item.get("cover"))
+                            .or_else(|| item.get("pic"))
+                            .and_then(|c| {
+                                c.as_str().or_else(|| c.get("url").and_then(|u| u.as_str()))
+                            })
+                            .map(|s| s.to_string());
+
                         let is_duplicate = self.state.search_results.iter().any(|r| {
                             r.title == clean_title
                                 && r.release_year == release_year
@@ -542,14 +599,56 @@ impl App {
                                 title: clean_title,
                                 stype,
                                 release_year,
+                                cover_url,
                             });
                             count += 1;
                         }
                     }
+                    let query_lower = query.to_lowercase();
                     self.state.search_results.sort_by(|a, b| {
-                        b.stype
-                            .cmp(&a.stype)
+                        let a_title = a.title.to_lowercase();
+                        let b_title = b.title.to_lowercase();
+                        
+                        let a_exact = a_title == query_lower;
+                        let b_exact = b_title == query_lower;
+                        
+                        let a_starts = a_title.starts_with(&query_lower);
+                        let b_starts = b_title.starts_with(&query_lower);
+                        
+                        b_exact.cmp(&a_exact)
+                            .then_with(|| b_starts.cmp(&a_starts))
+                            .then_with(|| b.stype.cmp(&a.stype))
                             .then_with(|| b.release_year.cmp(&a.release_year))
+                    });
+                }
+
+                if !self.state.search_results.is_empty() {
+                    let results_to_fetch = self.state.search_results.iter().take(15).map(|r| {
+                        (r.id.clone(), r.stype, r.cover_url.clone())
+                    }).collect::<Vec<_>>();
+                    
+                    let sender = self.action_sender.clone();
+                    tokio::spawn(async move {
+                        for (id, stype, cover_url) in results_to_fetch {
+                            let mut url_to_fetch = cover_url;
+                            if url_to_fetch.is_none() {
+                                let type_str = if stype == 2 { "series" } else { "movie" };
+                                if let Ok(resp) = reqwest::get(&format!("https://v3-cinemeta.strem.io/meta/{}/{}.json", type_str, id)).await {
+                                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                                        url_to_fetch = json.get("meta").and_then(|m| m.get("poster")).and_then(|p| p.as_str()).map(|s| s.to_string());
+                                    }
+                                }
+                            }
+                            if let Some(url) = url_to_fetch {
+                                if let Ok(resp) = reqwest::get(&url).await {
+                                    if let Ok(bytes) = resp.bytes().await {
+                                        if let Ok(img) = image::load_from_memory(&bytes) {
+                                            let _ = sender.send(Action::SearchPosterLoaded(id, Some(std::sync::Arc::new(img))));
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     });
                 }
 
@@ -557,25 +656,15 @@ impl App {
                 self.state
                     .add_log(format!("Search completed: {} items loaded.", count));
 
-                let query_lower = query.to_lowercase().trim().to_string();
-                let exact_match_idx = self.state.search_results.iter().position(|r| r.title.to_lowercase() == query_lower);
+                self.state.search_list_state.select(Some(0));
 
-                if let Some(idx) = exact_match_idx {
-                    self.state.search_list_state.select(Some(idx));
-                    self.action_sender.send(Action::Submit).ok();
-                } else if count == 1 {
+                self.state.last_search_edit = std::time::Instant::now();
+
+                if let Some(res) = self.state.search_results.first() {
                     self.state.search_list_state.select(Some(0));
-                    self.action_sender.send(Action::Submit).ok();
+                    self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
                 } else {
-                    self.state
-                        .search_list_state
-                        .select(if count > 0 { Some(0) } else { None });
-
-                    if let Some(res) = self.state.search_results.first() {
-                        self.action_sender
-                            .send(Action::FetchPreview(res.id.clone()))
-                            .ok();
-                    }
+                    self.state.search_list_state.select(None);
                 }
             }
             Action::SearchFailure(err) => {
@@ -738,7 +827,18 @@ impl App {
                 }
             }
             Action::MoveLeft => {
-                if self.state.active_screen == Screen::Details {
+                if self.state.active_screen == Screen::Home {
+                    let current = self.state.search_list_state.selected().unwrap_or(0);
+                    let jump = self.state.visible_items.max(1);
+                    if current > jump {
+                        self.state.search_list_state.select(Some(current - jump));
+                    } else {
+                        self.state.search_list_state.select(Some(0));
+                    }
+                    if let Some(res) = self.state.search_results.get(self.state.search_list_state.selected().unwrap_or(0)) {
+                        self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
+                    }
+                } else if self.state.active_screen == Screen::Details {
                     match self.state.details_pane {
                         crate::tui::state::DetailsPane::Streams => {
                             if !self.state.available_seasons.is_empty() {
@@ -777,7 +877,19 @@ impl App {
                 }
             }
             Action::MoveRight => {
-                if self.state.active_screen == Screen::Details {
+                if self.state.active_screen == Screen::Home {
+                    let current = self.state.search_list_state.selected().unwrap_or(0);
+                    let jump = self.state.visible_items.max(1);
+                    let total = self.state.search_results.len();
+                    if current + jump < total {
+                        self.state.search_list_state.select(Some(current + jump));
+                    } else if total > 0 {
+                        self.state.search_list_state.select(Some(total - 1));
+                    }
+                    if let Some(res) = self.state.search_results.get(self.state.search_list_state.selected().unwrap_or(0)) {
+                        self.action_sender.send(Action::FetchPreview(res.id.clone())).ok();
+                    }
+                } else if self.state.active_screen == Screen::Details {
                     match self.state.details_pane {
                         crate::tui::state::DetailsPane::Seasons => {
                             self.state.details_pane = crate::tui::state::DetailsPane::Episodes;
@@ -808,6 +920,12 @@ impl App {
                 }
             }
             Action::Submit => {
+                if self.state.is_loading {
+                    return None;
+                }
+                if self.state.last_search_edit.elapsed().as_millis() < 500 {
+                    return None;
+                }
                 if self.state.subtitle_popup {
                     self.state.subtitle_popup = false;
                     let idx = self.state.subtitle_list_state.selected().unwrap_or(0);
@@ -853,6 +971,7 @@ impl App {
             }
             Action::FetchPreview(id) => {
                 self.state.preview_loading = true;
+                self.state.selected_poster = None;
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 let id_clone = id.clone();
@@ -869,7 +988,7 @@ impl App {
             }
             Action::PreviewSuccess(id, json) => {
                 let current_id = if self.state.active_screen == Screen::Details {
-                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_str()).map(|s| s.to_string())
+                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_i64().map(|n| n.to_string()).or_else(|| i.as_str().map(|s| s.to_string())))
                 } else {
                     self.state
                         .search_list_state
@@ -881,6 +1000,8 @@ impl App {
                 if current_id.as_deref() != Some(id.as_str()) {
                     return None;
                 }
+                
+                let _ = std::fs::write("preview_debug.json", serde_json::to_string_pretty(&json).unwrap_or_default());
 
                 self.state.preview_loading = false;
                 self.state.search_preview = Some(json.clone());
@@ -909,19 +1030,20 @@ impl App {
             Action::PosterSuccess(id, img) => {
                 self.state.image_cache.put(id.clone(), img.clone());
                 
-                let current_id = if self.state.active_screen == Screen::Details {
-                    self.state.selected_details.as_ref().and_then(|d| d.get("id")).and_then(|i| i.as_str()).map(|s| s.to_string())
-                } else {
-                    self.state
-                        .search_list_state
-                        .selected()
-                        .and_then(|idx| self.state.search_results.get(idx))
-                        .map(|res| res.id.clone())
-                };
+                let current_id = self.state
+                    .search_list_state
+                    .selected()
+                    .and_then(|idx| self.state.search_results.get(idx))
+                    .map(|res| res.id.clone());
 
                 if current_id.as_deref() == Some(id.as_str()) {
                     self.state.poster_image = Some((*img).clone());
                     self.state.poster_protocol = None;
+                }
+            }
+            Action::SearchPosterLoaded(id, img_opt) => {
+                if let Some(img) = img_opt {
+                    self.state.search_posters.insert(id, img);
                 }
             }
             Action::PreviewFailure(err) => {
@@ -935,7 +1057,7 @@ impl App {
                 {
                     if let Ok(mut clipboard) = arboard::Clipboard::new() {
                         let _ = clipboard.set_text(link.clone());
-                        self.state.toast_message = Some("[ ✓ ] Copied stream link!".to_string());
+                        self.state.toast_message = Some("✓ Copied stream link!".to_string());
                         self.state.toast_timer = 30;
                         self.state.add_log(
                             "Stream link successfully copied to clipboard.".to_string(),
@@ -949,7 +1071,7 @@ impl App {
                 if self.state.active_screen == Screen::Details
                     && let Some(link) = self.get_selected_link()
                 {
-                    self.state.toast_message = Some("[ i ] Fetching subtitles...".to_string());
+                    self.state.toast_message = Some("✓ Fetching subtitles...".to_string());
                     self.state.toast_timer = 40;
                     let subject_id = self
                         .state
@@ -997,7 +1119,7 @@ impl App {
             }
             Action::LaunchMpv(link, subtitle_url) => {
                 use std::process::{Command, Stdio};
-                self.state.toast_message = Some("[ i ] Launching MPV...".to_string());
+                self.state.toast_message = Some("✓ Launching MPV...".to_string());
                 self.state.toast_timer = 40;
                 
                 let mut cmd = Command::new("mpv");
@@ -1012,7 +1134,7 @@ impl App {
                 if cmd.spawn().is_ok() {
                     self.state.add_log("MPV started successfully.".to_string());
                 } else {
-                    self.state.toast_message = Some("[ ! ] Error: mpv player not found in PATH".to_string());
+                    self.state.toast_message = Some("✗ Error: mpv player not found in PATH".to_string());
                     self.state.toast_timer = 60;
                     self.state.add_log("Error starting mpv process. Command failed.".to_string());
                 }
@@ -1045,7 +1167,7 @@ impl App {
 
                     if let Some(link) = link_opt {
                         self.state.toast_message =
-                            Some("[ ↓ ] Starting native download...".to_string());
+                            Some("✓ Starting native download...".to_string());
                         self.state.toast_timer = 40;
                         self.state.download_status = Some("Connecting...".to_string());
                         self.state.download_progress = Some(0.0);
@@ -1518,9 +1640,10 @@ impl App {
 
                 if let Some(dubs) = payload.get("dubs").and_then(|d| d.as_array()) {
                     let mut current_idx = 0;
-                    let current_id = payload.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                    let current_id = payload.get("id").and_then(|i| i.as_i64().map(|n| n.to_string()).or_else(|| i.as_str().map(|s| s.to_string()))).unwrap_or_default();
                     for (i, dub) in dubs.iter().enumerate() {
-                        if dub.get("subjectId").and_then(|i| i.as_str()) == Some(current_id) {
+                        let dub_id = dub.get("subjectId").and_then(|i| i.as_i64().map(|n| n.to_string()).or_else(|| i.as_str().map(|s| s.to_string())));
+                        if dub_id == Some(current_id.clone()) {
                             current_idx = i;
                         }
                     }
@@ -1631,7 +1754,7 @@ impl App {
                     .cancel_download
                     .store(true, std::sync::atomic::Ordering::SeqCst);
                 self.state.download_status = Some("Cancelling...".to_string());
-                self.state.toast_message = Some("[ ! ] Cancelling download...".to_string());
+                self.state.toast_message = Some("✗ Cancelling download...".to_string());
                 self.state.toast_timer = 40;
             }
             Action::Log(msg) => {
@@ -1698,26 +1821,23 @@ impl App {
         if let Some(msg) = &self.state.toast_message {
             use ratatui::layout::{Constraint, Direction, Layout};
             use ratatui::style::{Color, Style};
-            use ratatui::widgets::{Block, Borders, Paragraph};
+            use ratatui::widgets::Paragraph;
 
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(3)])
+                .constraints([Constraint::Min(0), Constraint::Length(1)])
                 .split(area);
 
-            let h_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
-                .split(chunks[0]);
-
             let toast_area = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(3)])
-                .split(h_chunks[1])[1];
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Min(0), Constraint::Length(msg.chars().count() as u16 + 2)])
+                .split(chunks[1])[1];
+
+
+            let color = if self.state.toast_timer < 10 { self.theme.muted } else { self.theme.success };
 
             let p = Paragraph::new(msg.clone())
-                .block(Block::default().borders(Borders::ALL))
-                .style(Style::default().fg(Color::Green));
+                .style(color.add_modifier(ratatui::style::Modifier::BOLD));
             frame.render_widget(p, toast_area);
         }
     }

@@ -13,6 +13,9 @@ pub struct Theme {
     pub success: Style,
     pub shortcut: Style,
     pub overlay: Style,
+    pub rating: Style,
+    pub accent: Style,
+    pub muted: Style,
 }
 
 impl Default for Theme {
@@ -26,7 +29,6 @@ impl Default for Theme {
                 .fg(Color::Rgb(203, 166, 247))
                 .add_modifier(Modifier::BOLD),
             highlight: Style::default()
-                .bg(Color::Rgb(49, 50, 68))
                 .fg(Color::Rgb(137, 180, 250))
                 .add_modifier(Modifier::BOLD),
             header: Style::default()
@@ -36,6 +38,9 @@ impl Default for Theme {
             success: Style::default().fg(Color::Rgb(166, 227, 161)),
             shortcut: Style::default().fg(Color::Rgb(250, 179, 135)),
             overlay: Style::default().fg(Color::Rgb(108, 112, 134)),
+            rating: Style::default().fg(Color::Rgb(249, 226, 175)), // Yellow
+            accent: Style::default().fg(Color::Rgb(137, 220, 235)).add_modifier(Modifier::BOLD), // Sky
+            muted: Style::default().fg(Color::Rgb(88, 91, 112)), // Surface 1
         }
     }
 }

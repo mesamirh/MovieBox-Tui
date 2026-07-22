@@ -24,7 +24,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
         ])
         .split(popup_layout[1])[1];
 
-    frame.render_widget(Clear, popup_area); // Clear background under popup
+    frame.render_widget(Clear, popup_area);
 
     let list_items: Vec<ListItem> = state
         .logs

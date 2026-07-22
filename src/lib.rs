@@ -1,3 +1,3 @@
 
 pub mod tui;
-pub mod v3;
+pub mod providers;
