@@ -1,5 +1,6 @@
 [package]
 name = "moviebox-tui"
+exclude = ["assets/", ".github/"]
 version = "0.1.3"
 edition = "2024"
 description = "A terminal client for finding and streaming movies, TV shows, and anime from the MovieBox catalog."

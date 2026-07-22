@@ -12,7 +12,7 @@ A terminal client for finding and streaming movies, TV shows, and anime from you
 <br>
 
 <p align="center">
-  <img src="assets/screenshots/01-home.png" alt="MovieBox-Tui home screen" width="88%"/>
+  <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/01-home.jpg" alt="MovieBox-Tui home screen" width="88%"/>
 </p>
 
 </div>
@@ -93,7 +93,7 @@ A short walkthrough of the app in action:
 
 | Home | Search results |
 | :---: | :---: |
-| <img src="assets/screenshots/01-home.png" alt="Home screen" width="480"> | <img src="assets/screenshots/02-search-results.png" alt="Search results" width="480"> |
+| <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/01-home.jpg" alt="Home screen" width="480"> | <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/02-search-results.jpg" alt="Search results" width="480"> |
 
 </details>
 
@@ -103,7 +103,7 @@ A short walkthrough of the app in action:
 
 | Movie | TV series |
 | :---: | :---: |
-| <img src="assets/screenshots/03-movie-details.png" alt="Movie details" width="480"> | <img src="assets/screenshots/04-series-details.png" alt="Series details" width="480"> |
+| <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/03-movie-details.jpg" alt="Movie details" width="480"> | <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/04-series-details.jpg" alt="Series details" width="480"> |
 
 </details>
 
@@ -113,7 +113,7 @@ A short walkthrough of the app in action:
 
 | Movies | Series | Anime |
 | :---: | :---: | :---: |
-| <img src="assets/screenshots/05-discover-movies.png" alt="Discover movies" width="320"> | <img src="assets/screenshots/06-discover-series.png" alt="Discover series" width="320"> | <img src="assets/screenshots/07-discover-anime.png" alt="Discover anime" width="320"> |
+| <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/05-discover-movies.jpg" alt="Discover movies" width="320"> | <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/06-discover-series.jpg" alt="Discover series" width="320"> | <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/07-discover-anime.jpg" alt="Discover anime" width="320"> |
 
 </details>
 
@@ -122,7 +122,7 @@ A short walkthrough of the app in action:
 <br>
 
 <p align="center">
-  <img src="assets/screenshots/08-help.png" alt="Keybindings help overlay" width="70%">
+  <img src="https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/assets/screenshots/08-help.jpg" alt="Keybindings help overlay" width="70%">
 </p>
 
 </details>
