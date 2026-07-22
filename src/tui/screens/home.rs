@@ -332,7 +332,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 }
 
                 let mut poster_rendered = false;
-                if let Some(img) = state.search_posters.get(&res.id) {
+                if let Some(img) = state.search_posters.peek(&res.id) {
                     if state.image_supported {
                         let needs_protocol =
                             state.search_poster_protocols.get(&res.id).map(|(r, _)| *r)

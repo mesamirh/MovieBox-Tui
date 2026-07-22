@@ -62,21 +62,6 @@ impl App {
         }
     }
 
-    fn get_absolute_episode_index(&self) -> usize {
-        let mut absolute_episode_index = 0;
-        let selected_season_idx = self.state.season_list_state.selected().unwrap_or(0);
-        for (i, season) in self.state.available_seasons.iter().enumerate() {
-            if i < selected_season_idx {
-                absolute_episode_index +=
-                    season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1) as usize;
-            } else {
-                break;
-            }
-        }
-        absolute_episode_index += self.state.episode_list_state.selected().unwrap_or(0);
-        absolute_episode_index
-    }
-
     fn trigger_episode_fetch(&mut self) {
         if let Some(id) = &self.state.active_subject_id {
             let se_idx = self.state.season_list_state.selected().unwrap_or(0);
@@ -128,8 +113,21 @@ impl App {
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
         if self.state.image_picker.is_none() && self.state.image_supported {
             match ratatui_image::picker::Picker::from_query_stdio() {
-                Ok(picker) => {
+                Ok(mut picker) => {
+                    let size = picker.font_size();
+                    let fallback = format!("{:?}", size).contains("8") && format!("{:?}", size).contains("16");
+                    let empty = format!("{:?}", size).contains("0");
+                    if fallback || empty {
+                        if let Ok(picker2) = ratatui_image::picker::Picker::from_query_stdio() {
+                            picker = picker2;
+                        }
+                    }
                     self.state.image_picker = Some(picker);
+                    
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                        let _ = crossterm::event::read();
+                    }
                 }
                 Err(_) => {
                     self.state.image_supported = false;
@@ -139,26 +137,16 @@ impl App {
 
         let mut events = EventHandler::new(Duration::from_millis(100));
 
-        let init_sender = self.action_sender.clone();
+        let _init_sender = self.action_sender.clone();
         let client_clone = self.client.clone();
         tokio::spawn(async move {
-            init_sender
-                .send(Action::Log(
-                    "Initializing MovieBox-Tui client session...".to_string(),
-                ))
-                .ok();
+
             match client_clone.init().await {
                 Ok(_) => {
-                    init_sender
-                        .send(Action::Log(
-                            "MovieBox-Tui client initialized successfully.".to_string(),
-                        ))
-                        .ok();
+                    let _ = _init_sender;
                 }
-                Err(e) => {
-                    init_sender
-                        .send(Action::Log(format!("Initialization failed: {:?}", e)))
-                        .ok();
+                Err(_e) => {
+
                 }
             }
         });
@@ -254,8 +242,6 @@ impl App {
                                     subject_id,
                                     season: se,
                                     episode: ep,
-                                    absolute_episode_index: 0,
-                                    resolution: "".to_string(),
                                 })
                                 .ok();
                         }
@@ -263,13 +249,29 @@ impl App {
                 }
             }
             Action::Quit => {
-                self.state.add_log("Quitting...".to_string());
                 return Some(());
             }
-            Action::Resize(_w, _h) => {
-                self.state.image_picker = ratatui_image::picker::Picker::from_query_stdio().ok();
-
+            Action::FocusChange => {
                 self.state.poster_protocol = None;
+                self.state.search_poster_protocols.clear();
+                self.state.selected_resources = None;
+                self.state.resource_list_state.select(None);
+                if self.state.image_picker.is_some() {
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                        let _ = crossterm::event::read();
+                    }
+                }
+            }
+            Action::Resize(_w, _h) => {
+                self.state.poster_protocol = None;
+                self.state.search_poster_protocols.clear();
+                if self.state.image_picker.is_some() {
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                        let _ = crossterm::event::read();
+                    }
+                }
             }
             Action::Key(key) => {
                 use crossterm::event::{KeyCode, KeyModifiers};
@@ -281,7 +283,7 @@ impl App {
                             return Some(());
                         }
                         KeyCode::Char('l') => {
-                            self.action_sender.send(Action::ToggleLogs).ok();
+
                         }
                         _ => {}
                     }
@@ -404,9 +406,6 @@ impl App {
                             KeyCode::Char('y') | KeyCode::Char('c') => {
                                 self.action_sender.send(Action::CopyLink).ok();
                             }
-                            KeyCode::Char('p') | KeyCode::Char('P') => {
-                                self.action_sender.send(Action::PlayStream).ok();
-                            }
                             KeyCode::Char('d') | KeyCode::Char('D') => {
                                 self.action_sender.send(Action::DownloadStream).ok();
                             }
@@ -430,12 +429,13 @@ impl App {
                                 self.action_sender.send(Action::MoveRight).ok();
                             }
                             KeyCode::Enter => {
+                                let open_with = key.modifiers.contains(crossterm::event::KeyModifiers::SHIFT);
                                 if self.state.subtitle_popup {
                                     self.action_sender.send(Action::Submit).ok();
                                 } else {
                                     match self.state.details_pane {
                                         crate::tui::state::DetailsPane::Streams => {
-                                            self.action_sender.send(Action::PlayStream).ok();
+                                            self.action_sender.send(Action::PlayStream(open_with)).ok();
                                         }
                                         crate::tui::state::DetailsPane::Seasons => {
                                             self.action_sender.send(Action::MoveRight).ok();
@@ -459,9 +459,6 @@ impl App {
                                                         .unwrap_or("".to_string()),
                                                     season: self.state.selected_season,
                                                     episode: self.state.selected_episode,
-                                                    absolute_episode_index: self
-                                                        .get_absolute_episode_index(),
-                                                    resolution: "".to_string(),
                                                 })
                                                 .ok();
                                             self.action_sender
@@ -477,22 +474,19 @@ impl App {
                     },
                 }
             }
-            Action::ToggleLogs => {
-                self.state.show_logs = !self.state.show_logs;
-            }
+
             Action::ToggleHelp => {
-                if matches!(
-                    self.state.active_screen,
-                    Screen::Home | Screen::Search | Screen::Details
-                ) {
+                if matches!(self.state.active_screen, Screen::Home | Screen::Details) {
                     self.state.show_help = !self.state.show_help;
                 }
             }
-
-            Action::ClosePopup => {
-                self.state.active_popup = None;
-            }
             Action::GoBack => {
+                if self.state.player_picker_popup {
+                    self.state.player_picker_popup = false;
+                    self.state.player_picker_link = None;
+                    self.state.player_picker_subtitle = None;
+                    return None;
+                }
                 if self.state.subtitle_popup {
                     self.state.subtitle_popup = false;
                     self.state.pending_play_link = None;
@@ -505,6 +499,7 @@ impl App {
                 match self.state.active_screen {
                     Screen::Home => {
                         if !self.state.search_results.is_empty() {
+                            self.state.search_poster_protocols.clear();
                             self.state.search_results.clear();
                             self.state.search_query.clear();
                             self.state.search_preview = None;
@@ -512,11 +507,9 @@ impl App {
                             self.state.status_timer = 150;
                         }
                     }
-                    Screen::Search => {
-                        self.state.active_screen = Screen::Home;
-                    }
                     Screen::Details => {
                         self.state.active_screen = Screen::Home;
+                        self.state.language_chosen = false;
                         self.state.status_message =
                             "Select a movie/series and press Enter".to_string();
                         self.state.status_timer = 150;
@@ -635,7 +628,6 @@ impl App {
                 self.state.suggest_index = None;
                 self.state.status_message = format!("Searching for '{}'...", query);
                 self.state.status_timer = 150;
-                self.state.add_log(format!("API Search request: {}", query));
 
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
@@ -672,10 +664,6 @@ impl App {
                 self.state.suggest_index = None;
                 self.state.status_message = format!("Loading discover tab...");
                 self.state.status_timer = 150;
-                self.state.add_log(format!(
-                    "API Homepage request: tab_id={} page={}",
-                    tab_id, page
-                ));
 
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
@@ -840,9 +828,6 @@ impl App {
 
                 self.state.status_message = format!("Found {} results.", count);
                 self.state.status_timer = 150;
-                self.state
-                    .add_log(format!("Search completed: {} items loaded.", count));
-
                 if self.state.current_page <= 1 {
                     if let Some(res) = self.state.search_results.first() {
                         self.state.search_list_state.select(Some(0));
@@ -858,7 +843,6 @@ impl App {
                 self.state.is_loading = false;
                 self.state.status_message = format!("Search failed: {}", err);
                 self.state.status_timer = 150;
-                self.state.add_log(format!("Search API Error: {}", err));
             }
             Action::HomepageSuccess {
                 tab_id,
@@ -1011,10 +995,21 @@ impl App {
                 self.state.is_loading = false;
                 self.state.status_message = format!("Discover failed: {}", err);
                 self.state.status_timer = 150;
-                self.state.add_log(format!("Homepage API Error: {}", err));
             }
             Action::MoveUp => {
-                if self.state.subtitle_popup {
+                if self.state.player_picker_popup {
+                    let i = match self.state.player_picker_state.selected() {
+                        Some(i) => {
+                            if i == 0 {
+                                self.state.available_players.len() - 1
+                            } else {
+                                i - 1
+                            }
+                        }
+                        None => 0,
+                    };
+                    self.state.player_picker_state.select(Some(i));
+                } else if self.state.subtitle_popup {
                     let current = self.state.subtitle_list_state.selected().unwrap_or(0);
                     if current > 0 {
                         self.state.subtitle_list_state.select(Some(current - 1));
@@ -1107,7 +1102,19 @@ impl App {
                 }
             }
             Action::MoveDown => {
-                if self.state.subtitle_popup {
+                if self.state.player_picker_popup {
+                    let i = match self.state.player_picker_state.selected() {
+                        Some(i) => {
+                            if i >= self.state.available_players.len() - 1 {
+                                0
+                            } else {
+                                i + 1
+                            }
+                        }
+                        None => 0,
+                    };
+                    self.state.player_picker_state.select(Some(i));
+                } else if self.state.subtitle_popup {
                     let current = self.state.subtitle_list_state.selected().unwrap_or(0);
                     if current + 1 < self.state.subtitle_list.len() {
                         self.state.subtitle_list_state.select(Some(current + 1));
@@ -1324,9 +1331,12 @@ impl App {
                     let idx = self.state.subtitle_list_state.selected().unwrap_or(0);
                     let sub_url = self.state.subtitle_list.get(idx).map(|(_, u)| u.clone());
                     if let Some(link) = self.state.pending_play_link.take() {
-                        self.action_sender
-                            .send(Action::LaunchMpv(link, sub_url))
-                            .ok();
+                        let open_with = self.state.pending_open_with;
+                        if open_with {
+                            self.action_sender.send(Action::ShowPlayerPicker(link, sub_url)).ok();
+                        } else {
+                            self.action_sender.send(Action::LaunchMpv(link, sub_url)).ok();
+                        }
                     }
                     return None;
                 }
@@ -1344,7 +1354,6 @@ impl App {
                         self.state.episode_list_state.select(Some(0));
                         self.state.language_chosen = false;
                         self.state.poster_image = None;
-                        self.state.poster_protocol = None;
                         self.state.available_seasons.clear();
                         self.state.status_message =
                             format!("Loading details for {}...", item.title);
@@ -1356,6 +1365,7 @@ impl App {
                 }
             }
             Action::FetchDetails(id) => {
+                self.state.poster_protocol = None;
                 self.state.is_loading = true;
                 self.state.stream_cache.clear();
                 let client = self.client.clone();
@@ -1409,7 +1419,6 @@ impl App {
                     return None;
                 }
                 self.state.preview_loading = true;
-                self.state.selected_poster = None;
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 let id_clone = id.clone();
@@ -1449,7 +1458,7 @@ impl App {
 
                 self.state.preview_loading = false;
 
-                self.state.preview_cache.insert(id.clone(), json.clone());
+                self.state.preview_cache.put(id.clone(), json.clone());
                 self.state.search_preview = Some(json.clone());
                 self.state.poster_image = None;
                 self.state.poster_protocol = None;
@@ -1497,12 +1506,11 @@ impl App {
             }
             Action::SearchPosterLoaded(id, img_opt) => {
                 if let Some(img) = img_opt {
-                    self.state.search_posters.insert(id, img);
+                    self.state.search_posters.put(id, img);
                 }
             }
             Action::PreviewFailure(err) => {
                 self.state.preview_loading = false;
-                self.state.add_log(format!("Preview fetch failed: {}", err));
             }
 
             Action::CopyLink => {
@@ -1513,15 +1521,13 @@ impl App {
                         let _ = clipboard.set_text(link.clone());
                         self.state.toast_message = Some("✓ Copied stream link!".to_string());
                         self.state.toast_timer = 30;
-                        self.state
-                            .add_log("Stream link successfully copied to clipboard.".to_string());
                     } else {
                         self.state.status_message = format!("Link: {}", link);
                         self.state.status_timer = 150;
                     }
                 }
             }
-            Action::PlayStream => {
+            Action::PlayStream(open_with) => {
                 if self.state.active_screen == Screen::Details
                     && let Some(link) = self.get_selected_link()
                 {
@@ -1543,17 +1549,25 @@ impl App {
                         let link_clone = link.clone();
                         tokio::spawn(async move {
                             if let Ok(res) = client.get_ext_captions(&subject_id, &rid).await {
-                                sender.send(Action::ShowSubtitlePopup(link_clone, res)).ok();
+                                sender.send(Action::ShowSubtitlePopup(link_clone, res, open_with)).ok();
                             } else {
-                                sender.send(Action::LaunchMpv(link_clone, None)).ok();
+                                if open_with {
+                                    sender.send(Action::ShowPlayerPicker(link_clone, None)).ok();
+                                } else {
+                                    sender.send(Action::LaunchMpv(link_clone, None)).ok();
+                                }
                             }
                         });
                     } else {
-                        self.action_sender.send(Action::LaunchMpv(link, None)).ok();
+                        if open_with {
+                            self.action_sender.send(Action::ShowPlayerPicker(link, None)).ok();
+                        } else {
+                            self.action_sender.send(Action::LaunchMpv(link, None)).ok();
+                        }
                     }
                 }
             }
-            Action::ShowSubtitlePopup(link, ext_captions) => {
+            Action::ShowSubtitlePopup(link, ext_captions, open_with) => {
                 let mut options = vec![("None".to_string(), "".to_string())];
 
                 if let Some(captions_list) =
@@ -1581,8 +1595,13 @@ impl App {
                     self.state.subtitle_list = options;
                     self.state.subtitle_list_state.select(Some(0));
                     self.state.pending_play_link = Some(link);
+                    self.state.pending_open_with = open_with;
                 } else {
-                    self.action_sender.send(Action::LaunchMpv(link, None)).ok();
+                    if open_with {
+                        self.action_sender.send(Action::ShowPlayerPicker(link, None)).ok();
+                    } else {
+                        self.action_sender.send(Action::LaunchMpv(link, None)).ok();
+                    }
                 }
             }
             Action::LaunchMpv(link, subtitle_url) => {
@@ -1593,6 +1612,12 @@ impl App {
                 let mut cmd = Command::new("mpv");
                 cmd.arg(&link).stdout(Stdio::null()).stderr(Stdio::null());
 
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::CommandExt;
+                    cmd.process_group(0);
+                }
+
                 if let Some(sub) = subtitle_url {
                     if !sub.is_empty() {
                         cmd.arg(format!("--sub-file={}", sub));
@@ -1600,13 +1625,10 @@ impl App {
                 }
 
                 if cmd.spawn().is_ok() {
-                    self.state.add_log("MPV started successfully.".to_string());
                 } else {
                     self.state.toast_message =
                         Some("✗ Error: mpv player not found in PATH".to_string());
                     self.state.toast_timer = 60;
-                    self.state
-                        .add_log("Error starting mpv process. Command failed.".to_string());
                 }
             }
             Action::DownloadStream => {
@@ -2176,8 +2198,6 @@ impl App {
                             subject_id: id,
                             season: se,
                             episode: ep,
-                            absolute_episode_index: self.get_absolute_episode_index(),
-                            resolution: "".to_string(),
                         })
                         .ok();
                 }
@@ -2191,8 +2211,6 @@ impl App {
                 subject_id,
                 season,
                 episode,
-                absolute_episode_index: _,
-                resolution: _,
             } => {
                 self.state.active_resource_request =
                     self.state.active_resource_request.wrapping_add(1);
@@ -2263,7 +2281,7 @@ impl App {
                 if let Some(ref subject_id) = self.state.active_subject_id {
                     self.state
                         .stream_cache
-                        .insert((subject_id.clone(), target_se, target_ep), filtered.clone());
+                        .put((subject_id.clone(), target_se, target_ep), filtered.clone());
                 }
 
                 let mut result = serde_json::Map::new();
@@ -2303,8 +2321,80 @@ impl App {
                 self.state.toast_message = Some("✗ Cancelling download...".to_string());
                 self.state.toast_timer = 40;
             }
-            Action::Log(msg) => {
-                self.state.add_log(msg);
+
+            Action::ShowPlayerPicker(link, subtitle) => {
+                let mut players = Vec::new();
+                if std::path::Path::new("/Applications/IINA.app").exists()
+                    || std::process::Command::new("which").arg("iina").output().map(|o| o.status.success()).unwrap_or(false)
+                {
+                    players.push(crate::tui::state::PlayerKind::Iina);
+                }
+                if std::path::Path::new("/Applications/mpv.app").exists()
+                    || std::process::Command::new("which").arg("mpv").output().map(|o| o.status.success()).unwrap_or(false)
+                {
+                    players.push(crate::tui::state::PlayerKind::Mpv);
+                }
+                if std::path::Path::new("/Applications/VLC.app").exists()
+                    || std::process::Command::new("which").arg("vlc").output().map(|o| o.status.success()).unwrap_or(false)
+                {
+                    players.push(crate::tui::state::PlayerKind::Vlc);
+                }
+                
+                if players.is_empty() {
+                    self.state.toast_message =
+                        Some("✗ No media player found. Install mpv, IINA, or VLC.".to_string());
+                    self.state.toast_timer = 150;
+                    return None;
+                }
+                self.state.available_players = players;
+                self.state.player_picker_popup = true;
+                self.state.player_picker_link = Some(link);
+                self.state.player_picker_subtitle = subtitle;
+                self.state.player_picker_state.select(Some(0));
+                self.state.subtitle_popup = false;
+            }
+            Action::LaunchPlayer(kind, link, sub) => {
+                let mut cmd = match kind {
+                    crate::tui::state::PlayerKind::Mpv => {
+                        let mut c = std::process::Command::new("mpv");
+                        c.arg(&link);
+                        if let Some(s) = sub {
+                            c.arg(format!("--sub-file={}", s));
+                        }
+                        c
+                    }
+                    crate::tui::state::PlayerKind::Iina => {
+                        let mut c = std::process::Command::new("open");
+                        c.arg("-a").arg("IINA").arg(&link);
+                        c
+                    }
+                    crate::tui::state::PlayerKind::Vlc => {
+                        let mut c = if std::path::Path::new("/Applications/VLC.app").exists() {
+                            std::process::Command::new("/Applications/VLC.app/Contents/MacOS/VLC")
+                        } else {
+                            std::process::Command::new("vlc")
+                        };
+                        c.arg(&link);
+                        if let Some(s) = sub {
+                            c.arg("--sub-file").arg(s);
+                        }
+                        c
+                    }
+                };
+                cmd.stdout(std::process::Stdio::null());
+                cmd.stderr(std::process::Stdio::null());
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::CommandExt;
+                    cmd.process_group(0);
+                }
+                
+                if cmd.spawn().is_err() {
+                    self.state.toast_message = Some("✗ Failed to launch player".to_string());
+                    self.state.toast_timer = 60;
+                }
+                self.state.player_picker_popup = false;
             }
             Action::UpdateAvailable(version) => {
                 self.state.update_available = Some(version);
@@ -2356,12 +2446,10 @@ impl App {
             Screen::Details => {
                 super::screens::details::draw(frame, area, &mut self.state, &self.theme);
             }
-            _ => {}
+
         }
 
-        if self.state.show_logs {
-            super::screens::logs::draw(frame, area, &self.state, &self.theme);
-        }
+
 
         if self.state.show_help {
             super::screens::help::draw(frame, area, &self.state, &self.theme);

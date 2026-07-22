@@ -13,7 +13,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(14),
+            Constraint::Min(12),
             Constraint::Length(1),
             Constraint::Min(10),
             Constraint::Length(1),
@@ -606,7 +606,50 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         frame.render_stateful_widget(list, popup_area, &mut state.subtitle_list_state);
     }
 
-    let footer_text = "Enter Play      D Download      C Copy Link      Esc Back";
+    if state.player_picker_popup {
+        let popup_width = 40;
+        let popup_height = std::cmp::min(15, state.available_players.len() as u16 + 2);
+
+        let area = frame.area();
+        let popup_area = ratatui::layout::Rect {
+            x: area.width.saturating_sub(popup_width) / 2,
+            y: area.height.saturating_sub(popup_height) / 2,
+            width: popup_width,
+            height: popup_height,
+        };
+
+        frame.render_widget(ratatui::widgets::Clear, popup_area);
+
+        let items: Vec<ratatui::widgets::ListItem> = state
+            .available_players
+            .iter()
+            .map(|k| {
+                let text = match k {
+                    crate::tui::state::PlayerKind::Mpv => "mpv         (terminal)",
+                    crate::tui::state::PlayerKind::Iina => "IINA        (macOS)",
+                    crate::tui::state::PlayerKind::Vlc => "VLC         (cross-platform)",
+                };
+                ratatui::widgets::ListItem::new(text)
+            })
+            .collect();
+
+        let list = ratatui::widgets::List::new(items)
+            .block(
+                ratatui::widgets::Block::default()
+                    .title(" Open With ")
+                    .title_style(theme.title)
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(theme.border),
+            )
+            .highlight_style(theme.highlight)
+            .highlight_symbol("▌ ");
+
+        frame.render_stateful_widget(list, popup_area, &mut state.player_picker_state);
+    }
+
+    let footer_text =
+        "Enter Play      ⇧+Enter Open With...      D Download      C Copy Link      Esc Back";
     let footer_p = Paragraph::new(footer_text)
         .alignment(Alignment::Center)
         .style(theme.muted);

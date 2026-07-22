@@ -1,9 +1,15 @@
 use ratatui::widgets::{ListState, TableState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerKind {
+    Mpv,
+    Iina,
+    Vlc,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Home,
-    Search,
     Details,
 }
 
@@ -43,7 +49,7 @@ pub struct AppState {
     pub is_homepage_mode: bool,
     pub current_tab_id: String,
     pub current_page: usize,
-    pub search_posters: std::collections::HashMap<String, std::sync::Arc<image::DynamicImage>>,
+    pub search_posters: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
     pub search_poster_protocols: std::collections::HashMap<
         String,
         (ratatui::layout::Rect, ratatui_image::protocol::Protocol),
@@ -53,12 +59,8 @@ pub struct AppState {
     pub selected_details: Option<serde_json::Value>,
     pub active_subject_id: Option<String>,
     pub selected_resources: Option<serde_json::Value>,
-    pub stream_cache: std::collections::HashMap<(String, usize, usize), Vec<serde_json::Value>>,
-    pub preview_cache: std::collections::HashMap<String, serde_json::Value>,
-    pub active_popup: Option<String>,
-    pub selected_poster: Option<std::sync::Arc<image::DynamicImage>>,
-    pub selected_poster_protocol:
-        Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
+    pub stream_cache: lru::LruCache<(String, usize, usize), Vec<serde_json::Value>>,
+    pub preview_cache: lru::LruCache<String, serde_json::Value>,
     pub resource_list_state: ListState,
 
     pub details_pane: DetailsPane,
@@ -79,16 +81,17 @@ pub struct AppState {
     pub image_supported: bool,
     pub image_cache: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
 
-    pub show_logs: bool,
     pub show_help: bool,
     pub visible_items: usize,
-    pub logs: Vec<String>,
-    pub logs_scroll: usize,
 
     pub active_resource_request: u64,
     pub pending_episode_fetch: Option<(String, usize, usize)>,
     pub last_episode_nav: std::time::Instant,
-    pub active_error: Option<String>,
+    pub player_picker_popup: bool,
+    pub player_picker_state: ListState,
+    pub player_picker_link: Option<String>,
+    pub player_picker_subtitle: Option<String>,
+    pub available_players: Vec<PlayerKind>,
     pub is_loading: bool,
     pub status_message: String,
     pub status_timer: usize,
@@ -106,6 +109,7 @@ pub struct AppState {
     pub subtitle_list: Vec<(String, String)>,
     pub subtitle_list_state: ListState,
     pub pending_play_link: Option<String>,
+    pub pending_open_with: bool,
     pub basic_terminal: bool,
 }
 
@@ -123,18 +127,15 @@ impl Default for AppState {
             is_homepage_mode: false,
             current_tab_id: String::new(),
             current_page: 1,
-            search_posters: std::collections::HashMap::new(),
+            search_posters: lru::LruCache::new(std::num::NonZeroUsize::new(30).unwrap()),
             search_poster_protocols: std::collections::HashMap::new(),
             search_list_state: TableState::default(),
             basic_terminal: std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal",
             selected_details: None,
             active_subject_id: None,
             selected_resources: None,
-            stream_cache: std::collections::HashMap::new(),
-            preview_cache: std::collections::HashMap::new(),
-            active_popup: None,
-            selected_poster: None,
-            selected_poster_protocol: None,
+            stream_cache: lru::LruCache::new(std::num::NonZeroUsize::new(50).unwrap()),
+            preview_cache: lru::LruCache::new(std::num::NonZeroUsize::new(30).unwrap()),
             resource_list_state: ListState::default(),
 
             details_pane: DetailsPane::default(),
@@ -153,15 +154,16 @@ impl Default for AppState {
             image_picker: None,
             image_supported: true,
             image_cache: lru::LruCache::new(std::num::NonZeroUsize::new(10).unwrap()),
-            show_logs: false,
             show_help: false,
             visible_items: 10,
-            logs: vec!["MovieBox-Tui started.".to_string()],
-            logs_scroll: 0,
             active_resource_request: 0,
             pending_episode_fetch: None,
             last_episode_nav: std::time::Instant::now(),
-            active_error: None,
+            player_picker_popup: false,
+            player_picker_state: ListState::default(),
+            player_picker_link: None,
+            player_picker_subtitle: None,
+            available_players: Vec::new(),
             is_loading: false,
             status_message: String::new(),
             status_timer: 0,
@@ -177,16 +179,7 @@ impl Default for AppState {
             subtitle_list: Vec::new(),
             subtitle_list_state: ListState::default(),
             pending_play_link: None,
+            pending_open_with: false,
         }
-    }
-}
-
-impl AppState {
-    pub fn add_log(&mut self, msg: String) {
-        self.logs.push(msg);
-        if self.logs.len() > 200 {
-            self.logs.remove(0);
-        }
-        self.logs_scroll = self.logs.len().saturating_sub(1);
     }
 }

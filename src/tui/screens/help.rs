@@ -7,26 +7,6 @@ use ratatui::{
 };
 
 pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Length(16),
-            Constraint::Percentage(25),
-        ])
-        .split(area);
-
-    let popup_chunk = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Min(45),
-            Constraint::Percentage(25),
-        ])
-        .split(popup_layout[1])[1];
-
-    frame.render_widget(Clear, popup_chunk);
-
     let help_text = vec![
         Line::from(vec![Span::styled(
             "  Global",
@@ -84,8 +64,12 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
             theme.header.add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![
-            Span::styled("    [p]        ", theme.header),
-            Span::styled("Play Video", theme.text),
+            Span::styled("    [Enter]    ", theme.header),
+            Span::styled("Play Video in mpv", theme.text),
+        ]),
+        Line::from(vec![
+            Span::styled("    [⇧+Enter]  ", theme.header),
+            Span::styled("Open Player Picker", theme.text),
         ]),
         Line::from(vec![
             Span::styled("    [d]        ", theme.header),
@@ -96,6 +80,29 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
             Span::styled("Copy URL to Clipboard", theme.text),
         ]),
     ];
+
+    let height = help_text.len() as u16 + 2;
+    let margin_y = area.height.saturating_sub(height) / 2;
+
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(margin_y),
+            Constraint::Length(height),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let popup_chunk = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Min(45),
+            Constraint::Percentage(25),
+        ])
+        .split(popup_layout[1])[1];
+
+    frame.render_widget(Clear, popup_chunk);
 
     let block = Block::default()
         .title(" Keybindings Help ")
