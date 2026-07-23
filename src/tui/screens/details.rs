@@ -24,8 +24,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let details_json = match &state.selected_details {
         Some(d) => d,
         None => {
-            let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-            let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
+            let spinner = if state.basic_terminal {
+                let frames = ['-', '\\', '|', '/'];
+                frames[(state.tick_count as usize) % frames.len()]
+            } else {
+                let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+                frames[(state.tick_count as usize) % frames.len()]
+            };
 
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -115,20 +120,24 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let details_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
         .border_style(theme.border)
         .padding(ratatui::widgets::Padding::new(2, 2, 1, 1));
 
     let inner_area = details_block.inner(chunks[0]);
     frame.render_widget(details_block.clone(), chunks[0]);
 
-    let poster_width = (inner_area.height as f32 * 1.33).ceil() as u16;
+    let poster_width = if state.image_supported {
+        (inner_area.height as f32 * 1.33).ceil() as u16
+    } else {
+        0
+    };
 
     let h_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Length(poster_width),
-            Constraint::Length(4),
+            Constraint::Length(if state.image_supported { 4 } else { 0 }),
             Constraint::Min(1),
         ])
         .split(inner_area);
@@ -154,7 +163,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         if let Some((_, proto)) = &state.poster_protocol {
             frame.render_widget(ratatui_image::Image::new(proto), poster_area);
         }
-    } else {
+    } else if state.image_supported {
         let current_spinner = if state.basic_terminal {
             let frames = ['-', '\\', '|', '/'];
             frames[(state.tick_count as usize) % frames.len()]
@@ -301,7 +310,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
                     .title(" Audio ")
                     .border_style(lang_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
@@ -334,7 +343,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
                     .title(" Seasons ")
                     .border_style(seasons_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
@@ -367,7 +376,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
                     .title(" Episodes ")
                     .border_style(eps_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
@@ -401,7 +410,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let streams_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
         .title(ratatui::text::Line::from(streams_title).alignment(Alignment::Left))
         .title_style(theme.title)
         .border_style(streams_border)
@@ -535,8 +544,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .is_some_and(|a| a.len() > 1);
 
             let msg = if state.is_loading {
-                let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-                let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
+                let spinner = if state.basic_terminal {
+                    let frames = ['-', '\\', '|', '/'];
+                    frames[(state.tick_count as usize) % frames.len()]
+                } else {
+                    let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+                    frames[(state.tick_count as usize) % frames.len()]
+                };
                 format!("{} Loading streams...", spinner)
             } else if has_multiple_dubs && !state.language_chosen {
                 "Please select a language dubbing from the Audio panel to view streams.".to_string()
@@ -593,7 +607,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .title(" Select Subtitle ")
                     .title_style(theme.title)
                     .borders(ratatui::widgets::Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)
@@ -635,7 +649,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .title(" Open With ")
                     .title_style(theme.title)
                     .borders(ratatui::widgets::Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)

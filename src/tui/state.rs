@@ -130,7 +130,14 @@ impl Default for AppState {
             search_posters: lru::LruCache::new(std::num::NonZeroUsize::new(30).unwrap()),
             search_poster_protocols: std::collections::HashMap::new(),
             search_list_state: TableState::default(),
-            basic_terminal: std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal",
+            basic_terminal: {
+                let term = std::env::var("TERM").unwrap_or_default();
+                let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
+                let is_windows = cfg!(target_os = "windows");
+                let is_dumb = term == "dumb" || term == "linux";
+                let is_apple_terminal = term_program == "Apple_Terminal";
+                is_windows || is_dumb || is_apple_terminal
+            },
             selected_details: None,
             active_subject_id: None,
             selected_resources: None,
@@ -152,7 +159,20 @@ impl Default for AppState {
             poster_image: None,
             poster_protocol: None,
             image_picker: None,
-            image_supported: true,
+            image_supported: {
+                let term = std::env::var("TERM").unwrap_or_default();
+                let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
+                if term_program == "Apple_Terminal" || term == "dumb" {
+                    false
+                } else {
+                    std::env::var("KITTY_WINDOW_ID").is_ok()
+                        || term_program.to_lowercase() == "ghostty"
+                        || term_program.to_lowercase() == "wezterm"
+                        || std::env::var("WEZTERM_UNIX_SOCKET").is_ok()
+                        || std::env::var("ITERM_SESSION_ID").is_ok()
+                        || term == "xterm-kitty"
+                }
+            },
             image_cache: lru::LruCache::new(std::num::NonZeroUsize::new(10).unwrap()),
             show_help: false,
             visible_items: 10,
@@ -165,30 +185,30 @@ impl Default for AppState {
             player_picker_subtitle: None,
             available_players: {
                 let mut players = Vec::new();
-                if std::path::Path::new("/Applications/IINA.app").exists()
-                    || std::process::Command::new("which")
-                        .arg("iina")
+                let which_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+                let check_player = |cmd: &str| -> bool {
+                    std::process::Command::new(which_cmd)
+                        .arg(cmd)
                         .output()
                         .map(|o| o.status.success())
                         .unwrap_or(false)
+                };
+                
+                #[cfg(target_os = "macos")]
                 {
-                    players.push(PlayerKind::Iina);
+                    if std::path::Path::new("/Applications/IINA.app").exists() || check_player("iina") {
+                        players.push(PlayerKind::Iina);
+                    }
                 }
                 if std::path::Path::new("/Applications/mpv.app").exists()
-                    || std::process::Command::new("which")
-                        .arg("mpv")
-                        .output()
-                        .map(|o| o.status.success())
-                        .unwrap_or(false)
+                    || std::path::Path::new("C:\\Program Files\\mpv\\mpv.exe").exists()
+                    || check_player("mpv")
                 {
                     players.push(PlayerKind::Mpv);
                 }
                 if std::path::Path::new("/Applications/VLC.app").exists()
-                    || std::process::Command::new("which")
-                        .arg("vlc")
-                        .output()
-                        .map(|o| o.status.success())
-                        .unwrap_or(false)
+                    || std::path::Path::new("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe").exists()
+                    || check_player("vlc")
                 {
                     players.push(PlayerKind::Vlc);
                 }

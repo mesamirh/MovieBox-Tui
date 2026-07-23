@@ -55,7 +55,7 @@ impl App {
         let (action_sender, action_receiver) = mpsc::unbounded_channel();
         Self {
             state: AppState::default(),
-            theme: Theme::default(),
+            theme: Theme::new(),
             client: MovieBoxClient::new(),
             action_sender,
             action_receiver,
@@ -113,17 +113,12 @@ impl App {
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
         if self.state.image_picker.is_none() && self.state.image_supported {
             match ratatui_image::picker::Picker::from_query_stdio() {
-                Ok(mut picker) => {
-                    let size = picker.font_size();
-                    let fallback =
-                        format!("{:?}", size).contains("8") && format!("{:?}", size).contains("16");
-                    let empty = format!("{:?}", size).contains("0");
-                    if fallback || empty {
-                        if let Ok(picker2) = ratatui_image::picker::Picker::from_query_stdio() {
-                            picker = picker2;
-                        }
+                Ok(picker) => {
+                    if matches!(picker.protocol_type(), ratatui_image::picker::ProtocolType::Halfblocks) {
+                        self.state.image_supported = false;
+                    } else {
+                        self.state.image_picker = Some(picker);
                     }
-                    self.state.image_picker = Some(picker);
 
                     tokio::time::sleep(std::time::Duration::from_millis(30)).await;
                     while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
@@ -829,7 +824,7 @@ impl App {
                                 let tx = sender.clone();
                                 let client = req_client.clone();
                                 tokio::spawn(async move {
-                                    let _permit = permit; // hold until block ends
+                                    let _permit = permit;
                                     if let Ok(resp) = client
                                         .get(&url)
                                         .header("User-Agent", "MovieBox-Tui/1.0")
@@ -1569,7 +1564,7 @@ impl App {
                 {
                     if let Ok(mut clipboard) = arboard::Clipboard::new() {
                         let _ = clipboard.set_text(link.clone());
-                        self.state.toast_message = Some("✓ Copied stream link!".to_string());
+                        self.state.toast_message = Some(format!("{} Copied stream link!", if self.state.basic_terminal { "[OK]" } else { "✓" }));
                         self.state.toast_timer = 30;
                     } else {
                         self.state.status_message = format!("Link: {}", link);
@@ -1592,7 +1587,7 @@ impl App {
                     let resource_id = self.get_selected_resource_id();
 
                     if let Some(rid) = resource_id {
-                        self.state.toast_message = Some("✓ Fetching subtitles...".to_string());
+                        self.state.toast_message = Some(format!("{} Fetching subtitles...", if self.state.basic_terminal { "[OK]" } else { "✓" }));
                         self.state.toast_timer = 40;
                         let client = self.client.clone();
                         let sender = self.action_sender.clone();
@@ -1662,7 +1657,7 @@ impl App {
             }
             Action::LaunchMpv(link, subtitle_url) => {
                 use std::process::{Command, Stdio};
-                self.state.toast_message = Some("✓ Launching MPV...".to_string());
+                self.state.toast_message = Some(format!("{} Launching MPV...", if self.state.basic_terminal { "[OK]" } else { "✓" }));
                 self.state.toast_timer = 40;
 
                 let mut cmd = Command::new("mpv");
@@ -1683,7 +1678,7 @@ impl App {
                 if cmd.spawn().is_ok() {
                 } else {
                     self.state.toast_message =
-                        Some("✗ Error: mpv player not found in PATH".to_string());
+                        Some(format!("{} Error: mpv player not found in PATH", if self.state.basic_terminal { "[X]" } else { "✗" }));
                     self.state.toast_timer = 60;
                 }
             }
@@ -1718,7 +1713,7 @@ impl App {
 
                     if let Some(link) = link_opt {
                         self.state.toast_message =
-                            Some("✓ Starting native download...".to_string());
+                            Some(format!("{} Starting native download...", if self.state.basic_terminal { "[OK]" } else { "✓" }));
                         self.state.toast_timer = 40;
                         self.state.download_status = Some("Connecting...".to_string());
                         self.state.download_progress = Some(0.0);
@@ -2374,14 +2369,14 @@ impl App {
                     .cancel_download
                     .store(true, std::sync::atomic::Ordering::SeqCst);
                 self.state.download_status = Some("Cancelling...".to_string());
-                self.state.toast_message = Some("✗ Cancelling download...".to_string());
+                self.state.toast_message = Some(format!("{} Cancelling download...", if self.state.basic_terminal { "[X]" } else { "✗" }));
                 self.state.toast_timer = 40;
             }
 
             Action::ShowPlayerPicker(link, subtitle) => {
                 if self.state.available_players.is_empty() {
                     self.state.toast_message =
-                        Some("✗ No media player found. Install mpv, IINA, or VLC.".to_string());
+                        Some(format!("{} No media player found. Install mpv, IINA, or VLC.", if self.state.basic_terminal { "[X]" } else { "✗" }));
                     self.state.toast_timer = 150;
                     return None;
                 }
@@ -2429,7 +2424,7 @@ impl App {
                 }
 
                 if cmd.spawn().is_err() {
-                    self.state.toast_message = Some("✗ Failed to launch player".to_string());
+                    self.state.toast_message = Some(format!("{} Failed to launch player", if self.state.basic_terminal { "[X]" } else { "✗" }));
                     self.state.toast_timer = 60;
                 }
                 self.state.player_picker_popup = false;

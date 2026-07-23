@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
 };
 
-pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
+pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
     let help_text = vec![
         Line::from(vec![Span::styled(
             "  Global",
@@ -117,7 +117,7 @@ pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
         .title_alignment(Alignment::Center)
         .title_style(theme.title)
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(if state.basic_terminal { BorderType::Plain } else { BorderType::Rounded })
         .border_style(theme.border_focus);
 
     let p = Paragraph::new(help_text)

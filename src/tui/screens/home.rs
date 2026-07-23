@@ -21,8 +21,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             ];
             let type_speed = 3;
             let del_speed = 1;
-            let pause1 = 60; // ~1 sec
-            let pause2 = 15; // ~250 ms
+            let pause1 = 60;
+            let pause2 = 15;
 
             let mut total_ticks = 0;
             for p in prompts.iter() {
@@ -88,8 +88,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             return;
         }
 
-        let is_narrow = area.width < 60;
-        let is_wide = area.width >= 100;
+        let is_narrow = area.width < 60 || state.basic_terminal;
+        let is_wide = area.width >= 100 && !state.basic_terminal;
         let logo_height = if is_narrow {
             2
         } else if is_wide {
@@ -304,8 +304,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .direction(Direction::Horizontal)
                     .constraints([
                         Constraint::Length(2),
-                        Constraint::Length(4),
-                        Constraint::Length(1),
+                        Constraint::Length(if state.image_supported { 4 } else { 0 }),
+                        Constraint::Length(if state.image_supported { 1 } else { 0 }),
                         Constraint::Min(0),
                     ])
                     .split(item_area);
@@ -316,7 +316,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                 if is_selected {
                     let indicator = Paragraph::new(ratatui::text::Line::from(vec![
-                        ratatui::text::Span::styled("▌ ", theme.accent),
+                        ratatui::text::Span::styled(if state.basic_terminal { "> " } else { "▌ " }, theme.accent),
                     ]));
 
                     let v_layout = Layout::default()
@@ -331,7 +331,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     frame.render_widget(indicator, v_layout[1]);
                 }
 
-                let mut poster_rendered = false;
                 if let Some(img) = state.search_posters.peek(&res.id) {
                     if state.image_supported {
                         let needs_protocol =
@@ -360,18 +359,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                                 ..poster_area
                             };
                             frame.render_widget(ratatui_image::Image::new(proto), p_area);
-                            poster_rendered = true;
                         }
                     }
-                }
-
-                if !poster_rendered {
-                    let p = Paragraph::new("████\n████\n████").style(theme.muted);
-                    let p_area = Rect {
-                        height: poster_area.height.min(3),
-                        ..poster_area
-                    };
-                    frame.render_widget(p, p_area);
                 }
 
                 let text_layout = Layout::default()
@@ -571,7 +560,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 ratatui::widgets::Block::default()
                     .borders(ratatui::widgets::Borders::ALL)
                     .border_style(theme.border_focus)
-                    .border_type(ratatui::widgets::BorderType::Rounded),
+                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded }),
             );
             frame.render_widget(list, dropdown_area);
         }
