@@ -2391,56 +2391,75 @@ impl App {
                 self.state.subtitle_popup = false;
             }
             Action::LaunchPlayer(kind, link, sub) => {
-                let mut cmd = match kind {
-                    crate::tui::state::PlayerKind::Mpv => {
-                        let mut c = std::process::Command::new("mpv");
-                        c.arg(&link);
-                        if let Some(s) = sub {
-                            c.arg(format!("--sub-file={}", s));
+                self.state.player_picker_popup = false;
+                tokio::spawn(async move {
+                    let mut local_sub = sub.clone();
+                    if kind == crate::tui::state::PlayerKind::Vlc {
+                        if let Some(s_url) = sub {
+                            if let Ok(resp) = reqwest::get(&s_url).await {
+                                if let Ok(bytes) = resp.bytes().await {
+                                    let temp_path = std::env::temp_dir().join(format!(
+                                        "moviebox_sub_{}.srt",
+                                        std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_millis()
+                                    ));
+                                    if std::fs::write(&temp_path, bytes).is_ok() {
+                                        local_sub = Some(temp_path.to_string_lossy().to_string());
+                                    }
+                                }
+                            }
                         }
-                        c
                     }
-                    crate::tui::state::PlayerKind::Iina => {
-                        #[cfg(target_os = "macos")]
-                        {
-                            let mut c = std::process::Command::new("open");
-                            c.arg("-a").arg("IINA").arg(&link);
-                            c
-                        }
-                        #[cfg(not(target_os = "macos"))]
-                        {
+
+                    let mut cmd = match kind {
+                        crate::tui::state::PlayerKind::Mpv => {
                             let mut c = std::process::Command::new("mpv");
                             c.arg(&link);
+                            if let Some(s) = local_sub {
+                                c.arg(format!("--sub-file={}", s));
+                            }
                             c
                         }
-                    }
-                    crate::tui::state::PlayerKind::Vlc => {
-                        let mut c = if std::path::Path::new("/Applications/VLC.app").exists() {
-                            std::process::Command::new("/Applications/VLC.app/Contents/MacOS/VLC")
-                        } else {
-                            std::process::Command::new("vlc")
-                        };
-                        c.arg(&link);
-                        if let Some(s) = sub {
-                            c.arg("--sub-file").arg(s);
+                        crate::tui::state::PlayerKind::Iina => {
+                            #[cfg(target_os = "macos")]
+                            {
+                                let mut c = std::process::Command::new("open");
+                                c.arg("-a").arg("IINA").arg(&link);
+                                c
+                            }
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                let mut c = std::process::Command::new("mpv");
+                                c.arg(&link);
+                                c
+                            }
                         }
-                        c
+                        crate::tui::state::PlayerKind::Vlc => {
+                            let mut c = if std::path::Path::new("/Applications/VLC.app").exists() {
+                                std::process::Command::new("/Applications/VLC.app/Contents/MacOS/VLC")
+                            } else {
+                                std::process::Command::new("vlc")
+                            };
+                            c.arg(&link);
+                            if let Some(s) = local_sub {
+                                c.arg("--sub-file").arg(s);
+                            }
+                            c
+                        }
+                    };
+                    cmd.stdout(std::process::Stdio::null());
+                    cmd.stderr(std::process::Stdio::null());
+
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::process::CommandExt;
+                        cmd.process_group(0);
                     }
-                };
-                cmd.stdout(std::process::Stdio::null());
-                cmd.stderr(std::process::Stdio::null());
 
-                #[cfg(unix)]
-                {
-                    use std::os::unix::process::CommandExt;
-                    cmd.process_group(0);
-                }
-
-                if cmd.spawn().is_err() {
-                    self.state.toast_message = Some(format!("{} Failed to launch player", if self.state.basic_terminal { "[X]" } else { "✗" }));
-                    self.state.toast_timer = 60;
-                }
-                self.state.player_picker_popup = false;
+                    let _ = cmd.spawn();
+                });
             }
             Action::UpdateAvailable(version) => {
                 self.state.update_available = Some(version);
