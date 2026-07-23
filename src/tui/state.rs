@@ -188,7 +188,11 @@ impl Default for AppState {
             player_picker_subtitle: None,
             available_players: {
                 let mut players = Vec::new();
-                let which_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+                let which_cmd = if cfg!(target_os = "windows") {
+                    "where"
+                } else {
+                    "which"
+                };
                 let check_player = |cmd: &str| -> bool {
                     std::process::Command::new(which_cmd)
                         .arg(cmd)
@@ -196,10 +200,12 @@ impl Default for AppState {
                         .map(|o| o.status.success())
                         .unwrap_or(false)
                 };
-                
+
                 #[cfg(target_os = "macos")]
                 {
-                    if std::path::Path::new("/Applications/IINA.app").exists() || check_player("iina") {
+                    if std::path::Path::new("/Applications/IINA.app").exists()
+                        || check_player("iina")
+                    {
                         players.push(PlayerKind::Iina);
                     }
                 }

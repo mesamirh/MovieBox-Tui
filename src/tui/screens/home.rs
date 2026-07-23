@@ -291,7 +291,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     x: inner_area.x,
                     y: current_y,
                     width: inner_area.width,
-                    height: state.poster_rows.min(inner_area.y + inner_area.height.saturating_sub(current_y)),
+                    height: state
+                        .poster_rows
+                        .min(inner_area.y + inner_area.height.saturating_sub(current_y)),
                 };
 
                 if item_area.height == 0 {
@@ -304,7 +306,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .direction(Direction::Horizontal)
                     .constraints([
                         Constraint::Length(2),
-                        Constraint::Length(if state.image_supported { state.poster_rows + 1 } else { 0 }),
+                        Constraint::Length(if state.image_supported {
+                            state.poster_rows + 1
+                        } else {
+                            0
+                        }),
                         Constraint::Length(if state.image_supported { 1 } else { 0 }),
                         Constraint::Min(0),
                     ])
@@ -316,7 +322,10 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                 if is_selected {
                     let indicator = Paragraph::new(ratatui::text::Line::from(vec![
-                        ratatui::text::Span::styled(if state.basic_terminal { "> " } else { "▌ " }, theme.accent),
+                        ratatui::text::Span::styled(
+                            if state.basic_terminal { "> " } else { "▌ " },
+                            theme.accent,
+                        ),
                     ]));
 
                     let v_layout = Layout::default()
@@ -561,7 +570,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 ratatui::widgets::Block::default()
                     .borders(ratatui::widgets::Borders::ALL)
                     .border_style(theme.border_focus)
-                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded }),
+                    .border_type(if state.basic_terminal {
+                        ratatui::widgets::BorderType::Plain
+                    } else {
+                        ratatui::widgets::BorderType::Rounded
+                    }),
             );
             frame.render_widget(list, dropdown_area);
         }

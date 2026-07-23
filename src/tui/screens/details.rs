@@ -120,7 +120,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let details_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
+        .border_type(if state.basic_terminal {
+            ratatui::widgets::BorderType::Plain
+        } else {
+            ratatui::widgets::BorderType::Rounded
+        })
         .border_style(theme.border)
         .padding(ratatui::widgets::Padding::new(2, 2, 1, 1));
 
@@ -310,7 +314,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
+                    .border_type(if state.basic_terminal {
+                        ratatui::widgets::BorderType::Plain
+                    } else {
+                        ratatui::widgets::BorderType::Rounded
+                    })
                     .title(" Audio ")
                     .border_style(lang_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
@@ -343,7 +351,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
+                    .border_type(if state.basic_terminal {
+                        ratatui::widgets::BorderType::Plain
+                    } else {
+                        ratatui::widgets::BorderType::Rounded
+                    })
                     .title(" Seasons ")
                     .border_style(seasons_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
@@ -376,7 +388,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
+                    .border_type(if state.basic_terminal {
+                        ratatui::widgets::BorderType::Plain
+                    } else {
+                        ratatui::widgets::BorderType::Rounded
+                    })
                     .title(" Episodes ")
                     .border_style(eps_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
@@ -410,7 +426,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let streams_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
+        .border_type(if state.basic_terminal {
+            ratatui::widgets::BorderType::Plain
+        } else {
+            ratatui::widgets::BorderType::Rounded
+        })
         .title(ratatui::text::Line::from(streams_title).alignment(Alignment::Left))
         .title_style(theme.title)
         .border_style(streams_border)
@@ -611,7 +631,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .title(" Select Subtitle ")
                     .title_style(theme.title)
                     .borders(ratatui::widgets::Borders::ALL)
-                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
+                    .border_type(if state.basic_terminal {
+                        ratatui::widgets::BorderType::Plain
+                    } else {
+                        ratatui::widgets::BorderType::Rounded
+                    })
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)
@@ -653,7 +677,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .title(" Open With ")
                     .title_style(theme.title)
                     .borders(ratatui::widgets::Borders::ALL)
-                    .border_type(if state.basic_terminal { ratatui::widgets::BorderType::Plain } else { ratatui::widgets::BorderType::Rounded })
+                    .border_type(if state.basic_terminal {
+                        ratatui::widgets::BorderType::Plain
+                    } else {
+                        ratatui::widgets::BorderType::Rounded
+                    })
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)

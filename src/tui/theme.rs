@@ -49,13 +49,23 @@ impl Default for Theme {
 
 impl Theme {
     pub fn new() -> Self {
-        let colorterm = std::env::var("COLORTERM").unwrap_or_default().to_lowercase();
+        let colorterm = std::env::var("COLORTERM")
+            .unwrap_or_default()
+            .to_lowercase();
         let term = std::env::var("TERM").unwrap_or_default().to_lowercase();
-        
+
         let wt_truecolor = std::env::var("WT_SESSION").is_ok();
-        let truecolor = wt_truecolor || colorterm == "truecolor" || colorterm == "24bit" || term.contains("truecolor");
-        
-        if !truecolor && (term.contains("apple") || term == "dumb" || term == "linux" || std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal") {
+        let truecolor = wt_truecolor
+            || colorterm == "truecolor"
+            || colorterm == "24bit"
+            || term.contains("truecolor");
+
+        if !truecolor
+            && (term.contains("apple")
+                || term == "dumb"
+                || term == "linux"
+                || std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal")
+        {
             Self::fallback()
         } else {
             Self::default()
@@ -68,15 +78,23 @@ impl Theme {
             border_focus: Style::default().fg(Color::Blue),
             text: Style::default().fg(Color::Reset),
             text_dim: Style::default().fg(Color::Gray),
-            title: Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
-            highlight: Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
-            header: Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+            title: Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+            highlight: Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
+            header: Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
             error: Style::default().fg(Color::Red),
             success: Style::default().fg(Color::Green),
             shortcut: Style::default().fg(Color::Yellow),
             overlay: Style::default().fg(Color::DarkGray),
             rating: Style::default().fg(Color::Yellow),
-            accent: Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            accent: Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
             muted: Style::default().fg(Color::DarkGray),
         }
     }

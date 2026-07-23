@@ -8,6 +8,7 @@ A terminal client for finding and streaming movies, TV shows, and anime from you
 [![Downloads](https://img.shields.io/crates/d/moviebox-tui.svg)](https://crates.io/crates/moviebox-tui)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg?logo=rust)](#requirements)
+[![Support](https://img.shields.io/badge/Support-Crypto-gold.svg)](#support)
 
 <br>
 
@@ -133,9 +134,12 @@ A short walkthrough of the app in action:
 
 | Platform | Status |
 | :--- | :--- |
-| **macOS** | Fully supported. Developed and tested here. Ghostty, iTerm2, and Kitty all render posters correctly. |
-| **Linux** | Experimental. Should work on any terminal with graphics-protocol support. Not extensively tested. |
-| **Windows** | Experimental. Expect bugs, especially around inline image rendering. Contributions welcome. |
+| **macOS** | Fully supported. Ghostty, iTerm2, and WezTerm render full-resolution image posters. |
+| **Linux** | Supported. You **must** use Kitty, WezTerm, or Ghostty for full-resolution posters. Other terminals (like GNOME Terminal) will safely fall back to text. |
+| **Windows** | Supported. You **must** use WezTerm for full-resolution posters. Windows Terminal/cmd will safely fall back to text. |
+
+> **Warning: Windows support is currently in beta.** 
+> While the core features work perfectly, you may experience occasional rendering glitches or slow performance compared to macOS and Linux. I am actively improving this. If you encounter any bugs on Windows, please [open an issue](https://github.com/mesamirh/MovieBox-Tui/issues) so I can fix them!
 
 ---
 
@@ -180,36 +184,45 @@ MovieBox-Tui auto-detects whichever players you have installed on the first run.
 
 ## Install
 
-The recommended way is to install from crates.io:
+The absolute easiest way to install MovieBox-Tui is using the automated installation scripts. This will download the latest pre-built binary for your system and add it to your PATH so you can just type `moviebox-tui` from anywhere.
+
+### macOS & Linux
+Paste this single line into your terminal:
+```bash
+curl -fsSL https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/install.sh | bash
+```
+*(Requires `sudo` permissions to move the binary into `/usr/local/bin`)*
+
+### Windows (PowerShell)
+Paste this single line into your PowerShell:
+```powershell
+irm https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/install.ps1 | iex
+```
+
+---
+
+<details>
+<summary><b>Manual Download (No scripts)</b></summary>
+<br>
+
+If you prefer not to run the scripts, you can download the binaries directly:
+1. Go to the [Releases page](https://github.com/mesamirh/MovieBox-Tui/releases/latest).
+2. Download the correct file for your operating system:
+   - **macOS:** `MovieBox_macOS_Universal.tar.gz`
+   - **Windows:** `MovieBox_Windows_x64.zip`
+   - **Linux:** `MovieBox_Linux_x64.tar.gz`
+3. Extract the file and run it directly.
+</details>
+
+<details>
+<summary><b>Installing via Cargo (for Rust developers)</b></summary>
+<br>
+
+If you already have Rust installed, you can easily install from crates.io:
 
 ```bash
 cargo install moviebox-tui
 ```
-
-Make sure `~/.cargo/bin` is on your `PATH`, then run:
-
-```bash
-moviebox-tui
-```
-
-<details>
-<summary><b>Building from source</b></summary>
-<br>
-
-If you want a local checkout or a development version:
-
-```bash
-git clone https://github.com/mesamirh/MovieBox-Tui.git
-cd MovieBox-Tui
-cargo install --path .
-```
-
-Or run it directly without installing:
-
-```bash
-cargo run --release
-```
-
 </details>
 
 ---
@@ -302,6 +315,11 @@ src/
         ├── home.rs             Home, search, and result list
         ├── details.rs          Movie / series detail view
         └── help.rs             Keybindings overlay
+
+install.sh                      macOS/Linux automated install script
+install.ps1                     Windows automated install script
+scripts/
+└── release.sh                  Cross-platform build script for releases
 ```
 
 If you're poking around the code, `src/tui/app.rs` is the map. Every user action, network response, and background task funnels through its match statement.
@@ -367,6 +385,16 @@ cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, etc.). See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
+
+---
+
+## Support
+
+If you enjoy using MovieBox-Tui and want to support its development, you can send a tip to any of the crypto addresses below. 
+
+- **EVM (ETH, BNB, Polygon, etc):** `0x7ea20d5fa29d87f33195f5a3b211ff94038d794c`
+- **BTC:** `3MEAtqtRWrQBhnaMi3Zuf5nt2efNUS2LUQ`
+- **LTC:** `ltc1qhjkq2n6tsayxj56n3c53uqv23v8vqhvc9g3vxl`
 
 ---
 

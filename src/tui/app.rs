@@ -114,7 +114,10 @@ impl App {
         if self.state.image_picker.is_none() && self.state.image_supported {
             match ratatui_image::picker::Picker::from_query_stdio() {
                 Ok(picker) => {
-                    if matches!(picker.protocol_type(), ratatui_image::picker::ProtocolType::Halfblocks) {
+                    if matches!(
+                        picker.protocol_type(),
+                        ratatui_image::picker::ProtocolType::Halfblocks
+                    ) {
                         self.state.image_supported = false;
                     } else {
                         let cell_h = picker.font_size().height;
@@ -1568,7 +1571,14 @@ impl App {
                 {
                     if let Ok(mut clipboard) = arboard::Clipboard::new() {
                         let _ = clipboard.set_text(link.clone());
-                        self.state.toast_message = Some(format!("{} Copied stream link!", if self.state.basic_terminal { "[OK]" } else { "✓" }));
+                        self.state.toast_message = Some(format!(
+                            "{} Copied stream link!",
+                            if self.state.basic_terminal {
+                                "[OK]"
+                            } else {
+                                "✓"
+                            }
+                        ));
                         self.state.toast_timer = 30;
                     } else {
                         self.state.status_message = format!("Link: {}", link);
@@ -1591,7 +1601,14 @@ impl App {
                     let resource_id = self.get_selected_resource_id();
 
                     if let Some(rid) = resource_id {
-                        self.state.toast_message = Some(format!("{} Fetching subtitles...", if self.state.basic_terminal { "[OK]" } else { "✓" }));
+                        self.state.toast_message = Some(format!(
+                            "{} Fetching subtitles...",
+                            if self.state.basic_terminal {
+                                "[OK]"
+                            } else {
+                                "✓"
+                            }
+                        ));
                         self.state.toast_timer = 40;
                         let client = self.client.clone();
                         let sender = self.action_sender.clone();
@@ -1661,7 +1678,14 @@ impl App {
             }
             Action::LaunchMpv(link, subtitle_url) => {
                 use std::process::{Command, Stdio};
-                self.state.toast_message = Some(format!("{} Launching MPV...", if self.state.basic_terminal { "[OK]" } else { "✓" }));
+                self.state.toast_message = Some(format!(
+                    "{} Launching MPV...",
+                    if self.state.basic_terminal {
+                        "[OK]"
+                    } else {
+                        "✓"
+                    }
+                ));
                 self.state.toast_timer = 40;
 
                 let mut cmd = Command::new("mpv");
@@ -1681,8 +1705,14 @@ impl App {
 
                 if cmd.spawn().is_ok() {
                 } else {
-                    self.state.toast_message =
-                        Some(format!("{} Error: mpv player not found in PATH", if self.state.basic_terminal { "[X]" } else { "✗" }));
+                    self.state.toast_message = Some(format!(
+                        "{} Error: mpv player not found in PATH",
+                        if self.state.basic_terminal {
+                            "[X]"
+                        } else {
+                            "✗"
+                        }
+                    ));
                     self.state.toast_timer = 60;
                 }
             }
@@ -1716,8 +1746,14 @@ impl App {
                         .join(&filename);
 
                     if let Some(link) = link_opt {
-                        self.state.toast_message =
-                            Some(format!("{} Starting native download...", if self.state.basic_terminal { "[OK]" } else { "✓" }));
+                        self.state.toast_message = Some(format!(
+                            "{} Starting native download...",
+                            if self.state.basic_terminal {
+                                "[OK]"
+                            } else {
+                                "✓"
+                            }
+                        ));
                         self.state.toast_timer = 40;
                         self.state.download_status = Some("Connecting...".to_string());
                         self.state.download_progress = Some(0.0);
@@ -2373,14 +2409,27 @@ impl App {
                     .cancel_download
                     .store(true, std::sync::atomic::Ordering::SeqCst);
                 self.state.download_status = Some("Cancelling...".to_string());
-                self.state.toast_message = Some(format!("{} Cancelling download...", if self.state.basic_terminal { "[X]" } else { "✗" }));
+                self.state.toast_message = Some(format!(
+                    "{} Cancelling download...",
+                    if self.state.basic_terminal {
+                        "[X]"
+                    } else {
+                        "✗"
+                    }
+                ));
                 self.state.toast_timer = 40;
             }
 
             Action::ShowPlayerPicker(link, subtitle) => {
                 if self.state.available_players.is_empty() {
-                    self.state.toast_message =
-                        Some(format!("{} No media player found. Install mpv, IINA, or VLC.", if self.state.basic_terminal { "[X]" } else { "✗" }));
+                    self.state.toast_message = Some(format!(
+                        "{} No media player found. Install mpv, IINA, or VLC.",
+                        if self.state.basic_terminal {
+                            "[X]"
+                        } else {
+                            "✗"
+                        }
+                    ));
                     self.state.toast_timer = 150;
                     return None;
                 }
@@ -2438,11 +2487,25 @@ impl App {
                         }
                         crate::tui::state::PlayerKind::Vlc => {
                             let mut c = if std::path::Path::new("/Applications/VLC.app").exists() {
-                                std::process::Command::new("/Applications/VLC.app/Contents/MacOS/VLC")
-                            } else if std::path::Path::new("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe").exists() {
-                                std::process::Command::new("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe")
-                            } else if std::path::Path::new("C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe").exists() {
-                                std::process::Command::new("C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe")
+                                std::process::Command::new(
+                                    "/Applications/VLC.app/Contents/MacOS/VLC",
+                                )
+                            } else if std::path::Path::new(
+                                "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+                            )
+                            .exists()
+                            {
+                                std::process::Command::new(
+                                    "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+                                )
+                            } else if std::path::Path::new(
+                                "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
+                            )
+                            .exists()
+                            {
+                                std::process::Command::new(
+                                    "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
+                                )
                             } else {
                                 std::process::Command::new("vlc")
                             };
