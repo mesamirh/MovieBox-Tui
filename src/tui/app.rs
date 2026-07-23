@@ -2648,3 +2648,53 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[tokio::test]
+    async fn test_app_action_toggle_help() {
+        let mut app = App::new();
+        assert!(!app.state.show_help);
+
+        app.handle_action(Action::ToggleHelp).await;
+        assert!(app.state.show_help);
+
+        app.handle_action(Action::ToggleHelp).await;
+        assert!(!app.state.show_help);
+    }
+
+    #[tokio::test]
+    async fn test_app_action_quit() {
+        let mut app = App::new();
+        let result = app.handle_action(Action::Quit).await;
+        assert_eq!(result, Some(()));
+    }
+
+    #[tokio::test]
+    async fn test_app_key_input_editing_mode() {
+        let mut app = App::new();
+        app.state.input_mode = InputMode::Editing;
+        app.state.search_query.clear();
+
+        // Simulate typing 'm', 'o', 'v', 'i', 'e'
+        for ch in ['m', 'o', 'v', 'i', 'e'] {
+            let key = KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE);
+            app.handle_action(Action::Key(key)).await;
+        }
+        assert_eq!(app.state.search_query, "movie");
+
+        // Simulate Backspace
+        let backspace = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+        app.handle_action(Action::Key(backspace)).await;
+        assert_eq!(app.state.search_query, "movi");
+
+        // Simulate Esc to switch back to normal mode
+        let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        app.handle_action(Action::Key(esc)).await;
+        assert_eq!(app.state.input_mode, InputMode::Normal);
+    }
+}
+

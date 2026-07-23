@@ -13,7 +13,7 @@ pub enum Screen {
     Details,
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum DetailsPane {
     #[default]
     Streams,
@@ -21,6 +21,7 @@ pub enum DetailsPane {
     Episodes,
     Languages,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputMode {
@@ -242,3 +243,26 @@ impl Default for AppState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_state_default() {
+        let state = AppState::default();
+        assert_eq!(state.active_screen, Screen::Home);
+        assert_eq!(state.input_mode, InputMode::Normal);
+        assert_eq!(state.details_pane, DetailsPane::Streams);
+        assert!(!state.show_help);
+        assert!(!state.is_loading);
+        assert_eq!(state.search_query, "");
+    }
+
+    #[test]
+    fn test_details_pane_default() {
+        let pane = DetailsPane::default();
+        assert_eq!(pane, DetailsPane::Streams);
+    }
+}
+

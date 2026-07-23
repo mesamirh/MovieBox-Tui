@@ -256,3 +256,59 @@ pub(crate) fn random_spoofed_ip() -> String {
     let d: u8 = rng.random_range(1..254);
     format!("{}.{}.{}", prefix, c, d)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_x_client_token() {
+        let ts = 1609459200;
+        let token = generate_x_client_token(ts);
+        assert!(token.starts_with("1609459200,"));
+        let parts: Vec<&str> = token.split(',').collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0], "1609459200");
+        assert!(!parts[1].is_empty());
+    }
+
+    #[test]
+    fn test_sorted_query_string() {
+        let url = "https://example.com/api?b=2&a=1&c=3";
+        let sorted = sorted_query_string(url);
+        assert_eq!(sorted, "a=1&b=2&c=3");
+
+        let url_no_query = "https://example.com/api";
+        assert_eq!(sorted_query_string(url_no_query), "");
+
+        let url_invalid = "invalid_url";
+        assert_eq!(sorted_query_string(url_invalid), "");
+    }
+
+    #[test]
+    fn test_build_canonical_string() {
+        let url = "https://api.example.com/v1/search?query=test&page=1";
+        let canonical = build_canonical_string("GET", None, None, url, None, 1700000000000);
+        assert!(canonical.contains("/v1/search?page=1&query=test"));
+    }
+
+    #[test]
+    fn test_base64_helpers() {
+        let original = b"hello moviebox";
+        let encoded = b64_encode(original);
+        let decoded = b64_decode(&encoded);
+        assert_eq!(decoded, original);
+
+        let unpadded = "aGVsbG8";
+        let decoded_unpadded = b64_decode(unpadded);
+        assert_eq!(decoded_unpadded, b"hello");
+    }
+
+    #[test]
+    fn test_random_spoofed_ip_format() {
+        let ip = random_spoofed_ip();
+        let parts: Vec<&str> = ip.split('.').collect();
+        assert_eq!(parts.len(), 4);
+    }
+}
+
