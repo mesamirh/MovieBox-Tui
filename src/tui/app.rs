@@ -2439,6 +2439,10 @@ impl App {
                         crate::tui::state::PlayerKind::Vlc => {
                             let mut c = if std::path::Path::new("/Applications/VLC.app").exists() {
                                 std::process::Command::new("/Applications/VLC.app/Contents/MacOS/VLC")
+                            } else if std::path::Path::new("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe").exists() {
+                                std::process::Command::new("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe")
+                            } else if std::path::Path::new("C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe").exists() {
+                                std::process::Command::new("C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe")
                             } else {
                                 std::process::Command::new("vlc")
                             };
