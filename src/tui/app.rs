@@ -117,6 +117,10 @@ impl App {
                     if matches!(picker.protocol_type(), ratatui_image::picker::ProtocolType::Halfblocks) {
                         self.state.image_supported = false;
                     } else {
+                        let cell_h = picker.font_size().height;
+                        if cell_h > 0 {
+                            self.state.poster_rows = (96_u16.div_ceil(cell_h)).max(3);
+                        }
                         self.state.image_picker = Some(picker);
                     }
 
@@ -2397,9 +2401,18 @@ impl App {
                         c
                     }
                     crate::tui::state::PlayerKind::Iina => {
-                        let mut c = std::process::Command::new("open");
-                        c.arg("-a").arg("IINA").arg(&link);
-                        c
+                        #[cfg(target_os = "macos")]
+                        {
+                            let mut c = std::process::Command::new("open");
+                            c.arg("-a").arg("IINA").arg(&link);
+                            c
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            let mut c = std::process::Command::new("mpv");
+                            c.arg(&link);
+                            c
+                        }
                     }
                     crate::tui::state::PlayerKind::Vlc => {
                         let mut c = if std::path::Path::new("/Applications/VLC.app").exists() {

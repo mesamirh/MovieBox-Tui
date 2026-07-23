@@ -52,7 +52,8 @@ impl Theme {
         let colorterm = std::env::var("COLORTERM").unwrap_or_default().to_lowercase();
         let term = std::env::var("TERM").unwrap_or_default().to_lowercase();
         
-        let truecolor = colorterm == "truecolor" || colorterm == "24bit" || term.contains("truecolor");
+        let wt_truecolor = std::env::var("WT_SESSION").is_ok();
+        let truecolor = wt_truecolor || colorterm == "truecolor" || colorterm == "24bit" || term.contains("truecolor");
         
         if !truecolor && (term.contains("apple") || term == "dumb" || term == "linux" || std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal") {
             Self::fallback()

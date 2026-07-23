@@ -316,7 +316,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol("▌ ");
+            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
 
         if let Some(area) = lang_area {
             frame.render_stateful_widget(lang_list, area, &mut state.language_list_state);
@@ -349,7 +349,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol("▌ ");
+            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
 
         if let Some(area) = seasons_area {
             frame.render_stateful_widget(seasons_list, area, &mut state.season_list_state);
@@ -382,7 +382,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol("▌ ");
+            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
 
         if let Some(area) = eps_area {
             frame.render_stateful_widget(eps_list, area, &mut state.episode_list_state);
@@ -455,7 +455,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                         };
 
                         let is_selected = Some(i) == selected_idx;
-                        let pointer = if is_selected { "▌ " } else { "  " };
+                        let pointer = if is_selected {
+                            if state.basic_terminal { "> " } else { "▌ " }
+                        } else {
+                            "  "
+                        };
 
                         let stream_style = if is_selected {
                             theme.highlight
@@ -611,7 +615,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol("▌ ");
+            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
 
         frame.render_stateful_widget(list, popup_area, &mut state.subtitle_list_state);
     }
@@ -653,7 +657,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol("▌ ");
+            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
 
         frame.render_stateful_widget(list, popup_area, &mut state.player_picker_state);
     }

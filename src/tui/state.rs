@@ -79,6 +79,7 @@ pub struct AppState {
     pub poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
     pub image_picker: Option<ratatui_image::picker::Picker>,
     pub image_supported: bool,
+    pub poster_rows: u16,
     pub image_cache: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
 
     pub show_help: bool,
@@ -169,10 +170,12 @@ impl Default for AppState {
                         || term_program.to_lowercase() == "ghostty"
                         || term_program.to_lowercase() == "wezterm"
                         || std::env::var("WEZTERM_UNIX_SOCKET").is_ok()
+                        || std::env::var("WEZTERM_EXECUTABLE").is_ok()
                         || std::env::var("ITERM_SESSION_ID").is_ok()
                         || term == "xterm-kitty"
                 }
             },
+            poster_rows: 3,
             image_cache: lru::LruCache::new(std::num::NonZeroUsize::new(10).unwrap()),
             show_help: false,
             visible_items: 10,

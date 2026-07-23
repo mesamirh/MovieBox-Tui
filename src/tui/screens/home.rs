@@ -262,7 +262,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             let selected_idx = state.search_list_state.selected();
             let offset = state.search_list_state.offset();
 
-            let row_height = 3;
+            let row_height = state.poster_rows;
             state.visible_items = (chunks[1].height as usize) / (row_height as usize);
             let rows: Vec<Row> = state
                 .search_results
@@ -291,7 +291,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     x: inner_area.x,
                     y: current_y,
                     width: inner_area.width,
-                    height: 3.min(inner_area.y + inner_area.height.saturating_sub(current_y)),
+                    height: state.poster_rows.min(inner_area.y + inner_area.height.saturating_sub(current_y)),
                 };
 
                 if item_area.height == 0 {
@@ -304,7 +304,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .direction(Direction::Horizontal)
                     .constraints([
                         Constraint::Length(2),
-                        Constraint::Length(if state.image_supported { 4 } else { 0 }),
+                        Constraint::Length(if state.image_supported { state.poster_rows + 1 } else { 0 }),
                         Constraint::Length(if state.image_supported { 1 } else { 0 }),
                         Constraint::Min(0),
                     ])
@@ -340,7 +340,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             if let Some(picker) = &mut state.image_picker {
                                 let size = ratatui::layout::Size::new(
                                     poster_area.width,
-                                    poster_area.height.min(3),
+                                    poster_area.height.min(state.poster_rows),
                                 );
                                 if let Ok(proto) = picker.new_protocol(
                                     (**img).clone(),
@@ -355,7 +355,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                         }
                         if let Some((_, proto)) = state.search_poster_protocols.get(&res.id) {
                             let p_area = Rect {
-                                height: poster_area.height.min(3),
+                                height: poster_area.height.min(state.poster_rows),
                                 ..poster_area
                             };
                             frame.render_widget(ratatui_image::Image::new(proto), p_area);
@@ -414,7 +414,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             .or_else(|| meta.get("imdbRatingValue"))
                             .and_then(|v| v.as_str());
                         if let Some(r) = rating {
-                            info_spans.push(ratatui::text::Span::styled("★ ", theme.rating));
+                            let star = if state.basic_terminal { "* " } else { "★ " };
+                            info_spans.push(ratatui::text::Span::styled(star, theme.rating));
                             info_spans.push(ratatui::text::Span::styled(r, theme.text));
                             info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
                         }
@@ -466,7 +467,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .begin_symbol(Some("▲"))
                     .end_symbol(Some("▼"))
                     .track_symbol(Some("│"))
-                    .thumb_symbol("█");
+                    .thumb_symbol(if state.basic_terminal { "|" } else { "█" });
 
                 let mut scrollbar_state = ratatui::widgets::ScrollbarState::default()
                     .content_length(content_len.saturating_sub(state.visible_items))
