@@ -99,3 +99,23 @@ impl Theme {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_theme_default() {
+        let theme = Theme::default();
+        assert_eq!(theme.border.fg, Some(Color::Rgb(88, 91, 112)));
+        assert_eq!(theme.border_focus.fg, Some(Color::Rgb(137, 180, 250)));
+    }
+
+    #[test]
+    fn test_theme_fallback() {
+        let theme = Theme::fallback();
+        assert_eq!(theme.border.fg, Some(Color::DarkGray));
+        assert_eq!(theme.border_focus.fg, Some(Color::Blue));
+    }
+}
+

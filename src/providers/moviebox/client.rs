@@ -197,3 +197,26 @@ impl MovieBoxClient {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_initialization() {
+        let client = MovieBoxClient::new();
+        assert!(!client.user_agent.is_empty());
+        assert!(!client.client_info.is_empty());
+        assert!(!client.spoofed_ip.is_empty());
+    }
+
+    #[test]
+    fn test_scraper_error_display() {
+        let err = ScraperError::ApiStatus(404);
+        assert_eq!(err.to_string(), "API error status: 404");
+
+        let hosts_err = ScraperError::HostsExhausted;
+        assert_eq!(hosts_err.to_string(), "All hosts exhausted");
+    }
+}
+
