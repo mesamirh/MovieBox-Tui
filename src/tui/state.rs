@@ -9,7 +9,6 @@ pub enum PlayerKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
-    Startup,
     Home,
     Details,
 }
@@ -36,20 +35,10 @@ pub struct SearchResult {
     pub stype: i64,
     pub release_year: String,
     pub cover_url: Option<String>,
-    pub season: usize,
-}
-
-#[derive(Debug, Default)]
-pub struct SubjectStreamPool {
-    pub episode_index: std::collections::HashMap<(usize, usize), Vec<serde_json::Value>>,
-    pub fetched_pages: std::collections::HashMap<u32, std::collections::HashSet<usize>>,
-    pub total_pages: std::collections::HashMap<u32, usize>,
-    pub available_resolutions: Vec<u32>,
 }
 
 pub struct AppState {
     pub active_screen: Screen,
-    pub dirty: bool,
     pub input_mode: InputMode,
     pub search_query: String,
     pub last_suggest_query: String,
@@ -60,20 +49,17 @@ pub struct AppState {
     pub is_homepage_mode: bool,
     pub current_tab_id: String,
     pub current_page: usize,
-    pub cached_animated_text: String,
     pub search_posters: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
     pub search_poster_protocols: std::collections::HashMap<
         String,
-        ((u16, u16), ratatui_image::protocol::Protocol),
+        (ratatui::layout::Rect, ratatui_image::protocol::Protocol),
     >,
     pub search_list_state: TableState,
 
     pub selected_details: Option<serde_json::Value>,
     pub active_subject_id: Option<String>,
     pub selected_resources: Option<serde_json::Value>,
-    pub stream_pool: std::collections::HashMap<String, SubjectStreamPool>,
-    pub fetch_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pub is_fetching_streams: bool,
+    pub stream_cache: lru::LruCache<(String, usize, usize), Vec<serde_json::Value>>,
     pub preview_cache: lru::LruCache<String, serde_json::Value>,
     pub resource_list_state: ListState,
 
@@ -84,7 +70,6 @@ pub struct AppState {
     pub episode_list_state: ListState,
     pub language_list_state: ListState,
     pub available_seasons: Vec<serde_json::Value>,
-    pub available_episode_numbers: Vec<Vec<usize>>,
 
     pub search_preview: Option<serde_json::Value>,
     pub preview_loading: bool,
@@ -94,7 +79,6 @@ pub struct AppState {
     pub poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
     pub image_picker: Option<ratatui_image::picker::Picker>,
     pub image_supported: bool,
-    pub poster_rows: u16,
     pub image_cache: lru::LruCache<String, std::sync::Arc<image::DynamicImage>>,
 
     pub show_help: bool,
@@ -114,11 +98,6 @@ pub struct AppState {
     pub toast_message: Option<String>,
     pub toast_timer: usize,
     pub update_available: Option<String>,
-    pub updater_progress: Option<f64>,
-    pub updater_status: Option<String>,
-    pub updater_done: bool,
-    pub auto_update: bool,
-    pub last_update_check: u64,
 
     pub download_progress: Option<f64>,
     pub download_status: Option<String>,
@@ -132,15 +111,13 @@ pub struct AppState {
     pub pending_play_link: Option<String>,
     pub pending_open_with: bool,
     pub basic_terminal: bool,
-    pub username: String,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            active_screen: Screen::Startup,
+            active_screen: Screen::Home,
             input_mode: InputMode::Normal,
-            cached_animated_text: String::new(),
             search_query: String::new(),
             last_suggest_query: String::new(),
             last_search_edit: std::time::Instant::now(),
@@ -153,22 +130,11 @@ impl Default for AppState {
             search_posters: lru::LruCache::new(std::num::NonZeroUsize::new(30).unwrap()),
             search_poster_protocols: std::collections::HashMap::new(),
             search_list_state: TableState::default(),
-            basic_terminal: {
-                let term = std::env::var("TERM").unwrap_or_default();
-                let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
-                let is_windows = cfg!(target_os = "windows");
-                let is_dumb = term == "dumb" || term == "linux";
-                let is_apple_terminal = term_program == "Apple_Terminal";
-                let is_tmux = std::env::var("TMUX").is_ok();
-                let is_ssh = std::env::var("SSH_TTY").is_ok() || std::env::var("SSH_CLIENT").is_ok();
-                is_windows || is_dumb || is_apple_terminal || is_tmux || is_ssh
-            },
+            basic_terminal: std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal",
             selected_details: None,
             active_subject_id: None,
             selected_resources: None,
-            stream_pool: std::collections::HashMap::new(),
-            fetch_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            is_fetching_streams: false,
+            stream_cache: lru::LruCache::new(std::num::NonZeroUsize::new(50).unwrap()),
             preview_cache: lru::LruCache::new(std::num::NonZeroUsize::new(30).unwrap()),
             resource_list_state: ListState::default(),
 
@@ -179,7 +145,6 @@ impl Default for AppState {
             episode_list_state: ListState::default(),
             language_list_state: ListState::default(),
             available_seasons: vec![],
-            available_episode_numbers: vec![],
 
             search_preview: None,
             preview_loading: false,
@@ -187,18 +152,7 @@ impl Default for AppState {
             poster_image: None,
             poster_protocol: None,
             image_picker: None,
-            image_supported: {
-                let term = std::env::var("TERM").unwrap_or_default();
-                let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
-                if term_program == "Apple_Terminal" || term == "dumb" || term == "linux" {
-                    false
-                } else if std::env::var("TMUX").is_ok() || std::env::var("SSH_TTY").is_ok() {
-                    false
-                } else {
-                    true // Let ratatui_image::picker::Picker query the terminal itself
-                }
-            },
-            poster_rows: 3,
+            image_supported: true,
             image_cache: lru::LruCache::new(std::num::NonZeroUsize::new(10).unwrap()),
             show_help: false,
             visible_items: 10,
@@ -209,20 +163,13 @@ impl Default for AppState {
             player_picker_state: ListState::default(),
             player_picker_link: None,
             player_picker_subtitle: None,
-            available_players: Vec::new(),
-            dirty: true,
+            available_players: crate::tui::player::detect_available_players(),
             is_loading: false,
             status_message: String::new(),
             status_timer: 0,
             toast_message: None,
             toast_timer: 0,
             update_available: None,
-            updater_progress: None,
-            updater_status: None,
-            updater_done: false,
-            auto_update: true,
-            last_update_check: 0,
-
             download_progress: None,
             download_status: None,
             cancel_download: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -233,13 +180,6 @@ impl Default for AppState {
             subtitle_list_state: ListState::default(),
             pending_play_link: None,
             pending_open_with: false,
-            username: std::env::var("USER")
-                .or_else(|_| std::env::var("USERNAME"))
-                .unwrap_or_else(|_| "Friend".to_string())
-                .split('\\')
-                .last()
-                .unwrap_or("Friend")
-                .to_string(),
         }
     }
 }

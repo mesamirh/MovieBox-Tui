@@ -98,62 +98,71 @@ impl MovieBoxClient {
         self.get(&path).await
     }
 
-    pub async fn fetch_resource_page(
+    pub async fn get_all_resources(
         &self,
         subject_id: &str,
-        resolution: u32,
-        page: usize,
-    ) -> Result<(Vec<Value>, Value), ScraperError> {
-        let res_param = if resolution == 0 {
-            String::new()
-        } else {
-            format!("&resolution={}", resolution)
-        };
+        season: usize,
+        episode: usize,
+    ) -> Result<Value, ScraperError> {
+        let resolutions = ["1080", "720", "480", "360", ""];
+        let mut handles = Vec::new();
 
-        let path = format!(
-            "/wefeed-mobile-bff/subject-api/resource?subjectId={}&page={}&perPage=20{}",
-            subject_id, page, res_param
-        );
+        for res in resolutions {
+            let c = self.clone();
+            let sid = subject_id.to_string();
+            let r = res.to_string();
+            handles.push(tokio::spawn(async move {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(8),
+                    c.get_resources(&sid, season, episode, 1, Some(&r), 20),
+                )
+                .await
+                {
+                    Ok(res) => res,
+                    Err(_) => Err(ScraperError::ApiStatus(408)),
+                }
+            }));
+        }
 
-        let res = self.get(&path).await?;
-
-        let items = res
-            .get("list")
-            .and_then(|l| l.as_array())
-            .cloned()
-            .unwrap_or_default();
-
-        let pager = res.get("pager").cloned().unwrap_or_else(|| json!({}));
-
-        Ok((items, pager))
-    }
-
-    pub async fn fetch_collection_resolutions(
-        &self,
-        subject_id: &str,
-    ) -> Result<Vec<u32>, ScraperError> {
-        let path = format!(
-            "/wefeed-mobile-bff/subject-api/resource?subjectId={}&page=1&perPage=20",
-            subject_id
-        );
-        let res = self.get(&path).await?;
-
-        let mut resolutions = Vec::new();
-        if let Some(cols) = res.get("collectionResolutions").and_then(|c| c.as_array()) {
-            for col in cols {
-                if let Some(r) = col.get("resolution").and_then(|v| v.as_u64()) {
-                    resolutions.push(r as u32);
+        let mut all_list = Vec::new();
+        let mut last_err = None;
+        for h in handles {
+            if let Ok(res_result) = h.await {
+                match res_result {
+                    Ok(res) => {
+                        if let Some(list) = res.get("list").and_then(|l| l.as_array()) {
+                            all_list.extend(list.clone());
+                        }
+                    }
+                    Err(e) => {
+                        last_err = Some(e);
+                    }
                 }
             }
         }
 
-        resolutions.sort_by(|a, b| b.cmp(a));
-
-        if resolutions.is_empty() {
-            resolutions = vec![1080, 720, 480, 360];
+        if all_list.is_empty() {
+            if let Some(e) = last_err {
+                Err(e)
+            } else {
+                Err(ScraperError::ApiStatus(404))
+            }
+        } else {
+            let mut seen_links = std::collections::HashSet::new();
+            let mut unique_list = Vec::new();
+            for item in all_list {
+                if let Some(link) = item.get("resourceLink").and_then(|l| l.as_str()) {
+                    if seen_links.insert(link.to_string()) {
+                        unique_list.push(item);
+                    }
+                } else {
+                    unique_list.push(item);
+                }
+            }
+            let mut combined = serde_json::Map::new();
+            combined.insert("list".to_string(), serde_json::Value::Array(unique_list));
+            Ok(serde_json::Value::Object(combined))
         }
-
-        Ok(resolutions)
     }
 
     pub async fn get_ext_captions(

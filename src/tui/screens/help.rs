@@ -6,14 +6,14 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
 };
 
-pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
+pub fn draw(frame: &mut Frame, area: Rect, _state: &AppState, theme: &Theme) {
     let help_text = vec![
         Line::from(vec![Span::styled(
             "  Global",
             theme.header.add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![
-            Span::styled("    [?]        ", theme.header),
+            Span::styled("    [?] / [F1] ", theme.header),
             Span::styled("Toggle Help Menu", theme.text),
         ]),
         Line::from(vec![
@@ -62,22 +62,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
             Span::styled("    /anime     ", theme.header),
             Span::styled("Discover Anime", theme.text),
         ]),
-        Line::from(vec![
-            Span::styled("    /github    ", theme.header),
-            Span::styled("Open GitHub Repo", theme.text),
-        ]),
-        Line::from(vec![
-            Span::styled("    /update    ", theme.header),
-            Span::styled("Check for updates", theme.text),
-        ]),
-        Line::from(vec![
-            Span::styled("    /toggle-update ", theme.header),
-            Span::styled("Toggle auto updates", theme.text),
-        ]),
-        Line::from(vec![
-            Span::styled("    /clear-cache   ", theme.header),
-            Span::styled("Clear app cache", theme.text),
-        ]),
         Line::from(vec![]),
         Line::from(vec![Span::styled(
             "  Stream Controls",
@@ -85,19 +69,23 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
         )]),
         Line::from(vec![
             Span::styled("    [Enter]    ", theme.header),
-            Span::styled("Play with default player", theme.text),
+            Span::styled("Play Video in mpv", theme.text),
         ]),
         Line::from(vec![
             Span::styled("    [o]        ", theme.header),
             Span::styled("Open Player Picker", theme.text),
         ]),
         Line::from(vec![
-            Span::styled("    [r]        ", theme.header),
-            Span::styled("Refresh Streams/Search", theme.text),
+            Span::styled("    [R]        ", theme.header),
+            Span::styled("Refresh Streams", theme.text),
         ]),
         Line::from(vec![
             Span::styled("    [d]        ", theme.header),
             Span::styled("Download Video", theme.text),
+        ]),
+        Line::from(vec![
+            Span::styled("    [c]        ", theme.header),
+            Span::styled("Copy URL to Clipboard", theme.text),
         ]),
     ];
 
@@ -129,11 +117,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
         .title_alignment(Alignment::Center)
         .title_style(theme.title)
         .borders(Borders::ALL)
-        .border_type(if state.basic_terminal {
-            BorderType::Plain
-        } else {
-            BorderType::Rounded
-        })
+        .border_type(BorderType::Rounded)
         .border_style(theme.border_focus);
 
     let p = Paragraph::new(help_text)

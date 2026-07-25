@@ -1,8 +1,9 @@
 use crate::providers::moviebox::crypto::build_signed_headers;
 use reqwest::Response;
 use serde_json::Value;
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
 const HOST_POOL: &[&str] = &[
     "https://api6.aoneroom.com",
     "https://api5.aoneroom.com",
@@ -33,7 +34,7 @@ pub enum ScraperError {
 pub struct MovieBoxClient {
     client: reqwest::Client,
     runtime_token: Arc<RwLock<Option<String>>>,
-    active_base_idx: Arc<AtomicUsize>,
+    active_base_idx: Arc<RwLock<usize>>,
     user_agent: String,
     client_info: String,
     spoofed_ip: String,
@@ -54,7 +55,7 @@ impl MovieBoxClient {
             .pool_idle_timeout(std::time::Duration::from_secs(90))
             .pool_max_idle_per_host(4)
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .expect("Failed to build reqwest client; TLS backend may be missing");
 
         let (user_agent, client_info) =
             crate::providers::moviebox::crypto::generate_client_info_and_ua();
@@ -63,7 +64,7 @@ impl MovieBoxClient {
         Self {
             client,
             runtime_token: Arc::new(RwLock::new(None)),
-            active_base_idx: Arc::new(AtomicUsize::new(0)),
+            active_base_idx: Arc::new(RwLock::new(0)),
             user_agent,
             client_info,
             spoofed_ip,
@@ -74,12 +75,16 @@ impl MovieBoxClient {
         &self.client
     }
 
+    pub fn user_agent(&self) -> &str {
+        &self.user_agent
+    }
+
     pub async fn init(&self) -> Result<(), ScraperError> {
         let path = "/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=";
         let _ = self.get(path).await?;
 
-        let has_token = self.runtime_token.read().unwrap().is_some();
-        if !has_token {
+        let token = self.runtime_token.read().await;
+        if token.is_none() {
             return Err(ScraperError::MissingToken);
         }
         Ok(())
@@ -99,7 +104,7 @@ impl MovieBoxClient {
             return;
         };
         if !token.is_empty() {
-            let mut write_token = self.runtime_token.write().unwrap();
+            let mut write_token = self.runtime_token.write().await;
             *write_token = Some(token.to_string());
         }
     }
@@ -119,17 +124,14 @@ impl MovieBoxClient {
         path_and_query: &str,
         body: Option<&str>,
     ) -> Result<Value, ScraperError> {
-        let start_idx = self.active_base_idx.load(Ordering::Relaxed);
+        let start_idx = *self.active_base_idx.read().await;
 
         for i in 0..HOST_POOL.len() {
-            if i > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            }
             let idx = (start_idx + i) % HOST_POOL.len();
             let base = HOST_POOL[idx];
             let url = format!("{}{}", base, path_and_query);
 
-            let token = self.runtime_token.read().unwrap().clone();
+            let token = self.runtime_token.read().await.clone();
             let headers = build_signed_headers(
                 method,
                 &url,
@@ -159,7 +161,8 @@ impl MovieBoxClient {
                         continue;
                     }
 
-                    self.active_base_idx.store(idx, Ordering::Relaxed);
+                    let mut active_idx = self.active_base_idx.write().await;
+                    *active_idx = idx;
 
                     match self.parse_response(resp).await {
                         Ok(val) => return Ok(val),
@@ -184,9 +187,11 @@ impl MovieBoxClient {
             Err(e) => return Err(ScraperError::Reqwest(e)),
         };
 
-        let body_val: Value = match tokio::task::spawn_blocking(move || serde_json::from_str(&raw_text)).await.unwrap() {
+        let body_val: Value = match serde_json::from_str(&raw_text) {
             Ok(v) => v,
-            Err(e) => return Err(ScraperError::Json(e)),
+            Err(e) => {
+                return Err(ScraperError::Json(e));
+            }
         };
 
         if let Some(data) = body_val.get("data") {

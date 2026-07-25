@@ -14,41 +14,43 @@ impl EventHandler {
         let (sender, receiver) = mpsc::unbounded_channel();
         let event_sender = sender.clone();
 
-        let mut tick_interval = tokio::time::interval(tick_rate);
-        
         tokio::spawn(async move {
-            let mut reader = crossterm::event::EventStream::new();
-            use futures::StreamExt;
-            
             loop {
-                tokio::select! {
-                    _ = tick_interval.tick() => {
-                        let _ = event_sender.send(Action::Tick);
-                    }
-                    Some(event) = reader.next() => {
-                        match event {
-                            Ok(CrosstermEvent::Key(key)) => {
-                                let is_press = key.kind == KeyEventKind::Press;
-                                if is_press && event_sender.send(Action::Key(key)).is_err() {
-                                    break;
-                                }
+                let polled = crossterm::event::poll(Duration::from_millis(50)).unwrap_or(false);
+                if polled {
+                    match crossterm::event::read() {
+                        Ok(CrosstermEvent::Key(key)) => {
+                            let is_press = key.kind == KeyEventKind::Press;
+                            if is_press && event_sender.send(Action::Key(key)).is_err() {
+                                break;
                             }
-                            Ok(CrosstermEvent::FocusGained) => {
-                                let _ = event_sender.send(Action::FocusChange);
-                            }
-                            Ok(CrosstermEvent::Resize(w, h)) => {
-                                if event_sender.send(Action::Resize(w, h)).is_err() {
-                                    break;
-                                }
-                            }
-                            _ => {}
                         }
+                        Ok(CrosstermEvent::FocusGained) => {
+                            let _ = event_sender.send(Action::FocusChange);
+                        }
+                        Ok(CrosstermEvent::Resize(w, h))
+                            if event_sender.send(Action::Resize(w, h)).is_err() =>
+                        {
+                            break;
+                        }
+                        Ok(CrosstermEvent::Resize(_, _)) => {}
+                        _ => {}
                     }
                 }
+                tokio::task::yield_now().await;
             }
         });
 
-
+        let tick_sender = sender.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tick_rate);
+            loop {
+                interval.tick().await;
+                if tick_sender.send(Action::Tick).is_err() {
+                    break;
+                }
+            }
+        });
 
         Self { receiver, sender }
     }

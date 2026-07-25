@@ -5,51 +5,76 @@ use crate::tui::{
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Cell, Paragraph, Row, Table},
 };
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) {
     let show_cursor = (state.tick_count % 16) < 8;
-    let search_prefix = if state.basic_terminal { "> " } else { "❯ " };
-
     let search_content =
         if !state.status_message.is_empty() && state.input_mode == InputMode::Normal {
-            format!("{}{}", search_prefix, state.status_message)
+            format!("> {}", state.status_message)
         } else if state.search_query.is_empty() {
-            let animated_text = &state.cached_animated_text;
+            let prompts = [
+                "Search for a movie...",
+                "Search for a TV series...",
+                "Search by genre...",
+            ];
+            let type_speed = 3;
+            let del_speed = 1;
+            let pause1 = 60; // ~1 sec
+            let pause2 = 15; // ~250 ms
+
+            let mut total_ticks = 0;
+            for p in prompts.iter() {
+                total_ticks += p.len() * type_speed + pause1 + p.len() * del_speed + pause2;
+            }
+            let mut t = (state.tick_count as usize) % total_ticks;
+
+            let mut animated_text = String::new();
+            for p in prompts.iter() {
+                let t_type = p.len() * type_speed;
+                let t_del = p.len() * del_speed;
+                let cycle = t_type + pause1 + t_del + pause2;
+
+                if t < cycle {
+                    let display_len = if t < t_type {
+                        t / type_speed
+                    } else if t < t_type + pause1 {
+                        p.len()
+                    } else if t < t_type + pause1 + t_del {
+                        p.len().saturating_sub((t - (t_type + pause1)) / del_speed)
+                    } else {
+                        0
+                    };
+                    animated_text = p[0..display_len].to_string();
+                    break;
+                } else {
+                    t -= cycle;
+                }
+            }
 
             if state.input_mode == InputMode::Editing {
                 if show_cursor {
-                    format!(
-                        "{}{}{}█",
-                        search_prefix,
-                        animated_text,
-                        if animated_text.is_empty() { "" } else { "" }
-                    )
+                    format!("> {}█", animated_text)
                 } else {
-                    format!(
-                        "{}{}{} ",
-                        search_prefix,
-                        animated_text,
-                        if animated_text.is_empty() { "" } else { "" }
-                    )
+                    format!("> {} ", animated_text)
                 }
             } else {
                 if show_cursor {
-                    format!("{}{}|", search_prefix, animated_text)
+                    format!("> {}|", animated_text)
                 } else {
-                    format!("{}{}", search_prefix, animated_text)
+                    format!("> {} ", animated_text)
                 }
             }
         } else {
             if state.input_mode == InputMode::Editing {
                 if show_cursor {
-                    format!("{} {}█", search_prefix, state.search_query)
+                    format!("> {}█", state.search_query)
                 } else {
-                    format!("{} {} ", search_prefix, state.search_query)
+                    format!("> {} ", state.search_query)
                 }
             } else {
-                format!("{} {}", search_prefix, state.search_query)
+                format!("> {}", state.search_query)
             }
         };
 
@@ -63,8 +88,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             return;
         }
 
-        let is_narrow = area.width < 60 || state.basic_terminal;
-        let is_wide = area.width >= 100 && !state.basic_terminal;
+        let is_narrow = area.width < 60;
+        let is_wide = area.width >= 100;
         let logo_height = if is_narrow {
             2
         } else if is_wide {
@@ -72,7 +97,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         } else {
             4
         };
-
         let logo_text = if is_narrow {
             "█▀▄▀█ █▀█ █ █ █ █▀▀ █▀▄ █▀█ ▀▄▀\n█ ▀ █ █▄█ ▀▄▀ █ ██▄ █▄▀ █▄█ █ █"
         } else if is_wide {
@@ -95,9 +119,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 Constraint::Percentage(15),
                 Constraint::Length(logo_height),
                 Constraint::Length(1),
-                Constraint::Length(2),
-                Constraint::Length(3),
-                Constraint::Length(3),
+                Constraint::Percentage(15),
+                Constraint::Length(1),
                 Constraint::Min(0),
                 Constraint::Length(1),
                 Constraint::Length(1),
@@ -130,47 +153,24 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             ])
             .split(vertical_chunks[2]);
 
-        let logo_style = if state.basic_terminal || state.tick_count >= 8 {
-            theme.title
+        let logo_style = if state.tick_count == 1 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(49, 50, 68))
+        } else if state.tick_count == 2 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(108, 112, 134))
         } else {
-            let t = state.tick_count as f32 / 8.0;
-
-            let r = (49.0 + (203.0 - 49.0) * t) as u8;
-            let g = (50.0 + (166.0 - 50.0) * t) as u8;
-            let b = (68.0 + (247.0 - 68.0) * t) as u8;
-            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(r, g, b))
+            theme.title
         };
 
-        if is_wide && !state.basic_terminal && state.tick_count < 15 {
-            let rows: Vec<&str> = logo_text.split('\n').collect();
-            for (i, row) in rows.iter().enumerate() {
-                let row_tick_start = 1 + i as u64;
-                if state.tick_count >= row_tick_start {
-                    let row_t = ((state.tick_count - row_tick_start) as f32 / 7.0).clamp(0.0, 1.0);
-                    let r = (49.0 + (203.0 - 49.0) * row_t) as u8;
-                    let g = (50.0 + (166.0 - 50.0) * row_t) as u8;
-                    let b = (68.0 + (247.0 - 68.0) * row_t) as u8;
-                    let row_style =
-                        ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(r, g, b));
+        let title_art = Paragraph::new(logo_text)
+            .alignment(Alignment::Left)
+            .style(logo_style);
 
-                    let row_area = Rect {
-                        x: horizontal_chunks[1].x,
-                        y: horizontal_chunks[1].y + i as u16,
-                        width: horizontal_chunks[1].width,
-                        height: 1,
-                    };
-                    frame.render_widget(Paragraph::new(*row).style(row_style), row_area);
-                }
-            }
-        } else {
-            let title_art = Paragraph::new(logo_text)
-                .alignment(Alignment::Left)
-                .style(logo_style);
-            frame.render_widget(title_art, horizontal_chunks[1]);
-        }
+        frame.render_widget(title_art, horizontal_chunks[1]);
 
-        let version_style = if state.tick_count < 6 {
-            ratatui::style::Style::default().fg(theme.base)
+        let version_style = if state.tick_count == 1 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(49, 50, 68))
+        } else if state.tick_count == 2 {
+            ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(108, 112, 134))
         } else {
             theme.text_dim
         };
@@ -180,93 +180,60 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         frame.render_widget(version, version_chunks[1]);
 
         if state.tick_count >= 3 {
-            search_bar_area = vertical_chunks[5];
+            let search_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(25),
+                ])
+                .split(vertical_chunks[4]);
+
+            search_bar_area = search_chunks[1];
 
             let search_bar = Paragraph::new(search_content.clone())
                 .alignment(Alignment::Center)
                 .style(match state.input_mode {
                     InputMode::Editing => theme.title,
-                    InputMode::Normal => theme.text_dim,
+                    InputMode::Normal => theme.text,
                 });
 
             frame.render_widget(search_bar, search_bar_area);
 
-            let legend_line = ratatui::text::Line::from(vec![
-                ratatui::text::Span::styled(" [Type] ", theme.shortcut),
-                ratatui::text::Span::styled("Search   ", theme.text_dim),
-                ratatui::text::Span::styled("[↑↓] ", theme.shortcut),
-                ratatui::text::Span::styled("Browse   ", theme.text_dim),
-                ratatui::text::Span::styled("[?] ", theme.shortcut),
-                ratatui::text::Span::styled("Help   ", theme.text_dim),
-                ratatui::text::Span::styled("[Esc] ", theme.shortcut),
-                ratatui::text::Span::styled("Quit", theme.text_dim),
-            ]);
-
-            let legend = Paragraph::new(legend_line).alignment(Alignment::Center);
-            frame.render_widget(legend, vertical_chunks[7]);
+            let legend = Paragraph::new("Type to Search   ↑↓ Browse   ? Help")
+                .alignment(Alignment::Center)
+                .style(theme.text_dim);
+            frame.render_widget(legend, vertical_chunks[6]);
 
             if let Some(version_str) = &state.update_available {
                 let update_text = Paragraph::new(format!(
-                    "Update v{} available! Auto-update failed, please reinstall manually.",
+                    "Update v{} available! Run: cargo install moviebox-tui",
                     version_str
                 ))
                 .alignment(Alignment::Center)
                 .style(theme.highlight);
-                frame.render_widget(update_text, vertical_chunks[8]);
+                frame.render_widget(update_text, vertical_chunks[7]);
             }
         }
     } else {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)])
+            .constraints([Constraint::Length(1), Constraint::Min(0)])
             .split(area);
 
         search_bar_area = chunks[0];
-        let border_style = if state.input_mode == InputMode::Editing {
-            theme.border_focus
-        } else {
-            theme.border
-        };
 
-        let loading_title = if state.is_loading && !state.search_results.is_empty() {
-            let spinner = if state.basic_terminal {
-                let frames = ['-', '\\', '|', '/'];
-                frames[(state.tick_count as usize) % frames.len()]
-            } else {
-                let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-                frames[(state.tick_count as usize) % frames.len()]
-            };
-            Some(ratatui::text::Line::from(ratatui::text::Span::styled(
-                format!(" {} ", spinner),
-                theme.accent,
-            )))
-        } else {
-            None
-        };
-
-        let mut search_block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(border_style)
-            .border_type(if state.basic_terminal {
-                ratatui::widgets::BorderType::Plain
-            } else {
-                ratatui::widgets::BorderType::Rounded
-            })
-            .padding(ratatui::widgets::Padding::left(1));
-        if let Some(title) = loading_title {
-            search_block = search_block.title_top(title).title_alignment(Alignment::Right);
-        }
         let search_bar = Paragraph::new(search_content.clone())
             .style(match state.input_mode {
                 InputMode::Editing => theme.title,
                 InputMode::Normal => theme.text,
             })
-            .block(search_block);
+            .block(ratatui::widgets::Block::default().padding(ratatui::widgets::Padding::left(1)));
         frame.render_widget(search_bar, search_bar_area);
 
         let list_block = Block::default();
 
-        if state.is_loading && state.search_results.is_empty() {
+        if state.is_loading {
             let spinner = if state.basic_terminal {
                 let frames = ['-', '\\', '|', '/'];
                 frames[(state.tick_count as usize) % frames.len()]
@@ -287,30 +254,15 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 ])
                 .split(inner_area);
 
-            let spinner_color = if state.basic_terminal {
-                theme.accent
-            } else {
-                let is_sky = (state.tick_count % 16) < 8;
-                if is_sky { theme.accent } else { theme.teal }
-            };
-
-            let loading_text = if state.is_homepage_mode {
-                state.status_message.clone()
-            } else {
-                format!("Searching for \"{}\"...", state.search_query)
-            };
-
-            let p = Paragraph::new(ratatui::text::Line::from(vec![
-                ratatui::text::Span::styled(format!("{}  ", spinner), spinner_color),
-                ratatui::text::Span::styled(loading_text, theme.title),
-            ]))
-            .alignment(Alignment::Center);
+            let p = Paragraph::new(format!("{} Searching...", spinner))
+                .alignment(Alignment::Center)
+                .style(theme.text_dim);
             frame.render_widget(p, v_chunks[1]);
         } else if !state.search_results.is_empty() {
             let selected_idx = state.search_list_state.selected();
             let offset = state.search_list_state.offset();
 
-            let row_height = state.poster_rows;
+            let row_height = 3;
             state.visible_items = (chunks[1].height as usize) / (row_height as usize);
             let rows: Vec<Row> = state
                 .search_results
@@ -339,9 +291,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     x: inner_area.x,
                     y: current_y,
                     width: inner_area.width,
-                    height: state
-                        .poster_rows
-                        .min(inner_area.y + inner_area.height.saturating_sub(current_y)),
+                    height: 3.min(inner_area.y + inner_area.height.saturating_sub(current_y)),
                 };
 
                 if item_area.height == 0 {
@@ -354,12 +304,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .direction(Direction::Horizontal)
                     .constraints([
                         Constraint::Length(2),
-                        Constraint::Length(if state.image_supported {
-                            state.poster_rows + 1
-                        } else {
-                            0
-                        }),
-                        Constraint::Length(if state.image_supported { 1 } else { 0 }),
+                        Constraint::Length(4),
+                        Constraint::Length(1),
                         Constraint::Min(0),
                     ])
                     .split(item_area);
@@ -370,10 +316,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                 if is_selected {
                     let indicator = Paragraph::new(ratatui::text::Line::from(vec![
-                        ratatui::text::Span::styled(
-                            if state.basic_terminal { "> " } else { "▌ " },
-                            theme.accent,
-                        ),
+                        ratatui::text::Span::styled("▌ ", theme.accent),
                     ]));
 
                     let v_layout = Layout::default()
@@ -388,17 +331,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     frame.render_widget(indicator, v_layout[1]);
                 }
 
+                let mut poster_rendered = false;
                 if let Some(img) = state.search_posters.peek(&res.id) {
                     if state.image_supported {
-                        let target_dims = (poster_area.width, state.poster_rows);
                         let needs_protocol =
-                            state.search_poster_protocols.get(&res.id).map(|(d, _)| *d)
-                                != Some(target_dims);
+                            state.search_poster_protocols.get(&res.id).map(|(r, _)| *r)
+                                != Some(poster_area);
                         if needs_protocol {
                             if let Some(picker) = &mut state.image_picker {
                                 let size = ratatui::layout::Size::new(
-                                    target_dims.0,
-                                    target_dims.1,
+                                    poster_area.width,
+                                    poster_area.height.min(3),
                                 );
                                 if let Ok(proto) = picker.new_protocol(
                                     (**img).clone(),
@@ -407,18 +350,28 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                                 ) {
                                     state
                                         .search_poster_protocols
-                                        .insert(res.id.clone(), (target_dims, proto));
+                                        .insert(res.id.clone(), (poster_area, proto));
                                 }
                             }
                         }
                         if let Some((_, proto)) = state.search_poster_protocols.get(&res.id) {
                             let p_area = Rect {
-                                height: poster_area.height.min(state.poster_rows),
+                                height: poster_area.height.min(3),
                                 ..poster_area
                             };
                             frame.render_widget(ratatui_image::Image::new(proto), p_area);
+                            poster_rendered = true;
                         }
                     }
+                }
+
+                if !poster_rendered {
+                    let p = Paragraph::new("████\n████\n████").style(theme.muted);
+                    let p_area = Rect {
+                        height: poster_area.height.min(3),
+                        ..poster_area
+                    };
+                    frame.render_widget(p, p_area);
                 }
 
                 let text_layout = Layout::default()
@@ -472,8 +425,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             .or_else(|| meta.get("imdbRatingValue"))
                             .and_then(|v| v.as_str());
                         if let Some(r) = rating {
-                            let star = if state.basic_terminal { "* " } else { "★ " };
-                            info_spans.push(ratatui::text::Span::styled(star, theme.rating));
+                            info_spans.push(ratatui::text::Span::styled("★ ", theme.rating));
                             info_spans.push(ratatui::text::Span::styled(r, theme.text));
                             info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
                         }
@@ -525,7 +477,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .begin_symbol(Some("▲"))
                     .end_symbol(Some("▼"))
                     .track_symbol(Some("│"))
-                    .thumb_symbol(if state.basic_terminal { "|" } else { "█" });
+                    .thumb_symbol("█");
 
                 let mut scrollbar_state = ratatui::widgets::ScrollbarState::default()
                     .content_length(content_len.saturating_sub(state.visible_items))
@@ -563,7 +515,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     {
         let search_area = search_bar_area;
 
-        let dropdown_height = std::cmp::min(state.search_suggestions.len() as u16, 10);
+        let dropdown_height = std::cmp::min(state.search_suggestions.len() as u16 + 2, 10);
 
         let is_home_screen = state.search_results.is_empty()
             && !state.is_loading
@@ -572,7 +524,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         let dropdown_y = if !is_home_screen && search_area.y > area.height / 2 {
             search_area.y.saturating_sub(dropdown_height)
         } else {
-            search_area.y + 1
+            search_area.y + search_area.height
         };
 
         let max_len = state
@@ -581,17 +533,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .map(|s| s.len())
             .max()
             .unwrap_or(0) as u16;
-            
         let dropdown_width = std::cmp::min(std::cmp::max(max_len + 8, 30), search_area.width);
-        
-        let text_len = search_content.chars().count() as u16;
-        let text_start_x = search_area.x + search_area.width.saturating_sub(text_len) / 2;
-        
-        let dropdown_x = if is_home_screen {
-            text_start_x + 2
-        } else {
-            search_area.x + 3
-        };
+        let dropdown_x = search_area.x + (search_area.width.saturating_sub(dropdown_width)) / 2;
 
         let dropdown_area = Rect {
             x: dropdown_x,
@@ -626,7 +569,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .collect();
             let list = ratatui::widgets::List::new(items).block(
                 ratatui::widgets::Block::default()
-                    .borders(ratatui::widgets::Borders::NONE),
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .border_style(theme.border_focus)
+                    .border_type(ratatui::widgets::BorderType::Rounded),
             );
             frame.render_widget(list, dropdown_area);
         }

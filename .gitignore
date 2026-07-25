@@ -18,4 +18,3 @@ Thumbs.db
 .LSOverride
 debug_*.json
 *.log
-dist/

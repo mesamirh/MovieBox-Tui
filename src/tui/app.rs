@@ -1,4 +1,4 @@
-use ratatui::Frame;
+use ratatui::{DefaultTerminal, Frame};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -9,30 +9,31 @@ use crate::tui::{
     state::{AppState, InputMode, Screen, SearchResult},
     theme::Theme,
 };
+use update_informer::Check;
 
 pub fn clean_moviebox_title(raw_title: &str) -> String {
-    let mut end = raw_title.len();
-
-    if let Some(start) = raw_title[..end].find(" [") {
-        end = start;
+    let mut clean = raw_title.to_string();
+    if let Some(start) = clean.find(" [") {
+        clean = clean[..start].to_string();
     }
-    if let Some(start) = raw_title[..end].find(" (") {
-        let inside = &raw_title[start..end].to_lowercase();
+    if let Some(start) = clean.find(" (") {
+        let lower = clean.to_lowercase();
+        let inside = &lower[start..];
         if inside.contains("dub") || inside.contains("hindi") {
-            end = start;
+            clean = clean[..start].to_string();
         }
     }
 
-    if let Some(s_idx) = raw_title[..end].rfind(" S") {
-        let suffix = &raw_title[s_idx + 2..end];
+    if let Some(s_idx) = clean.rfind(" S") {
+        let suffix = &clean[s_idx + 2..];
         let is_season = suffix
             .chars()
             .all(|c| c.is_ascii_digit() || c == '-' || c == 'S');
         if is_season && suffix.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-            end = s_idx;
+            clean = clean[..s_idx].trim_end().to_string();
         }
     }
-    raw_title[..end].trim_end().to_string()
+    clean
 }
 
 pub struct App {
@@ -52,30 +53,9 @@ impl Default for App {
 impl App {
     pub fn new() -> Self {
         let (action_sender, action_receiver) = mpsc::unbounded_channel();
-        let mut state = AppState::default();
-
-        if let Some(config_dir) = dirs::config_dir() {
-            let config_path = config_dir.join("moviebox-tui").join("config.json");
-            if let Ok(config_str) = std::fs::read_to_string(config_path) {
-                if let Ok(config_json) = serde_json::from_str::<serde_json::Value>(&config_str) {
-                    if let Some(auto_update) =
-                        config_json.get("auto_update").and_then(|v| v.as_bool())
-                    {
-                        state.auto_update = auto_update;
-                    }
-                    if let Some(last_check) = config_json
-                        .get("last_update_check")
-                        .and_then(|v| v.as_u64())
-                    {
-                        state.last_update_check = last_check;
-                    }
-                }
-            }
-        }
-
         Self {
-            state,
-            theme: Theme::new(),
+            state: AppState::default(),
+            theme: Theme::default(),
             client: MovieBoxClient::new(),
             action_sender,
             action_receiver,
@@ -84,61 +64,18 @@ impl App {
 
     fn trigger_episode_fetch(&mut self) {
         if let Some(id) = &self.state.active_subject_id {
-            let stype = self.state.selected_details
-                .as_ref()
-                .and_then(|d| d.get("subjectType").or_else(|| d.get("stype")))
-                .and_then(|s| s.as_i64())
-                .unwrap_or(1);
+            let se_idx = self.state.season_list_state.selected().unwrap_or(0);
+            let ep_idx = self.state.episode_list_state.selected().unwrap_or(0);
 
-            let (se, ep) = if stype == 2 {
-                let se_idx = self.state.season_list_state.selected().unwrap_or(0);
-                let ep_idx = self.state.episode_list_state.selected().unwrap_or(0);
-                
-                let season_num = self.state.available_seasons.get(se_idx)
-                    .and_then(|s| s.get("se"))
-                    .and_then(|s| s.as_i64())
-                    .unwrap_or(1) as usize;
-                    
-                let ep_num = if let Some(ep_numbers) = self.state.available_episode_numbers.get(se_idx) {
-                    ep_numbers.get(ep_idx).copied().unwrap_or(ep_idx + 1)
-                } else {
-                    ep_idx + 1
-                };
-                (season_num, ep_num)
-            } else {
-                (0, 0)
-            };
-
-            self.state.selected_season = se;
-            self.state.selected_episode = ep;
-            self.state.resource_list_state.select(None);
-
-            let mut found_cached = false;
-            if let Some(cached) = crate::cache::get_stream_cache(id, se, ep) {
-                found_cached = true;
-                if let Some(arr) = cached.as_array() {
-                    let count = arr.len();
-                    let mut result = serde_json::Map::new();
-                    result.insert("list".to_string(), cached.clone());
-                    self.state.selected_resources = Some(serde_json::Value::Object(result));
-                    self.state.is_loading = false;
-                    self.state.is_fetching_streams = false;
-                    self.state.resource_list_state.select(if count > 0 { Some(0) } else { None });
-                    self.state.status_message = format!("Resolved {} direct stream sources (cached).", count);
-                    self.state.status_timer = 150;
-                }
-            }
-
-            if !found_cached {
-                self.state.is_loading = true;
-                self.state.is_fetching_streams = true;
-                self.state.status_message = "Resolving streams...".to_string();
-                self.state.status_timer = 150;
+            if let Some(season) = self.state.available_seasons.get(se_idx) {
+                let se = season.get("se").and_then(|s| s.as_i64()).unwrap_or(1) as usize;
+                let ep = ep_idx + 1;
+                self.state.selected_season = se;
+                self.state.selected_episode = ep;
+                self.state.resource_list_state.select(None);
 
                 self.state.pending_episode_fetch = Some((id.clone(), se, ep));
                 self.state.last_episode_nav = std::time::Instant::now();
-            } else {
-                self.state.pending_episode_fetch = None;
             }
         }
     }
@@ -173,24 +110,25 @@ impl App {
             .map(|s| s.to_string())
     }
 
-    pub async fn run<B: ratatui::backend::Backend>(&mut self, terminal: &mut ratatui::Terminal<B>) -> std::io::Result<()> where std::io::Error: From<<B as ratatui::backend::Backend>::Error> {
+    pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
         if self.state.image_picker.is_none() && self.state.image_supported {
             match ratatui_image::picker::Picker::from_query_stdio() {
-                Ok(picker) => {
-                    if matches!(
-                        picker.protocol_type(),
-                        ratatui_image::picker::ProtocolType::Halfblocks
-                    ) {
-                        self.state.image_supported = false;
-                    } else {
-                        let cell_h = picker.font_size().height;
-                        if cell_h > 0 {
-                            self.state.poster_rows = (96_u16.div_ceil(cell_h)).max(3);
+                Ok(mut picker) => {
+                    let size = picker.font_size();
+                    let fallback =
+                        format!("{:?}", size).contains("8") && format!("{:?}", size).contains("16");
+                    let empty = format!("{:?}", size).contains("0");
+                    if fallback || empty {
+                        if let Ok(picker2) = ratatui_image::picker::Picker::from_query_stdio() {
+                            picker = picker2;
                         }
-                        self.state.image_picker = Some(picker);
                     }
+                    self.state.image_picker = Some(picker);
 
-
+                    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+                    while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                        let _ = crossterm::event::read();
+                    }
                 }
                 Err(_) => {
                     self.state.image_supported = false;
@@ -211,70 +149,21 @@ impl App {
             }
         });
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        if self.state.auto_update && now.saturating_sub(self.state.last_update_check) > 3600 {
-            self.state.last_update_check = now;
-            if let Some(config_dir) = dirs::config_dir() {
-                let config_path = config_dir.join("moviebox-tui").join("config.json");
-                let _ = std::fs::create_dir_all(config_dir.join("moviebox-tui"));
-                let config_json = serde_json::json!({
-                    "auto_update": self.state.auto_update,
-                    "last_update_check": now
-                });
-                let _ = std::fs::write(config_path, config_json.to_string());
-            }
-            self.action_sender.send(Action::CheckForUpdates).ok();
-        } else {
-            self.state.active_screen = Screen::Home;
-        }
-
-        let player_sender = self.action_sender.clone();
+        let update_sender = self.action_sender.clone();
         tokio::task::spawn_blocking(move || {
-            let mut players = Vec::new();
-            let which_cmd = if cfg!(target_os = "windows") {
-                "where"
-            } else {
-                "which"
-            };
-            let check_player = |cmd: &str| -> bool {
-                std::process::Command::new(which_cmd)
-                    .arg(cmd)
-                    .output()
-                    .map(|o| o.status.success())
-                    .unwrap_or(false)
-            };
-
-            #[cfg(target_os = "macos")]
-            {
-                if std::path::Path::new("/Applications/IINA.app").exists() || check_player("iina") {
-                    players.push(crate::tui::state::PlayerKind::Iina);
-                }
+            let pkg_name = env!("CARGO_PKG_NAME");
+            let current_version = env!("CARGO_PKG_VERSION");
+            let informer =
+                update_informer::new(update_informer::registry::Crates, pkg_name, current_version);
+            if let Ok(Some(version)) = informer.check_version() {
+                update_sender
+                    .send(Action::UpdateAvailable(version.to_string()))
+                    .ok();
             }
-            if std::path::Path::new("/Applications/mpv.app").exists()
-                || std::path::Path::new("C:\\Program Files\\mpv\\mpv.exe").exists()
-                || check_player("mpv")
-            {
-                players.push(crate::tui::state::PlayerKind::Mpv);
-            }
-            if std::path::Path::new("/Applications/VLC.app").exists()
-                || std::path::Path::new("C:\\Program Files\\VideoLAN\\VLC\\vlc.exe").exists()
-                || std::path::Path::new("C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe").exists()
-                || check_player("vlc")
-            {
-                players.push(crate::tui::state::PlayerKind::Vlc);
-            }
-            player_sender.send(Action::PlayersDetected(players)).ok();
         });
 
         loop {
-            if self.state.dirty {
-                terminal.draw(|frame| self.draw(frame))?;
-                self.state.dirty = false;
-            }
+            terminal.draw(|frame| self.draw(frame))?;
 
             tokio::select! {
                 Some(action) = events.next() => {
@@ -292,114 +181,26 @@ impl App {
     }
 
     async fn handle_action(&mut self, action: Action) -> Option<()> {
-        if !matches!(action, Action::Tick | Action::UpdateDownload(..)) {
-            self.state.dirty = true;
-        }
         match action {
             Action::Tick => {
-                let mut needs_redraw = (self.state.is_loading && self.state.tick_count % 5 == 0) || self.state.tick_count < 15;
                 self.state.tick_count = self.state.tick_count.wrapping_add(1);
                 if self.state.toast_timer > 0 {
-                    needs_redraw = true;
                     self.state.toast_timer -= 1;
                     if self.state.toast_timer == 0 {
                         self.state.toast_message = None;
                     }
                 }
                 if self.state.status_timer > 0 {
-                    needs_redraw = true;
                     self.state.status_timer -= 1;
                     if self.state.status_timer == 0 {
                         self.state.status_message.clear();
                     }
                 }
-                if needs_redraw {
-                    self.state.dirty = true;
-                }
 
-                if self.state.search_query.is_empty() && matches!(self.state.active_screen, crate::tui::state::Screen::Home) {
-                    use chrono::Timelike;
-                    let hour = chrono::Local::now().hour();
-                    let greeting_time = if hour >= 5 && hour < 12 {
-                        "Good morning"
-                    } else if hour >= 12 && hour < 17 {
-                        "Good afternoon"
-                    } else if hour >= 17 && hour < 21 {
-                        "Good evening"
-                    } else {
-                        "Working late"
-                    };
-                    let punct = if greeting_time == "Working late" { "?" } else { "" };
-                    let greeting = format!("{}, {}{}", greeting_time, self.state.username, punct);
-
-                    let prompts = [
-                        "What are you in the mood to watch?",
-                        "Try 'Oppenheimer', 'Titanic', or 'Interstellar'...",
-                        "Discover your next binge-worthy masterpiece...",
-                        "Search for blockbuster movies, hit shows, or anime...",
-                        "Feeling nostalgic? Search timeless classics...",
-                        "Explore trending titles for your movie night...",
-                    ];
-                    let type_speed = 3;
-                    let del_speed = 1;
-                    let pause1 = 90;
-                    let pause2 = 15;
-
-                    let greeting_cycle = greeting.len() * type_speed + pause1 + greeting.len() * del_speed + pause2;
-                    let mut total_ticks = 0;
-                    for p in prompts.iter() {
-                        total_ticks += p.len() * type_speed + pause1 + p.len() * del_speed + pause2;
-                    }
-
-                    let tick_u = self.state.tick_count as usize;
-                    let mut animated_text = String::new();
-
-                    if tick_u < greeting_cycle {
-                        let t = tick_u;
-                        let t_type = greeting.len() * type_speed;
-                        let t_del = greeting.len() * del_speed;
-                        let display_len = if t < t_type {
-                            t / type_speed
-                        } else if t < t_type + pause1 {
-                            greeting.len()
-                        } else if t < t_type + pause1 + t_del {
-                            greeting.len().saturating_sub((t - (t_type + pause1)) / del_speed)
-                        } else {
-                            0
-                        };
-                        animated_text = greeting[0..display_len.min(greeting.len())].to_string();
-                    } else {
-                        let mut t = (tick_u - greeting_cycle) % total_ticks;
-                        for p in prompts.iter() {
-                            let t_type = p.len() * type_speed;
-                            let t_del = p.len() * del_speed;
-                            let cycle = t_type + pause1 + t_del + pause2;
-                            if t < cycle {
-                                let display_len = if t < t_type {
-                                    t / type_speed
-                                } else if t < t_type + pause1 {
-                                    p.len()
-                                } else if t < t_type + pause1 + t_del {
-                                    p.len().saturating_sub((t - (t_type + pause1)) / del_speed)
-                                } else {
-                                    0
-                                };
-                                animated_text = p[0..display_len.min(p.len())].to_string();
-                                break;
-                            } else {
-                                t -= cycle;
-                            }
-                        }
-                    }
-                    if self.state.cached_animated_text != animated_text {
-                        self.state.cached_animated_text = animated_text;
-                        self.state.dirty = true;
-                    }
-                }
                 let current_query = self.state.search_query.trim().to_string();
                 if current_query != self.state.last_suggest_query
                     && self.state.last_search_edit.elapsed()
-                        >= std::time::Duration::from_millis(100)
+                        >= std::time::Duration::from_millis(250)
                 {
                     self.state.last_suggest_query = current_query.clone();
                     if !current_query.is_empty() {
@@ -414,37 +215,31 @@ impl App {
                         >= std::time::Duration::from_millis(300)
                 {
                     if let Some((subject_id, se, ep)) = self.state.pending_episode_fetch.take() {
-                        let mut found_cached = false;
-                        if let Some(pool) = self.state.stream_pool.get(&subject_id) {
-                            if let Some(cached) = pool.episode_index.get(&(se, ep)) {
-                                found_cached = true;
-                                let count = cached.len();
-                                let mut result = serde_json::Map::new();
-                                result.insert(
-                                    "list".to_string(),
-                                    serde_json::Value::Array(cached.clone()),
-                                );
-                                self.state.selected_resources =
-                                    Some(serde_json::Value::Object(result));
-                                self.state.is_loading = false;
-                                self.state.resource_list_state.select(if count > 0 {
-                                    Some(0)
-                                } else {
-                                    None
-                                });
-                                self.state.status_message =
-                                    format!("Resolved {} direct stream sources (cached).", count);
-                                self.state.status_timer = 150;
-                            }
-                        }
-
-                        if !found_cached {
+                        if let Some(cached) = self
+                            .state
+                            .stream_cache
+                            .get(&(subject_id.clone(), se, ep))
+                            .cloned()
+                        {
+                            let count = cached.len();
+                            let mut result = serde_json::Map::new();
+                            result.insert("list".to_string(), serde_json::Value::Array(cached));
+                            self.state.selected_resources = Some(serde_json::Value::Object(result));
+                            self.state.is_loading = false;
+                            self.state.resource_list_state.select(if count > 0 {
+                                Some(0)
+                            } else {
+                                None
+                            });
+                            self.state.status_message =
+                                format!("Resolved {} direct stream sources (cached).", count);
+                            self.state.status_timer = 150;
+                        } else {
                             self.action_sender
-                                .send(Action::FetchEpisodeStreams {
+                                .send(Action::FetchResources {
                                     subject_id,
                                     season: se,
                                     episode: ep,
-                                    force_refresh: false,
                                 })
                                 .ok();
                         }
@@ -458,14 +253,20 @@ impl App {
                 self.state.poster_protocol = None;
                 self.state.search_poster_protocols.clear();
                 if self.state.image_picker.is_some() {
-
+                    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+                    while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                        let _ = crossterm::event::read();
+                    }
                 }
             }
             Action::Resize(_w, _h) => {
                 self.state.poster_protocol = None;
                 self.state.search_poster_protocols.clear();
                 if self.state.image_picker.is_some() {
-
+                    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+                    while crossterm::event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                        let _ = crossterm::event::read();
+                    }
                 }
             }
             Action::Key(key) => {
@@ -482,7 +283,7 @@ impl App {
                     && self.state.download_progress.is_some()
                 {
                     self.action_sender.send(Action::CancelDownload).ok();
-                    return None;
+                    return Some(());
                 }
 
                 if key.code == KeyCode::F(1) {
@@ -504,12 +305,13 @@ impl App {
                                 self.state.input_mode = InputMode::Normal;
                                 self.state.search_suggestions.clear();
                                 self.state.suggest_index = None;
+                                self.state.search_results.clear();
                                 self.state.search_list_state.select(None);
                                 self.state.last_search_edit = std::time::Instant::now();
                                 let action = if selected_suggestion {
                                     Action::SelectSuggestion { query }
                                 } else {
-                                    Action::Search { query, force_refresh: false }
+                                    Action::Search { query }
                                 };
                                 self.action_sender.send(action).ok();
                             }
@@ -548,7 +350,6 @@ impl App {
                         _ => {}
                     },
                     InputMode::Normal => match self.state.active_screen {
-                        Screen::Startup => {}
                         Screen::Home => match key.code {
                             KeyCode::Esc => {
                                 self.action_sender.send(Action::GoBack).ok();
@@ -574,9 +375,6 @@ impl App {
                             KeyCode::Char('q') => {
                                 self.action_sender.send(Action::Quit).ok();
                             }
-                            KeyCode::Char('r') => {
-                                self.action_sender.send(Action::Refresh).ok();
-                            }
                             KeyCode::Char(c)
                                 if (key.modifiers.is_empty()
                                     || key.modifiers == KeyModifiers::SHIFT) =>
@@ -595,6 +393,9 @@ impl App {
                             KeyCode::Char('q') => {
                                 self.action_sender.send(Action::Quit).ok();
                             }
+                            KeyCode::Char('y') | KeyCode::Char('c') => {
+                                self.action_sender.send(Action::CopyLink).ok();
+                            }
                             KeyCode::Char('o') | KeyCode::Char('O') => {
                                 if !self.state.subtitle_popup && !self.state.player_picker_popup {
                                     if let crate::tui::state::DetailsPane::Streams =
@@ -609,8 +410,26 @@ impl App {
                                     self.action_sender.send(Action::DownloadStream).ok();
                                 }
                             }
-                            KeyCode::Char('r') => {
-                                self.action_sender.send(Action::Refresh).ok();
+                            KeyCode::Char('R') => {
+                                if let Some(id) = self.state.active_subject_id.clone() {
+                                    let se = if self.state.available_seasons.is_empty() {
+                                        0
+                                    } else {
+                                        self.state.selected_season
+                                    };
+                                    let ep = if self.state.available_seasons.is_empty() {
+                                        0
+                                    } else {
+                                        self.state.selected_episode
+                                    };
+                                    self.action_sender
+                                        .send(Action::FetchResources {
+                                            subject_id: id,
+                                            season: se,
+                                            episode: ep,
+                                        })
+                                        .ok();
+                                }
                             }
                             KeyCode::Char('?') => {
                                 self.action_sender.send(Action::ToggleHelp).ok();
@@ -657,7 +476,17 @@ impl App {
                                                 .language_list_state
                                                 .selected()
                                                 .unwrap_or(0);
-
+                                            self.action_sender
+                                                .send(Action::FetchResources {
+                                                    subject_id: self
+                                                        .state
+                                                        .active_subject_id
+                                                        .clone()
+                                                        .unwrap_or("".to_string()),
+                                                    season: self.state.selected_season,
+                                                    episode: self.state.selected_episode,
+                                                })
+                                                .ok();
                                             self.action_sender
                                                 .send(Action::SelectLanguage(idx))
                                                 .ok();
@@ -693,7 +522,6 @@ impl App {
                     return None;
                 }
                 match self.state.active_screen {
-                    Screen::Startup => {}
                     Screen::Home => {
                         if !self.state.search_results.is_empty() {
                             self.state.search_poster_protocols.clear();
@@ -705,12 +533,6 @@ impl App {
                         }
                     }
                     Screen::Details => {
-                        self.state
-                            .fetch_cancel
-                            .store(true, std::sync::atomic::Ordering::Relaxed);
-                        self.state.stream_pool.clear();
-                        self.state.pending_episode_fetch = None;
-                        self.state.selected_resources = None;
                         self.state.active_screen = Screen::Home;
                         self.state.is_loading = false;
                         self.state.language_chosen = false;
@@ -720,50 +542,6 @@ impl App {
                     }
                 }
             }
-            Action::Refresh => {
-                match self.state.active_screen {
-                    Screen::Home => {
-                        let query = self.state.search_query.trim().to_string();
-                        if !query.is_empty() {
-                            self.action_sender.send(Action::Search { query, force_refresh: true }).ok();
-                        }
-                    }
-                    Screen::Details => {
-                        if let Some(id) = self.state.active_subject_id.clone() {
-                            let se = if self.state.available_seasons.is_empty() {
-                                0
-                            } else {
-                                self.state.selected_season
-                            };
-                            let ep = if self.state.available_seasons.is_empty() {
-                                0
-                            } else {
-                                self.state.selected_episode
-                            };
-                            let id_clone = id.clone();
-                            tokio::task::spawn_blocking(move || {
-                                crate::cache::invalidate_stream_cache(&id_clone, se, ep);
-                            });
-                            self.state.selected_season = se;
-                            self.state.selected_episode = ep;
-                            self.action_sender
-                                .send(Action::FetchEpisodeStreams {
-                                    subject_id: id,
-                                    season: se,
-                                    episode: ep,
-                                    force_refresh: true,
-                                })
-                                .ok();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Action::ClearCache => {
-                crate::cache::clear_all_cache();
-                self.state.status_message = "Cache cleared completely.".to_string();
-                self.state.status_timer = 150;
-            }
             Action::SelectLanguage(idx) => {
                 if let Some(details) = &self.state.selected_details
                     && let Some(dubs) = details.get("dubs").and_then(|d| d.as_array())
@@ -771,41 +549,16 @@ impl App {
                     && let Some(id) = dub.get("subjectId").and_then(|i| i.as_str())
                 {
                     let next_id = id.to_string();
+                    self.state.selected_details = None;
                     self.state.selected_resources = None;
                     self.state.resource_list_state.select(None);
                     self.state.language_chosen = true;
                     self.state.status_message = "Switching language...".to_string();
                     self.state.status_timer = 150;
-                    self.action_sender.send(Action::FetchDetails(next_id, false)).ok();
+                    self.action_sender.send(Action::FetchDetails(next_id)).ok();
                 }
             }
             Action::Suggest(query) => {
-                if query.starts_with('/') {
-                    let commands = vec![
-                        "/discover",
-                        "/movies",
-                        "/tvshows",
-                        "/search",
-                        "/clear-cache",
-                        "/quit",
-                    ];
-                    let mut suggestions = vec![];
-                    for cmd in commands {
-                        if cmd.starts_with(&query) {
-                            suggestions.push(serde_json::json!({ "title": cmd }));
-                        }
-                    }
-                    if !suggestions.is_empty() {
-                        let fake_payload = serde_json::json!({
-                            "results": [{
-                                "subjects": suggestions
-                            }]
-                        });
-                        self.action_sender.send(Action::SuggestSuccess(query, fake_payload)).ok();
-                    }
-                    return None;
-                }
-
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 let query_clone = query.clone();
@@ -867,64 +620,10 @@ impl App {
                 }
             }
             Action::SelectSuggestion { query } => {
-                self.action_sender.send(Action::Search { query, force_refresh: false }).ok();
+                self.action_sender.send(Action::Search { query }).ok();
             }
-            Action::Search { query, force_refresh } => {
+            Action::Search { query } => {
                 let lower_query = query.trim().to_lowercase();
-                if lower_query == "/github" {
-                    let _ = open::that("https://github.com/mesamirh/MovieBox-Tui");
-                    self.state.search_query.clear();
-                    self.state.input_mode = InputMode::Normal;
-                    return None;
-                }
-
-                if lower_query == "/update" {
-                    self.state.search_query.clear();
-                    self.state.input_mode = InputMode::Normal;
-                    self.state.active_screen = Screen::Startup;
-                    self.state.update_available = None;
-                    self.state.updater_progress = None;
-                    self.state.updater_status = None;
-                    self.state.updater_done = false;
-                    self.action_sender.send(Action::CheckForUpdates).ok();
-                    return None;
-                }
-                if lower_query == "/toggle-update" {
-                    self.state.auto_update = !self.state.auto_update;
-                    if let Some(config_dir) = dirs::config_dir() {
-                        let config_path = config_dir.join("moviebox-tui").join("config.json");
-                        let _ = std::fs::create_dir_all(config_dir.join("moviebox-tui"));
-                        let config_json = serde_json::json!({
-                            "auto_update": self.state.auto_update,
-                            "last_update_check": self.state.last_update_check
-                        });
-                        let _ = std::fs::write(config_path, config_json.to_string());
-                    }
-                    self.state.search_query.clear();
-                    self.state.input_mode = InputMode::Normal;
-                    self.state.toast_message = Some(format!(
-                        "{} Auto Update is now {}",
-                        if self.state.basic_terminal {
-                            "[!]"
-                        } else {
-                            "!"
-                        },
-                        if self.state.auto_update {
-                            "Enabled"
-                        } else {
-                            "Disabled"
-                        }
-                    ));
-                    self.state.toast_timer = 50;
-                    return None;
-                }
-
-                if lower_query == "/clear-cache" {
-                    self.action_sender.send(Action::ClearCache).ok();
-                    self.state.search_query.clear();
-                    return None;
-                }
-
                 let tab_id = match lower_query.as_str() {
                     "/home" | "/discover" => Some("0"),
                     "/movies" => Some("2"),
@@ -949,31 +648,19 @@ impl App {
                 self.state.selected_details = None;
                 self.state.selected_resources = None;
                 self.state.is_loading = true;
+                self.state.search_results.clear();
                 self.state.search_list_state.select(Some(0));
                 self.state.search_suggestions.clear();
                 self.state.suggest_index = None;
-                self.state.search_preview = None;
                 self.state.status_message = format!("Searching for '{}'...", query);
                 self.state.status_timer = 150;
 
-                let query_clone = query.clone();
-                let sender = self.action_sender.clone();
                 let client = self.client.clone();
+                let sender = self.action_sender.clone();
+                let query_clone = query.clone();
                 tokio::spawn(async move {
-                    if !force_refresh {
-                        if let Some(cached) = crate::cache::get_search_cache(&query_clone) {
-                            sender
-                                .send(Action::SearchSuccess {
-                                    query: query_clone.clone(),
-                                    payload: cached,
-                                })
-                                .ok();
-                            return;
-                        }
-                    }
                     match client.search(&query_clone, 1).await {
                         Ok(res) => {
-                            crate::cache::set_search_cache(&query_clone, &res);
                             sender
                                 .send(Action::SearchSuccess {
                                     query: query_clone,
@@ -1006,24 +693,9 @@ impl App {
 
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
-                let force_refresh = false; 
-
-                if !force_refresh {
-                    if let Some(cached) = crate::cache::get_homepage_cache(&tab_id, page) {
-                        sender
-                            .send(Action::HomepageSuccess {
-                                tab_id: tab_id.clone(),
-                                page,
-                                payload: cached,
-                            })
-                            .ok();
-                    }
-                }
-
                 tokio::spawn(async move {
                     match client.get_homepage(&tab_id, page).await {
                         Ok(res) => {
-                            crate::cache::set_homepage_cache(&tab_id, page, &res);
                             sender
                                 .send(Action::HomepageSuccess {
                                     tab_id,
@@ -1102,54 +774,19 @@ impl App {
                             })
                             .map(|s| s.to_string());
 
-                        let season =
-                            item.get("season").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
-
-                        if let Some(existing) =
-                            self.state.search_results.iter_mut().find(|r| r.id == id)
-                        {
-                            if season > existing.season {
-                                existing.season = season;
-                                existing.title = clean_title;
-                                existing.stype = stype;
-                                existing.release_year = release_year;
-                                existing.cover_url = cover_url;
-                            }
-                            continue;
-                        }
-
-                        let raw_lower = raw_title.to_lowercase();
-                        let is_dub = raw_lower.contains("[hindi]")
-                            || raw_lower.contains("[tamil]")
-                            || raw_lower.contains("[telugu]")
-                            || raw_lower.contains("[english]");
-
-                        if is_dub
-                            && self
-                                .state
-                                .search_results
-                                .iter()
-                                .any(|r| r.title == clean_title && r.stype == stype)
-                        {
-                            continue;
-                        }
-
-                        if self.state.search_results.iter().any(|r| {
+                        let is_duplicate = self.state.search_results.iter().any(|r| {
                             r.title == clean_title
                                 && r.release_year == release_year
                                 && r.stype == stype
-                        }) {
-                            continue;
-                        }
+                        });
 
-                        if !id.is_empty() {
+                        if !id.is_empty() && !is_duplicate {
                             self.state.search_results.push(SearchResult {
                                 id,
                                 title: clean_title,
                                 stype,
                                 release_year,
                                 cover_url,
-                                season,
                             });
                             count += 1;
                         }
@@ -1192,7 +829,7 @@ impl App {
                                 let tx = sender.clone();
                                 let client = req_client.clone();
                                 tokio::spawn(async move {
-                                    let _permit = permit;
+                                    let _permit = permit; // hold until block ends
                                     if let Ok(resp) = client
                                         .get(&url)
                                         .header("User-Agent", "MovieBox-Tui/1.0")
@@ -1200,8 +837,7 @@ impl App {
                                         .await
                                     {
                                         if let Ok(bytes) = resp.bytes().await {
-                                            let bytes_clone = bytes.clone();
-                                            if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_clone)).await {
+                                            if let Ok(img) = image::load_from_memory(&bytes) {
                                                 tx.send(Action::SearchPosterLoaded(
                                                     id,
                                                     Some(std::sync::Arc::new(img)),
@@ -1311,43 +947,6 @@ impl App {
                         .and_then(|u| u.as_str())
                         .map(|s| s.to_string());
 
-                    let season = item.get("season").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
-
-                    if let Some(existing) =
-                        self.state.search_results.iter_mut().find(|r| r.id == id)
-                    {
-                        if season > existing.season {
-                            existing.season = season;
-                            existing.title = clean_title;
-                            existing.stype = stype;
-                            existing.release_year = release_year;
-                            existing.cover_url = cover_url;
-                        }
-                        continue;
-                    }
-
-                    let raw_lower = raw_title.to_lowercase();
-                    let is_dub = raw_lower.contains("[hindi]")
-                        || raw_lower.contains("[tamil]")
-                        || raw_lower.contains("[telugu]")
-                        || raw_lower.contains("[english]");
-
-                    if is_dub
-                        && self
-                            .state
-                            .search_results
-                            .iter()
-                            .any(|r| r.title == clean_title && r.stype == stype)
-                    {
-                        continue;
-                    }
-
-                    if self.state.search_results.iter().any(|r| {
-                        r.title == clean_title && r.release_year == release_year && r.stype == stype
-                    }) {
-                        continue;
-                    }
-
                     if !id.is_empty() {
                         self.state.search_results.push(SearchResult {
                             id,
@@ -1355,7 +954,6 @@ impl App {
                             stype,
                             release_year,
                             cover_url,
-                            season,
                         });
                         count += 1;
                     }
@@ -1389,8 +987,7 @@ impl App {
                                         .await
                                     {
                                         if let Ok(bytes) = resp.bytes().await {
-                                            let bytes_clone = bytes.clone();
-                                            if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_clone)).await {
+                                            if let Ok(img) = image::load_from_memory(&bytes) {
                                                 tx.send(Action::SearchPosterLoaded(
                                                     id,
                                                     Some(std::sync::Arc::new(img)),
@@ -1447,7 +1044,6 @@ impl App {
                     return None;
                 }
                 match self.state.active_screen {
-                    Screen::Startup => {}
                     Screen::Home => {
                         let current = self.state.search_list_state.selected().unwrap_or(0);
                         if current > 0 {
@@ -1485,9 +1081,6 @@ impl App {
                             let current = self.state.language_list_state.selected().unwrap_or(0);
                             if current > 0 {
                                 self.state.language_list_state.select(Some(current - 1));
-                                self.action_sender
-                                    .send(Action::SelectLanguage(current - 1))
-                                    .ok();
                             }
                         }
                     },
@@ -1556,7 +1149,6 @@ impl App {
                     return None;
                 }
                 match self.state.active_screen {
-                    Screen::Startup => {}
                     Screen::Home => {
                         let current = self.state.search_list_state.selected().unwrap_or(0);
                         if current + 1 < self.state.search_results.len() {
@@ -1649,9 +1241,6 @@ impl App {
                                 && current + 1 < dubs.len()
                             {
                                 self.state.language_list_state.select(Some(current + 1));
-                                self.action_sender
-                                    .send(Action::SelectLanguage(current + 1))
-                                    .ok();
                             }
                         }
                     },
@@ -1814,32 +1403,19 @@ impl App {
                         self.state.status_timer = 150;
 
                         let sender = self.action_sender.clone();
-                        sender.send(Action::FetchDetails(item.id.clone(), false)).ok();
+                        sender.send(Action::FetchDetails(item.id)).ok();
                     }
                 }
             }
-            Action::FetchDetails(id, force_refresh) => {
+            Action::FetchDetails(id) => {
                 self.state.poster_protocol = None;
                 self.state.is_loading = true;
-                self.state.fetch_cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-                self.state.status_message = "Fetching details...".to_string();
-                self.state.stream_pool.clear();
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
                 let id_clone = id.clone();
                 tokio::spawn(async move {
-                    if !force_refresh {
-                        let id_for_cache = id_clone.clone();
-                        if let Ok(Some(cached)) = tokio::task::spawn_blocking(move || crate::cache::get_details_cache(&id_for_cache)).await {
-                            sender.send(Action::DetailsSuccess(id_clone.clone(), cached)).ok();
-                            return;
-                        }
-                    }
                     match client.get_details(&id_clone).await {
                         Ok(details) => {
-                            let id_for_cache = id_clone.clone();
-                            let details_for_cache = details.clone();
-                            let _ = tokio::task::spawn_blocking(move || crate::cache::set_details_cache(&id_for_cache, &details_for_cache)).await;
                             sender.send(Action::DetailsSuccess(id_clone, details)).ok();
                         }
                         Err(e) => {
@@ -1952,13 +1528,11 @@ impl App {
                             .header("User-Agent", "MovieBox-Tui/1.0")
                             .send()
                             .await
+                            && let Ok(bytes) = resp.bytes().await
+                            && let Ok(img) = image::load_from_memory(&bytes)
                         {
-                            if let Ok(bytes) = resp.bytes().await {
-                                if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes)).await {
                             let _ = action_tx
                                 .send(Action::PosterSuccess(id_clone, std::sync::Arc::new(img)));
-                                }
-                            }
                         }
                     });
                 }
@@ -1989,6 +1563,20 @@ impl App {
                 self.state.status_timer = 150;
             }
 
+            Action::CopyLink => {
+                if self.state.active_screen == Screen::Details
+                    && let Some(link) = self.get_selected_link()
+                {
+                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                        let _ = clipboard.set_text(link.clone());
+                        self.state.toast_message = Some("✓ Copied stream link!".to_string());
+                        self.state.toast_timer = 30;
+                    } else {
+                        self.state.status_message = format!("Link: {}", link);
+                        self.state.status_timer = 150;
+                    }
+                }
+            }
             Action::PlayStream(open_with) => {
                 if self.state.active_screen == Screen::Details
                     && let Some(link) = self.get_selected_link()
@@ -2004,14 +1592,7 @@ impl App {
                     let resource_id = self.get_selected_resource_id();
 
                     if let Some(rid) = resource_id {
-                        self.state.toast_message = Some(format!(
-                            "{} Fetching subtitles...",
-                            if self.state.basic_terminal {
-                                "[OK]"
-                            } else {
-                                "✓"
-                            }
-                        ));
+                        self.state.toast_message = Some("✓ Fetching subtitles...".to_string());
                         self.state.toast_timer = 40;
                         let client = self.client.clone();
                         let sender = self.action_sender.clone();
@@ -2080,41 +1661,91 @@ impl App {
                 }
             }
             Action::LaunchMpv(link, subtitle_url) => {
-                let player = self.state.available_players.first().cloned();
-                match player {
-                    None => {
-                        self.state.toast_message = Some(format!(
-                            "{} No media player found. Install mpv, IINA, or VLC.",
-                            if self.state.basic_terminal {
-                                "[X]"
-                            } else {
-                                "✗"
-                            }
-                        ));
-                        self.state.toast_timer = 150;
+                // Live stream via local proxy (same HTTP stack as download, no file saved).
+                self.state.toast_message = Some("✓ Starting stream…".to_string());
+                self.state.toast_timer = 60;
+                let http = self.client.http_client().clone();
+                let sender = self.action_sender.clone();
+                tokio::spawn(async move {
+                    match crate::tui::player::start_stream_proxy(http, link).await {
+                        Ok(port) => {
+                            let local = format!("http://127.0.0.1:{port}/stream.mp4");
+                            sender
+                                .send(Action::DoLaunchMpv(local, subtitle_url))
+                                .ok();
+                        }
+                        Err(err) => {
+                            sender.send(Action::PlayerError(err)).ok();
+                        }
                     }
-                    Some(kind) => {
-                        let player_name = match kind {
-                            crate::tui::state::PlayerKind::Mpv => "MPV",
-                            crate::tui::state::PlayerKind::Iina => "IINA",
-                            crate::tui::state::PlayerKind::Vlc => "VLC",
-                        };
-                        self.state.toast_message = Some(format!(
-                            "{} Launching {}...",
-                            if self.state.basic_terminal {
-                                "[OK]"
-                            } else {
-                                "✓"
-                            },
-                            player_name
-                        ));
-                        self.state.toast_timer = 40;
+                });
+            }
+            Action::DoLaunchMpv(link, subtitle_url) => {
+                self.state.toast_message = Some("✓ Launching MPV...".to_string());
+                self.state.toast_timer = 40;
 
-                        self.action_sender
-                            .send(Action::LaunchPlayer(kind, link, subtitle_url))
-                            .ok();
+                let sub = subtitle_url.as_deref().filter(|s| !s.is_empty());
+                match crate::tui::player::build_player_command(
+                    crate::tui::state::PlayerKind::Mpv,
+                    &link,
+                    sub,
+                ) {
+                    Some(mut cmd) => match cmd.spawn() {
+                        Ok(mut child) => {
+                            let sender = self.action_sender.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                match child.try_wait() {
+                                    Ok(Some(status)) if !status.success() => {
+                                        let hint = std::fs::read_to_string(
+                                            crate::tui::player::mpv_log_path(),
+                                        )
+                                        .ok()
+                                        .map(|log| {
+                                            if log.contains("429") {
+                                                "CDN rate-limited (429). Wait a few minutes, then try once."
+                                                    .to_string()
+                                            } else if let Some(line) = log.lines().rev().find(|l| {
+                                                let lower = l.to_lowercase();
+                                                lower.contains("error")
+                                                    || lower.contains("failed")
+                                                    || lower.contains("fatal")
+                                            }) {
+                                                line.trim().to_string()
+                                            } else {
+                                                "mpv exited early (stream failed)".to_string()
+                                            }
+                                        })
+                                        .unwrap_or_else(|| {
+                                            "mpv exited early (stream failed)".to_string()
+                                        });
+                                        sender.send(Action::PlayerError(hint)).ok();
+                                    }
+                                    _ => {}
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            self.state.toast_message =
+                                Some(format!("✗ Failed to start mpv: {e}"));
+                            self.state.toast_timer = 90;
+                        }
+                    },
+                    None => {
+                        self.state.toast_message = Some(
+                            "✗ mpv not found. Install to C:\\Program Files\\MPV Player".to_string(),
+                        );
+                        self.state.toast_timer = 90;
                     }
                 }
+            }
+            Action::PlayerError(msg) => {
+                self.state.toast_message = Some(format!("✗ {msg}"));
+                self.state.toast_timer = 150;
+            }
+            Action::SetToast(msg) => {
+                self.state.toast_message = Some(msg);
+                self.state.toast_timer = 80;
             }
             Action::DownloadStream => {
                 if self.state.download_progress.is_some() {
@@ -2131,13 +1762,9 @@ impl App {
                         .unwrap_or("MovieBox-Tui_Stream")
                         .to_string();
                     let ext = "mp4";
-                    let mut sanitized_title = title.replace(" ", "_");
-                    for c in &['/', '\\', ':', '*', '?', '"', '<', '>', '|'] {
-                        sanitized_title = sanitized_title.replace(*c, "_");
-                    }
                     let filename = format!(
                         "{}_{}.{}",
-                        sanitized_title,
+                        title.replace(" ", "_").replace("/", "_"),
                         std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap()
@@ -2150,14 +1777,8 @@ impl App {
                         .join(&filename);
 
                     if let Some(link) = link_opt {
-                        self.state.toast_message = Some(format!(
-                            "{} Starting native download...",
-                            if self.state.basic_terminal {
-                                "[OK]"
-                            } else {
-                                "✓"
-                            }
-                        ));
+                        self.state.toast_message =
+                            Some("✓ Starting native download...".to_string());
                         self.state.toast_timer = 40;
                         self.state.download_status = Some("Connecting...".to_string());
                         self.state.download_progress = Some(0.0);
@@ -2167,11 +1788,7 @@ impl App {
 
                         let cancel_token = self.state.cancel_download.clone();
                         let sender = self.action_sender.clone();
-                        let client = reqwest::Client::builder()
-                            .connect_timeout(std::time::Duration::from_secs(10))
-                            .tcp_keepalive(std::time::Duration::from_secs(30))
-                            .build()
-                            .unwrap_or_else(|_| self.client.http_client().clone());
+                        let client = self.client.http_client().clone();
                         tokio::spawn(async move {
                             let head_res = client.head(&link).send().await;
                             let (total_size, supports_ranges) = match head_res {
@@ -2302,42 +1919,32 @@ impl App {
                                         use tokio::io::AsyncWriteExt;
                                         let expected_size = end - start + 1;
                                         let mut part_downloaded = 0;
-                                        loop {
-                                            match res.chunk().await {
-                                                Ok(Some(chunk)) => {
-                                                    if c_token.load(std::sync::atomic::Ordering::Relaxed) {
-                                                        return Err(());
-                                                    }
-
-                                                    let chunk_to_write = if part_downloaded
-                                                        + chunk.len() as u64
-                                                        > expected_size
-                                                    {
-                                                        &chunk[..(expected_size - part_downloaded) as usize]
-                                                    } else {
-                                                        &chunk[..]
-                                                    };
-
-                                                    if file.write_all(chunk_to_write).await.is_err() {
-                                                        return Err(());
-                                                    }
-                                                    dl_total.fetch_add(
-                                                        chunk_to_write.len() as u64,
-                                                        std::sync::atomic::Ordering::Relaxed,
-                                                    );
-                                                    part_downloaded += chunk_to_write.len() as u64;
-
-                                                    if part_downloaded >= expected_size {
-                                                        break;
-                                                    }
-                                                }
-                                                Ok(None) => break,
-                                                Err(_) => return Err(()),
+                                        while let Ok(Some(chunk)) = res.chunk().await {
+                                            if c_token.load(std::sync::atomic::Ordering::Relaxed) {
+                                                return Err(());
                                             }
-                                        }
 
-                                        if part_downloaded < expected_size {
-                                            return Err(());
+                                            let chunk_to_write = if part_downloaded
+                                                + chunk.len() as u64
+                                                > expected_size
+                                            {
+                                                &chunk[..(expected_size - part_downloaded) as usize]
+                                            } else {
+                                                &chunk[..]
+                                            };
+
+                                            if file.write_all(chunk_to_write).await.is_err() {
+                                                return Err(());
+                                            }
+                                            dl_total.fetch_add(
+                                                chunk_to_write.len() as u64,
+                                                std::sync::atomic::Ordering::Relaxed,
+                                            );
+                                            part_downloaded += chunk_to_write.len() as u64;
+
+                                            if part_downloaded >= expected_size {
+                                                break;
+                                            }
                                         }
                                         let _ = file.flush().await;
                                         Ok(())
@@ -2470,112 +2077,82 @@ impl App {
                                                     Some(format!("Downloading to {}", filename)),
                                                 ))
                                                 .ok();
-                                            loop {
-                                                match response.chunk().await {
-                                                    Ok(Some(chunk)) => {
-                                                        if cancel_token
-                                                            .load(std::sync::atomic::Ordering::Relaxed)
-                                                        {
-                                                            let _ = tokio::fs::remove_file(&filepath).await;
-                                                            sender
-                                                                .send(Action::UpdateDownload(
-                                                                    None,
-                                                                    Some("Download Cancelled".to_string()),
-                                                                ))
-                                                                .ok();
-                                                            tokio::time::sleep(
-                                                                std::time::Duration::from_secs(2),
-                                                            )
-                                                            .await;
-                                                            sender
-                                                                .send(Action::UpdateDownload(None, None))
-                                                                .ok();
-                                                            return;
-                                                        }
-                                                        if buf_writer.write_all(&chunk).await.is_err() {
-                                                            sender
-                                                                .send(Action::UpdateDownload(
-                                                                    None,
-                                                                    Some("File write error!".to_string()),
-                                                                ))
-                                                                .ok();
-                                                            return;
-                                                        }
-                                                        downloaded += chunk.len() as u64;
-
-                                                        let now = std::time::Instant::now();
-                                                        if now.duration_since(last_ui_update).as_millis()
-                                                            > 200
-                                                        {
-                                                            last_ui_update = now;
-                                                            let progress = if total_size > 0 {
-                                                                (downloaded as f64 / total_size as f64)
-                                                                    * 100.0
-                                                            } else {
-                                                                0.0
-                                                            };
-
-                                                            let elapsed = now
-                                                                .duration_since(start_time)
-                                                                .as_secs_f64();
-                                                            let speed_bps = if elapsed > 0.0 {
-                                                                downloaded as f64 / elapsed
-                                                            } else {
-                                                                0.0
-                                                            };
-                                                            let speed_mbps = speed_bps / 1024.0 / 1024.0;
-
-                                                            let remaining_bytes = total_size
-                                                                .saturating_sub(downloaded)
-                                                                as f64;
-                                                            let eta_secs = if speed_bps > 0.0 {
-                                                                remaining_bytes / speed_bps
-                                                            } else {
-                                                                0.0
-                                                            };
-
-                                                            let status = format!(
-                                                                "{:.1} MB / {:.1} MB | {:.1} MB/s | ETA: {:.0}s [1x]",
-                                                                downloaded as f64 / 1024.0 / 1024.0,
-                                                                total_size as f64 / 1024.0 / 1024.0,
-                                                                speed_mbps,
-                                                                eta_secs
-                                                            );
-                                                            sender
-                                                                .send(Action::UpdateDownload(
-                                                                    Some(progress),
-                                                                    Some(status),
-                                                                ))
-                                                                .ok();
-                                                        }
-                                                    }
-                                                    Ok(None) => break,
-                                                    Err(e) => {
-                                                        let _ = tokio::fs::remove_file(&filepath).await;
-                                                        sender
-                                                            .send(Action::UpdateDownload(
-                                                                None,
-                                                                Some(format!("Stream Error: {}", e)),
-                                                            ))
-                                                            .ok();
-                                                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                                                        sender.send(Action::UpdateDownload(None, None)).ok();
-                                                        return;
-                                                    }
+                                            while let Ok(Some(chunk)) = response.chunk().await {
+                                                if cancel_token
+                                                    .load(std::sync::atomic::Ordering::Relaxed)
+                                                {
+                                                    let _ = tokio::fs::remove_file(&filepath).await;
+                                                    sender
+                                                        .send(Action::UpdateDownload(
+                                                            None,
+                                                            Some("Download Cancelled".to_string()),
+                                                        ))
+                                                        .ok();
+                                                    tokio::time::sleep(
+                                                        std::time::Duration::from_secs(2),
+                                                    )
+                                                    .await;
+                                                    sender
+                                                        .send(Action::UpdateDownload(None, None))
+                                                        .ok();
+                                                    return;
                                                 }
-                                            }
+                                                if buf_writer.write_all(&chunk).await.is_err() {
+                                                    sender
+                                                        .send(Action::UpdateDownload(
+                                                            None,
+                                                            Some("File write error!".to_string()),
+                                                        ))
+                                                        .ok();
+                                                    return;
+                                                }
+                                                downloaded += chunk.len() as u64;
 
-                                            if total_size > 0 && downloaded != total_size {
-                                                let _ = tokio::fs::remove_file(&filepath).await;
-                                                sender
-                                                    .send(Action::UpdateDownload(
-                                                        None,
-                                                        Some("Incomplete download".to_string()),
-                                                    ))
-                                                    .ok();
-                                                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                                                sender.send(Action::UpdateDownload(None, None)).ok();
-                                                return;
+                                                let now = std::time::Instant::now();
+                                                if now.duration_since(last_ui_update).as_millis()
+                                                    > 200
+                                                {
+                                                    last_ui_update = now;
+                                                    let progress = if total_size > 0 {
+                                                        (downloaded as f64 / total_size as f64)
+                                                            * 100.0
+                                                    } else {
+                                                        0.0
+                                                    };
+
+                                                    let elapsed = now
+                                                        .duration_since(start_time)
+                                                        .as_secs_f64();
+                                                    let speed_bps = if elapsed > 0.0 {
+                                                        downloaded as f64 / elapsed
+                                                    } else {
+                                                        0.0
+                                                    };
+                                                    let speed_mbps = speed_bps / 1024.0 / 1024.0;
+
+                                                    let remaining_bytes = total_size
+                                                        .saturating_sub(downloaded)
+                                                        as f64;
+                                                    let eta_secs = if speed_bps > 0.0 {
+                                                        remaining_bytes / speed_bps
+                                                    } else {
+                                                        0.0
+                                                    };
+
+                                                    let status = format!(
+                                                        "{:.1} MB / {:.1} MB | {:.1} MB/s | ETA: {:.0}s [1x]",
+                                                        downloaded as f64 / 1024.0 / 1024.0,
+                                                        total_size as f64 / 1024.0 / 1024.0,
+                                                        speed_mbps,
+                                                        eta_secs
+                                                    );
+                                                    sender
+                                                        .send(Action::UpdateDownload(
+                                                            Some(progress),
+                                                            Some(status),
+                                                        ))
+                                                        .ok();
+                                                }
                                             }
                                             let _ = buf_writer.flush().await;
                                             sender
@@ -2617,29 +2194,8 @@ impl App {
             }
 
             Action::DetailsSuccess(id, payload) => {
-                let mut final_payload = payload.clone();
-                if self.state.language_chosen {
-                    if let Some(existing) = &self.state.selected_details {
-                        if let Some(final_obj) = final_payload.as_object_mut() {
-                            if let Some(existing_obj) = existing.as_object() {
-                                let preserve_keys = [
-                                    "title", "synopsis", "cover", "year", "releaseDate", 
-                                    "duration", "countryName", "genre", "imdbRatingValue", 
-                                    "intro", "description", "dubs"
-                                ];
-                                for key in preserve_keys {
-                                    if let Some(v) = existing_obj.get(key) {
-                                        final_obj.insert(key.to_string(), v.clone());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
                 self.state.active_subject_id = Some(id.clone());
-                self.state.selected_details = Some(final_payload.clone());
-                let payload = final_payload;
+                self.state.selected_details = Some(payload.clone());
 
                 if self.state.poster_image.is_none() {
                     if let Some(cached_img) = self.state.image_cache.get(&id) {
@@ -2657,15 +2213,13 @@ impl App {
                                 .header("User-Agent", "MovieBox-Tui/1.0")
                                 .send()
                                 .await
+                                && let Ok(bytes) = resp.bytes().await
+                                && let Ok(img) = image::load_from_memory(&bytes)
                             {
-                                if let Ok(bytes) = resp.bytes().await {
-                                if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes)).await {
-                                    let _ = action_tx.send(Action::PosterSuccess(
-                                        id_clone,
-                                        std::sync::Arc::new(img),
-                                    ));
-                                }
-                                }
+                                let _ = action_tx.send(Action::PosterSuccess(
+                                    id_clone,
+                                    std::sync::Arc::new(img),
+                                ));
                             }
                         });
                     }
@@ -2695,25 +2249,10 @@ impl App {
                     self.state.available_seasons = vec![serde_json::json!({
                         "se": 1,
                         "maxEp": max_ep,
-                        "allEp": ""
+                        "allEp": format!("1-{}", max_ep)
                     })];
                 } else {
                     self.state.available_seasons.clear();
-                }
-
-                self.state.available_episode_numbers.clear();
-                for season in &self.state.available_seasons {
-                    let all_ep_str = season.get("allEp").and_then(|v| v.as_str()).unwrap_or("");
-                    let ep_numbers: Vec<usize> = if !all_ep_str.is_empty() {
-                        all_ep_str
-                            .split(',')
-                            .filter_map(|s| s.trim().parse().ok())
-                            .collect()
-                    } else {
-                        let max_ep = season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1) as usize;
-                        (1..=max_ep).collect()
-                    };
-                    self.state.available_episode_numbers.push(ep_numbers);
                 }
 
                 self.state.season_list_state.select(Some(0));
@@ -2721,13 +2260,21 @@ impl App {
 
                 if let Some(dubs) = payload.get("dubs").and_then(|d| d.as_array()) {
                     let mut current_idx = 0;
+                    let current_id = payload
+                        .get("id")
+                        .and_then(|i| {
+                            i.as_i64()
+                                .map(|n| n.to_string())
+                                .or_else(|| i.as_str().map(|s| s.to_string()))
+                        })
+                        .unwrap_or_default();
                     for (i, dub) in dubs.iter().enumerate() {
                         let dub_id = dub.get("subjectId").and_then(|i| {
                             i.as_i64()
                                 .map(|n| n.to_string())
                                 .or_else(|| i.as_str().map(|s| s.to_string()))
                         });
-                        if dub_id == Some(id.clone()) {
+                        if dub_id == Some(current_id.clone()) {
                             current_idx = i;
                         }
                     }
@@ -2736,10 +2283,8 @@ impl App {
                     self.state.language_list_state.select(Some(0));
                 }
 
-                if !self.state.language_chosen {
-                    self.state.selected_season = 1;
-                    self.state.selected_episode = 1;
-                }
+                self.state.selected_season = 1;
+                self.state.selected_episode = 1;
 
                 let has_multiple_dubs = payload
                     .get("dubs")
@@ -2753,15 +2298,24 @@ impl App {
                     self.state.status_timer = 150;
                 } else {
                     if stype == 2 && !self.state.available_seasons.is_empty() {
-                        self.state.details_pane = crate::tui::state::DetailsPane::Seasons;
+                        self.state.details_pane = crate::tui::state::DetailsPane::Episodes;
                     } else {
                         self.state.details_pane = crate::tui::state::DetailsPane::Streams;
                     }
-                    
-                    self.state.is_loading = true;
-                    self.state.fetch_cancel
-                        .store(false, std::sync::atomic::Ordering::Relaxed);
-                    self.action_sender.send(Action::InitStreamPool(id)).ok();
+
+                    let (se, ep) = if stype == 2 {
+                        (1usize, 1usize)
+                    } else {
+                        (0usize, 0usize)
+                    };
+                    let sender = self.action_sender.clone();
+                    sender
+                        .send(Action::FetchResources {
+                            subject_id: id,
+                            season: se,
+                            episode: ep,
+                        })
+                        .ok();
                 }
             }
             Action::DetailsFailure(err) => {
@@ -2769,280 +2323,68 @@ impl App {
                 self.state.status_message = format!("Details fetch failed: {}", err);
                 self.state.status_timer = 150;
             }
-            Action::SetStatus(msg) => {
-                self.state.status_message = msg;
-                self.state.status_timer = 150;
-            }
-            Action::InitStreamPool(subject_id) => {
-                let mut pool = crate::tui::state::SubjectStreamPool::default();
-                pool.available_resolutions = vec![];
-                self.state.stream_pool.insert(subject_id.clone(), pool);
-                self.trigger_episode_fetch();
-
+            Action::FetchResources {
+                subject_id,
+                season,
+                episode,
+            } => {
+                self.state.active_resource_request =
+                    self.state.active_resource_request.wrapping_add(1);
+                let req_id = self.state.active_resource_request;
                 let client = self.client.clone();
                 let sender = self.action_sender.clone();
+                self.state.is_loading = true;
+                self.state.selected_resources = None;
                 tokio::spawn(async move {
-                    if let Ok(resolutions) = client.fetch_collection_resolutions(&subject_id).await {
-                        if !resolutions.is_empty() {
-                            sender.send(Action::StreamPoolInitialized(subject_id, resolutions)).ok();
+                    match client.get_all_resources(&subject_id, season, episode).await {
+                        Ok(res) => {
+                            sender
+                                .send(Action::ResourcesSuccess(req_id, season, episode, res))
+                                .ok();
+                        }
+                        Err(e) => {
+                            sender
+                                .send(Action::ResourcesFailure(req_id, format!("{:?}", e)))
+                                .ok();
                         }
                     }
                 });
             }
-            Action::StreamPoolInitialized(subject_id, resolutions) => {
-                let mut pool = crate::tui::state::SubjectStreamPool::default();
-                pool.available_resolutions = resolutions;
-                self.state.stream_pool.insert(subject_id.clone(), pool);
-
-                let (se, ep) = if let Some(details) = &self.state.selected_details {
-                    let stype = details
-                        .get("subjectType")
-                        .and_then(|s| s.as_i64())
-                        .or_else(|| details.get("stype").and_then(|s| s.as_i64()))
-                        .unwrap_or(1);
-                    if stype == 2 {
-                        let se = if self.state.selected_season > 0 { self.state.selected_season } else { 1 };
-                        let ep = if self.state.selected_episode > 0 { self.state.selected_episode } else { 1 };
-                        (se, ep)
-                    } else {
-                        (0usize, 0usize)
-                    }
-                } else {
-                    let se = if self.state.selected_season > 0 { self.state.selected_season } else { 1 };
-                    let ep = if self.state.selected_episode > 0 { self.state.selected_episode } else { 1 };
-                    (se, ep)
-                };
-                let _ = (se, ep);
-
-                self.state.selected_season = se;
-                self.state.selected_episode = ep;
-
-                self.action_sender
-                    .send(Action::FetchEpisodeStreams {
-                        subject_id,
-                        season: se,
-                        episode: ep,
-                        force_refresh: true,
-                    })
-                    .ok();
-            }
-            Action::FetchEpisodeStreams {
-                subject_id,
-                season,
-                episode,
-                force_refresh,
-            } => {
-                self.state.is_loading = true;
-                self.state.is_fetching_streams = true;
-
-                if let Some(pool) = self.state.stream_pool.get_mut(&subject_id) {
-                    if !force_refresh {
-                        if let Some(cached) = pool.episode_index.get(&(season, episode)) {
-                            self.action_sender
-                                .send(Action::EpisodeStreamsReady(
-                                    season,
-                                    episode,
-                                    serde_json::Value::Array(cached.clone()),
-                                ))
-                                .ok();
-                            return None;
-                        }
-                    }
-
-                    let mut absolute_episode = 0;
-                    for s_val in &self.state.available_seasons {
-                        let se = s_val.get("se").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
-                        if se < season {
-                            absolute_episode += s_val.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1) as usize;
-                        }
-                    }
-                    absolute_episode += episode.saturating_sub(1);
-                    let estimated_page = (absolute_episode / 20) + 1;
-
-                    let client = self.client.clone();
-                    let sender = self.action_sender.clone();
-                    let cancel_token = self.state.fetch_cancel.clone();
-                    let id_clone = subject_id.clone();
-                    let resolutions = pool.available_resolutions.clone();
-                    let is_movie = season == 0 && episode == 0;
-
-                    tokio::spawn(async move {
-                        if !force_refresh {
-                            let id_for_cache = id_clone.clone();
-                            if let Ok(Some(cached)) = tokio::task::spawn_blocking(move || crate::cache::get_stream_cache(&id_for_cache, season, episode)).await {
-                                sender.send(Action::SetStatus("Loaded from cache.".to_string())).ok();
-                                sender.send(Action::EpisodeStreamsReady(season, episode, cached)).ok();
-                                return;
-                            }
-                        }
-
-                        sender.send(Action::SetStatus("Fetching streams...".to_string())).ok();
-
-                        let mut all_items: Vec<serde_json::Value> = Vec::new();
-                        let mut found_target = false;
-                        
-                        if is_movie {
-                            let mut page = 1usize;
-                            loop {
-                                if cancel_token.load(std::sync::atomic::Ordering::Relaxed) { break; }
-                                match tokio::time::timeout(
-                                    std::time::Duration::from_secs(15),
-                                    client.fetch_resource_page(&id_clone, 0, page),
-                                )
-                                .await
-                                {
-                                    Ok(Ok((items, pager))) => {
-                                        let has_more = pager.get("hasMore").and_then(|v| v.as_bool()).unwrap_or(false);
-                                        all_items.extend(items);
-                                        if !has_more { break; }
-                                        page += 1;
-                                        if page > 10 { break; }
-                                    }
-                                    _ => break,
-                                }
-                            }
-                        } else {
-                            let mut page = estimated_page;
-                            'outer: loop {
-                                if cancel_token.load(std::sync::atomic::Ordering::Relaxed) { break 'outer; }
-                                let mut page_handles = Vec::new();
-                                
-                                let res_to_fetch = if resolutions.is_empty() { vec![0] } else { resolutions.clone() };
-                                
-                                for &res in &res_to_fetch {
-                                    let c = client.clone();
-                                    let id = id_clone.clone();
-                                    let ct = cancel_token.clone();
-                                    page_handles.push(tokio::spawn(async move {
-                                        if ct.load(std::sync::atomic::Ordering::Relaxed) {
-                                            return (Vec::new(), serde_json::json!({}));
-                                        }
-                                        match tokio::time::timeout(
-                                            std::time::Duration::from_secs(15),
-                                            c.fetch_resource_page(&id, res, page),
-                                        )
-                                        .await
-                                        {
-                                            Ok(Ok((items, pager))) => (items, pager),
-                                            _ => (Vec::new(), serde_json::json!({})),
-                                        }
-                                    }));
-                                }
-
-                                let mut page_empty = true;
-                                let mut has_more = false;
-                                for handle in page_handles {
-                                    if let Ok((items, pager)) = handle.await {
-                                        if !items.is_empty() { page_empty = false; }
-                                        if pager.get("hasMore").and_then(|v| v.as_bool()).unwrap_or(false) {
-                                            has_more = true;
-                                        }
-                                        for item in &items {
-                                            let se = item.get("se").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
-                                            let ep = item.get("ep").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
-                                            if se == season && ep == episode { found_target = true; }
-                                        }
-                                        all_items.extend(items);
-                                    }
-                                }
-
-                                if found_target || page_empty || !has_more { break 'outer; }
-                                page += 1;
-                                if page > 60 { break; } 
-                            }
-                        }
-
-                        let target_ok = if is_movie { !all_items.is_empty() } else { found_target };
-
-                        if !target_ok || all_items.is_empty() {
-                            sender
-                                .send(Action::EpisodeStreamsFailed(
-                                    season,
-                                    episode,
-                                    "No streams found".to_string(),
-                                ))
-                                .ok();
-                        } else {
-                            sender
-                                .send(Action::EpisodeStreamsReady(
-                                    season,
-                                    episode,
-                                    serde_json::Value::Array(all_items),
-                                ))
-                                .ok();
-                        }
-                    });
-                }
-            }
-            Action::EpisodeStreamsReady(target_se, target_ep, payload) => {
-                if target_se != self.state.selected_season || target_ep != self.state.selected_episode {
+            Action::ResourcesSuccess(req_id, target_se, target_ep, payload) => {
+                if req_id != self.state.active_resource_request {
                     return None;
                 }
 
-                let mut raw_list = payload.as_array().cloned().unwrap_or_default();
+                let raw_list = payload
+                    .get("list")
+                    .and_then(|l| l.as_array())
+                    .cloned()
+                    .unwrap_or_default();
 
-                if let Some(subject_id) = &self.state.active_subject_id {
-                    let id = subject_id.clone();
-                    if let Some(pool) = self.state.stream_pool.get_mut(&id) {
-                        let mut actual_resolutions = std::collections::HashSet::new();
-
-                        for item in raw_list.clone() {
-                            if let Some(r) = item.get("resolution").and_then(|r| r.as_u64()) {
-                                actual_resolutions.insert(r as u32);
-                            }
-
-                            let mut se = item
+                let mut filtered: Vec<serde_json::Value> = if target_se == 0 && target_ep == 0 {
+                    raw_list
+                } else {
+                    raw_list
+                        .into_iter()
+                        .filter(|stream| {
+                            let s = stream
                                 .get("se")
                                 .and_then(|v| {
                                     v.as_i64()
                                         .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
                                 })
                                 .unwrap_or(0) as usize;
-                            let mut ep = item
+                            let e = stream
                                 .get("ep")
                                 .and_then(|v| {
                                     v.as_i64()
                                         .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
                                 })
                                 .unwrap_or(0) as usize;
-
-                            if target_se == 0 && target_ep == 0 {
-                                se = 0;
-                                ep = 0;
-                            }
-
-                            let entry = pool.episode_index.entry((se, ep)).or_insert_with(Vec::new);
-                            let link = item
-                                .get("resourceLink")
-                                .and_then(|l| l.as_str())
-                                .unwrap_or("");
-                            if !entry.iter().any(|i| {
-                                i.get("resourceLink").and_then(|l| l.as_str()).unwrap_or("") == link
-                            }) {
-                                entry.push(item);
-                            }
-                        }
-
-                        if !actual_resolutions.is_empty() {
-                            let mut existing: std::collections::HashSet<u32> = pool.available_resolutions.iter().cloned().collect();
-                            existing.extend(actual_resolutions);
-                            let mut res_vec: Vec<u32> = existing.into_iter().collect();
-                            res_vec.sort_unstable_by(|a, b| b.cmp(a));
-
-                            pool.available_resolutions = res_vec;
-                        }
-
-                        if let Some(target_streams) =
-                            pool.episode_index.get(&(target_se, target_ep))
-                        {
-                            raw_list = target_streams.clone();
-                        } else {
-                            raw_list.clear();
-                        }
-                    }
-                }
-
-                let mut filtered = raw_list;
+                            s == target_se && e == target_ep
+                        })
+                        .collect()
+                };
 
                 filtered.sort_by(|a, b| {
                     let res_a = a.get("resolution").and_then(|r| r.as_i64()).unwrap_or(0);
@@ -3051,74 +2393,55 @@ impl App {
                 });
 
                 let count = filtered.len();
-                let array_payload = serde_json::Value::Array(filtered.clone());
-                if count > 0 {
-                    if let Some(subject_id) = &self.state.active_subject_id {
-                        let id_clone = subject_id.clone();
-                        let payload_clone = array_payload.clone();
-                        tokio::task::spawn_blocking(move || {
-                            crate::cache::set_stream_cache(&id_clone, target_se, target_ep, &payload_clone);
-                        });
-                    }
+
+                if let Some(ref subject_id) = self.state.active_subject_id {
+                    self.state
+                        .stream_cache
+                        .put((subject_id.clone(), target_se, target_ep), filtered.clone());
                 }
-                
+
                 let mut result = serde_json::Map::new();
-                result.insert("list".to_string(), array_payload);
+                result.insert("list".to_string(), serde_json::Value::Array(filtered));
                 self.state.selected_resources = Some(serde_json::Value::Object(result));
                 self.state.is_loading = false;
-                self.state.is_fetching_streams = false;
+
                 self.state
                     .resource_list_state
                     .select(if count > 0 { Some(0) } else { None });
-                self.state.status_message = format!("{} streams available.", count);
+                self.state.status_message = format!("Resolved {} direct stream sources.", count);
                 self.state.status_timer = 150;
             }
-            Action::EpisodeStreamsFailed(target_se, target_ep, err) => {
-                if target_se != self.state.selected_season || target_ep != self.state.selected_episode {
+            Action::ResourcesFailure(req_id, err) => {
+                if req_id != self.state.active_resource_request {
                     return None;
                 }
                 self.state.is_loading = false;
-                self.state.is_fetching_streams = false;
-                self.state.selected_resources = None;
-                self.state.status_message = format!("Error: {}", err);
-                self.state.status_timer = 150;
+                if err.contains("406") || err.to_lowercase().contains("exhausted") {
+                    self.state.status_message =
+                        "Error: No streams found on server (unreleased or removed).".to_string();
+                    self.state.status_timer = 150;
+                } else {
+                    self.state.status_message = format!("Error: Links resolution failed: {}", err);
+                    self.state.status_timer = 150;
+                }
             }
             Action::UpdateDownload(prog, stat) => {
-                if self.state.download_progress != prog || self.state.download_status != stat {
-                    self.state.download_progress = prog;
-                    self.state.download_status = stat;
-                    self.state.dirty = true;
-                }
+                self.state.download_progress = prog;
+                self.state.download_status = stat;
             }
             Action::CancelDownload => {
                 self.state
                     .cancel_download
                     .store(true, std::sync::atomic::Ordering::SeqCst);
                 self.state.download_status = Some("Cancelling...".to_string());
-                self.state.toast_message = Some(format!(
-                    "{} Cancelling download...",
-                    if self.state.basic_terminal {
-                        "[X]"
-                    } else {
-                        "✗"
-                    }
-                ));
+                self.state.toast_message = Some("✗ Cancelling download...".to_string());
                 self.state.toast_timer = 40;
             }
 
-            Action::PlayersDetected(players) => {
-                self.state.available_players = players;
-            }
             Action::ShowPlayerPicker(link, subtitle) => {
                 if self.state.available_players.is_empty() {
-                    self.state.toast_message = Some(format!(
-                        "{} No media player found. Install mpv, IINA, or VLC.",
-                        if self.state.basic_terminal {
-                            "[X]"
-                        } else {
-                            "✗"
-                        }
-                    ));
+                    self.state.toast_message =
+                        Some("✗ No media player found. Install mpv, IINA, or VLC.".to_string());
                     self.state.toast_timer = 150;
                     return None;
                 }
@@ -3130,254 +2453,38 @@ impl App {
             }
             Action::LaunchPlayer(kind, link, sub) => {
                 self.state.player_picker_popup = false;
-                tokio::spawn(async move {
-                    let mut local_sub = sub.clone();
-                    if kind == crate::tui::state::PlayerKind::Vlc {
-                        if let Some(s_url) = sub {
-                            if let Ok(resp) = reqwest::get(&s_url).await {
-                                if let Ok(bytes) = resp.bytes().await {
-                                    let temp_path = std::env::temp_dir().join(format!(
-                                        "moviebox_sub_{}.srt",
-                                        std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or_default()
-                                            .as_millis()
-                                    ));
-                                    if std::fs::write(&temp_path, bytes).is_ok() {
-                                        local_sub = Some(temp_path.to_string_lossy().to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    let mut cmd = match kind {
-                        crate::tui::state::PlayerKind::Mpv => {
-                            let mut c = if std::path::Path::new("C:\\Program Files\\mpv\\mpv.exe")
-                                .exists()
-                            {
-                                std::process::Command::new("C:\\Program Files\\mpv\\mpv.exe")
-                            } else if std::path::Path::new(
-                                "/Applications/mpv.app/Contents/MacOS/mpv",
-                            )
-                            .exists()
-                            {
-                                std::process::Command::new(
-                                    "/Applications/mpv.app/Contents/MacOS/mpv",
-                                )
-                            } else {
-                                std::process::Command::new("mpv")
-                            };
-                            c.arg(&link);
-                            if let Some(s) = local_sub {
-                                c.arg(format!("--sub-file={}", s));
-                            }
-                            c
-                        }
-                        crate::tui::state::PlayerKind::Iina => {
-                            #[cfg(target_os = "macos")]
-                            {
-                                let mut c = std::process::Command::new("open");
-                                c.arg("-a").arg("IINA");
-                                if let Some(s) = &local_sub {
-                                    c.arg("--args").arg(&link).arg(format!("--mpv-sub-file={}", s));
-                                } else {
-                                    c.arg(&link);
-                                }
-                                c
-                            }
-                            #[cfg(not(target_os = "macos"))]
-                            {
-                                let mut c = std::process::Command::new("mpv");
-                                c.arg(&link);
-                                if let Some(s) = local_sub {
-                                    c.arg(format!("--sub-file={}", s));
-                                }
-                                c
-                            }
-                        }
-                        crate::tui::state::PlayerKind::Vlc => {
-                            let mut c = if std::path::Path::new("/Applications/VLC.app").exists() {
-                                std::process::Command::new(
-                                    "/Applications/VLC.app/Contents/MacOS/VLC",
-                                )
-                            } else if std::path::Path::new(
-                                "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
-                            )
-                            .exists()
-                            {
-                                std::process::Command::new(
-                                    "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
-                                )
-                            } else if std::path::Path::new(
-                                "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
-                            )
-                            .exists()
-                            {
-                                std::process::Command::new(
-                                    "C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
-                                )
-                            } else {
-                                std::process::Command::new("vlc")
-                            };
-                            c.arg(&link);
-                            if let Some(s) = local_sub {
-                                c.arg(format!("--sub-file={}", s));
-                            }
-                            c
-                        }
-                    };
-                    cmd.stdout(std::process::Stdio::null());
-                    cmd.stderr(std::process::Stdio::null());
-
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::process::CommandExt;
-                        cmd.process_group(0);
-                    }
-
-                    let _ = cmd.spawn();
-                });
+                if kind == crate::tui::state::PlayerKind::Mpv {
+                    self.action_sender
+                        .send(Action::LaunchMpv(link, sub))
+                        .ok();
+                } else {
+                    self.action_sender
+                        .send(Action::DoLaunchPlayer(kind, link, sub))
+                        .ok();
+                }
             }
-            Action::CheckForUpdates => {
-                let update_sender = self.action_sender.clone();
-                tokio::spawn(async move {
-                    let start = std::time::Instant::now();
-
-                    let client = reqwest::Client::builder()
-                        .timeout(std::time::Duration::from_secs(10))
-                        .build()
-                        .unwrap_or_default();
-                    
-                    let result = match client.get("https://github.com/mesamirh/MovieBox-Tui/releases/latest").send().await {
-                        Ok(res) => {
-                            let url = res.url().as_str();
-                            if let Some(tag) = url.split("/tag/").last() {
-                                let version = tag.trim_start_matches('v');
-                                let current = env!("CARGO_PKG_VERSION");
-                                if self_update::version::bump_is_greater(current, version).unwrap_or(false) {
-                                    Some(version.to_string())
-                                } else {
-                                    Some("none".to_string())
-                                }
-                            } else {
-                                Some("error".to_string())
-                            }
+            Action::DoLaunchPlayer(kind, link, sub) => {
+                let sub_ref = sub.as_deref().filter(|s| !s.is_empty());
+                match crate::tui::player::build_player_command(kind, &link, sub_ref) {
+                    Some(mut cmd) => {
+                        if cmd.spawn().is_err() {
+                            self.state.toast_message =
+                                Some("✗ Failed to launch player".to_string());
+                            self.state.toast_timer = 60;
+                        } else {
+                            self.state.toast_message = Some("✓ Launching player...".to_string());
+                            self.state.toast_timer = 40;
                         }
-                        Err(_) => Some("error".to_string())
-                    };
-
-                    let elapsed = start.elapsed();
-                    if elapsed.as_millis() < 1500 {
-                        tokio::time::sleep(std::time::Duration::from_millis(1500) - elapsed).await;
                     }
-
-                    if let Some(res) = result {
-                        update_sender.send(Action::UpdateAvailable(res)).ok();
+                    None => {
+                        self.state.toast_message =
+                            Some("✗ Player executable not found".to_string());
+                        self.state.toast_timer = 90;
                     }
-                });
+                }
             }
             Action::UpdateAvailable(version) => {
-                if version == "none" || version == "error" {
-                    if self.state.active_screen == Screen::Startup {
-                        self.state.active_screen = Screen::Home;
-                        if version == "none" {
-                            self.state.toast_message =
-                                Some("You are on the latest version!".to_string());
-                        } else {
-                            self.state.toast_message =
-                                Some("Failed to check for updates.".to_string());
-                        }
-                        self.state.toast_timer = 40;
-                    }
-                } else {
-                    self.state.update_available = Some(version);
-                    if self.state.active_screen == Screen::Startup {
-                        self.action_sender.send(Action::StartUpdate).ok();
-                    }
-                }
-            }
-            Action::StartUpdate => {
-                let version = self.state.update_available.clone().unwrap_or_default();
-                self.state.updater_progress = Some(0.0);
-                self.state.updater_status = Some("Starting update...".to_string());
-                let update_sender = self.action_sender.clone();
-                
-                tokio::task::spawn_blocking(move || {
-                    let os = std::env::consts::OS;
-                    let asset_name = match os {
-                        "macos" => "MovieBox_macOS_Universal.tar.gz",
-                        "windows" => "MovieBox_Windows_x64.zip",
-                        "linux" => "MovieBox_Linux_x64.tar.gz",
-                        _ => return update_sender.send(Action::UpdateFailure("Unsupported OS".into())).unwrap_or(()),
-                    };
-                    
-                    let download_url = format!("https://github.com/mesamirh/MovieBox-Tui/releases/download/v{}/{}", version, asset_name);
-                    
-                    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-                    let tmp_dir = std::env::temp_dir().join(format!("moviebox-update-{}", ts));
-                    let _ = std::fs::create_dir_all(&tmp_dir);
-                    
-                    let archive_path = tmp_dir.join(asset_name);
-                    if let Ok(mut archive_file) = std::fs::File::create(&archive_path) {
-                        if self_update::Download::from_url(&download_url).show_progress(false).download_to(&mut archive_file).is_ok() {
-                            let bin_name = if os == "windows" { "MovieBox.exe" } else { "moviebox" };
-                            let archive_kind = if os == "windows" {
-                                self_update::ArchiveKind::Zip
-                            } else {
-                                self_update::ArchiveKind::Tar(Some(self_update::Compression::Gz))
-                            };
-                            
-                            if self_update::Extract::from_source(&archive_path)
-                                .archive(archive_kind)
-                                .extract_file(&tmp_dir, bin_name)
-                                .is_ok() {
-                                    
-                                if let Ok(current_exe) = std::env::current_exe() {
-                                    let tmp_old = current_exe.with_extension("old");
-                                    let _ = std::fs::rename(&current_exe, &tmp_old);
-                                    if std::fs::rename(&tmp_dir.join(bin_name), &current_exe).is_ok() {
-                                        let _ = std::fs::remove_dir_all(&tmp_dir);
-                                        update_sender.send(Action::UpdateSuccess).ok();
-                                        return;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    let _ = std::fs::remove_dir_all(&tmp_dir);
-                    update_sender.send(Action::UpdateFailure("Failed".into())).ok();
-                });
-
-                let progress_sender = self.action_sender.clone();
-                tokio::spawn(async move {
-                    let mut p = 0.0;
-                    loop {
-                        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                        p += 0.01;
-                        if p > 0.98 {
-                            p = 0.98;
-                        }
-                        progress_sender.send(Action::UpdateProgress(p)).ok();
-                    }
-                });
-            }
-            Action::UpdateProgress(p) => {
-                if !self.state.updater_done {
-                    self.state.updater_progress = Some(p);
-                }
-            }
-            Action::UpdateSuccess => {
-                self.state.updater_done = true;
-                self.state.updater_progress = Some(1.0);
-
-                let exe = std::env::current_exe().unwrap();
-                let _ = std::process::Command::new(exe).spawn();
-                return Some(());
-            }
-            Action::UpdateFailure(_err) => {
-                self.state.active_screen = Screen::Home;
+                self.state.update_available = Some(version);
             }
         }
         None
@@ -3419,58 +2526,47 @@ impl App {
             return;
         }
 
-        let mut main_area = frame.area();
-        let mut download_area = None;
-
-        if self.state.download_progress.is_some() {
-            use ratatui::layout::{Constraint, Direction, Layout};
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(3)])
-                .split(main_area);
-            
-            main_area = chunks[0];
-            download_area = Some(chunks[1]);
-        }
-
         match self.state.active_screen {
-            Screen::Startup => {
-                super::screens::startup::draw(frame, main_area, &mut self.state, &self.theme);
-            }
             Screen::Home => {
-                super::screens::home::draw(frame, main_area, &mut self.state, &self.theme);
+                super::screens::home::draw(frame, area, &mut self.state, &self.theme);
             }
             Screen::Details => {
-                super::screens::details::draw(frame, main_area, &mut self.state, &self.theme);
+                super::screens::details::draw(frame, area, &mut self.state, &self.theme);
             }
         }
 
         if self.state.show_help {
-            super::screens::help::draw(frame, main_area, &self.state, &self.theme);
+            super::screens::help::draw(frame, area, &self.state, &self.theme);
         }
 
         if let Some(prog) = self.state.download_progress {
-            if let Some(dl_area) = download_area {
-                use ratatui::widgets::{Block, Borders, Gauge, Clear};
+            use ratatui::layout::{Constraint, Direction, Layout};
+            use ratatui::style::{Color, Modifier, Style};
+            use ratatui::widgets::{Block, Borders, Gauge};
 
-                let status = self
-                    .state
-                    .download_status
-                    .as_deref()
-                    .unwrap_or("Downloading...");
-                
-                let gauge = Gauge::default()
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .title(format!(" Download: {} [X] Cancel ", status)),
-                    )
-                    .gauge_style(self.theme.accent)
-                    .ratio((prog / 100.0).clamp(0.0, 1.0));
-                
-                frame.render_widget(Clear, dl_area);
-                frame.render_widget(gauge, dl_area);
-            }
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(3)])
+                .split(area);
+
+            let status = self
+                .state
+                .download_status
+                .as_deref()
+                .unwrap_or("Downloading...");
+            let gauge = Gauge::default()
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(format!(" Download: {} [X] Cancel ", status)),
+                )
+                .gauge_style(
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .ratio((prog / 100.0).clamp(0.0, 1.0));
+            frame.render_widget(gauge, chunks[1]);
         }
 
         if let Some(msg) = &self.state.toast_message {

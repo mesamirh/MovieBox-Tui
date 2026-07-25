@@ -16,11 +16,6 @@ pub struct Theme {
     pub rating: Style,
     pub accent: Style,
     pub muted: Style,
-    pub teal: Style,
-    pub lavender: Style,
-    pub sapphire: Style,
-    pub subtext1: Style,
-    pub base: Color,
 }
 
 impl Default for Theme {
@@ -43,74 +38,11 @@ impl Default for Theme {
             success: Style::default().fg(Color::Rgb(166, 227, 161)),
             shortcut: Style::default().fg(Color::Rgb(250, 179, 135)),
             overlay: Style::default().fg(Color::Rgb(108, 112, 134)),
-            rating: Style::default().fg(Color::Rgb(249, 226, 175)),
+            rating: Style::default().fg(Color::Rgb(249, 226, 175)), // Yellow
             accent: Style::default()
                 .fg(Color::Rgb(137, 220, 235))
-                .add_modifier(Modifier::BOLD),
-            muted: Style::default().fg(Color::Rgb(88, 91, 112)),
-            teal: Style::default().fg(Color::Rgb(148, 226, 213)),
-            lavender: Style::default().fg(Color::Rgb(180, 190, 254)),
-            sapphire: Style::default().fg(Color::Rgb(116, 199, 236)),
-            subtext1: Style::default().fg(Color::Rgb(186, 194, 222)),
-            base: Color::Rgb(30, 30, 46),
-        }
-    }
-}
-
-impl Theme {
-    pub fn new() -> Self {
-        let colorterm = std::env::var("COLORTERM")
-            .unwrap_or_default()
-            .to_lowercase();
-        let term = std::env::var("TERM").unwrap_or_default().to_lowercase();
-
-        let wt_truecolor = std::env::var("WT_SESSION").is_ok();
-        let truecolor = wt_truecolor
-            || colorterm == "truecolor"
-            || colorterm == "24bit"
-            || term.contains("truecolor");
-
-        if !truecolor
-            && (term.contains("apple")
-                || term == "dumb"
-                || term == "linux"
-                || std::env::var("TERM_PROGRAM").unwrap_or_default() == "Apple_Terminal")
-        {
-            Self::fallback()
-        } else {
-            Self::default()
-        }
-    }
-
-    pub fn fallback() -> Self {
-        Self {
-            border: Style::default().fg(Color::DarkGray),
-            border_focus: Style::default().fg(Color::Blue),
-            text: Style::default().fg(Color::White),
-            text_dim: Style::default().fg(Color::Gray),
-            title: Style::default()
-                .fg(Color::Magenta)
-                .add_modifier(Modifier::BOLD),
-            highlight: Style::default()
-                .fg(Color::Blue)
-                .add_modifier(Modifier::BOLD),
-            header: Style::default()
-                .fg(Color::Magenta)
-                .add_modifier(Modifier::BOLD),
-            error: Style::default().fg(Color::Red),
-            success: Style::default().fg(Color::Green),
-            shortcut: Style::default().fg(Color::Yellow),
-            overlay: Style::default().fg(Color::DarkGray),
-            rating: Style::default().fg(Color::Yellow),
-            accent: Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-            muted: Style::default().fg(Color::DarkGray),
-            teal: Style::default().fg(Color::Cyan),
-            lavender: Style::default().fg(Color::Blue),
-            sapphire: Style::default().fg(Color::Cyan),
-            subtext1: Style::default().fg(Color::White),
-            base: Color::Black,
+                .add_modifier(Modifier::BOLD), // Sky
+            muted: Style::default().fg(Color::Rgb(88, 91, 112)),    // Surface 1
         }
     }
 }

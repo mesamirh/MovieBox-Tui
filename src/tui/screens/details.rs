@@ -24,13 +24,8 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     let details_json = match &state.selected_details {
         Some(d) => d,
         None => {
-            let spinner = if state.basic_terminal {
-                let frames = ['-', '\\', '|', '/'];
-                frames[(state.tick_count as usize) % frames.len()]
-            } else {
-                let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-                frames[(state.tick_count as usize) % frames.len()]
-            };
+            let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
 
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -120,28 +115,20 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let details_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(if state.basic_terminal {
-            ratatui::widgets::BorderType::Plain
-        } else {
-            ratatui::widgets::BorderType::Rounded
-        })
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(theme.border)
         .padding(ratatui::widgets::Padding::new(2, 2, 1, 1));
 
     let inner_area = details_block.inner(chunks[0]);
     frame.render_widget(details_block.clone(), chunks[0]);
 
-    let poster_width = if state.image_supported {
-        (inner_area.height as f32 * 1.33).ceil() as u16
-    } else {
-        0
-    };
+    let poster_width = (inner_area.height as f32 * 1.33).ceil() as u16;
 
     let h_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Length(poster_width),
-            Constraint::Length(if state.image_supported { 4 } else { 0 }),
+            Constraint::Length(4),
             Constraint::Min(1),
         ])
         .split(inner_area);
@@ -165,11 +152,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             }
         }
         if let Some((_, proto)) = &state.poster_protocol {
-            if !state.show_help {
-                frame.render_widget(ratatui_image::Image::new(proto), poster_area);
-            }
+            frame.render_widget(ratatui_image::Image::new(proto), poster_area);
         }
-    } else if state.image_supported {
+    } else {
         let current_spinner = if state.basic_terminal {
             let frames = ['-', '\\', '|', '/'];
             frames[(state.tick_count as usize) % frames.len()]
@@ -316,17 +301,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(if state.basic_terminal {
-                        ratatui::widgets::BorderType::Plain
-                    } else {
-                        ratatui::widgets::BorderType::Rounded
-                    })
+                    .border_type(ratatui::widgets::BorderType::Rounded)
                     .title(" Audio ")
                     .border_style(lang_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
+            .highlight_symbol("▌ ");
 
         if let Some(area) = lang_area {
             frame.render_stateful_widget(lang_list, area, &mut state.language_list_state);
@@ -353,29 +334,25 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(if state.basic_terminal {
-                        ratatui::widgets::BorderType::Plain
-                    } else {
-                        ratatui::widgets::BorderType::Rounded
-                    })
+                    .border_type(ratatui::widgets::BorderType::Rounded)
                     .title(" Seasons ")
                     .border_style(seasons_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
+            .highlight_symbol("▌ ");
 
         if let Some(area) = seasons_area {
             frame.render_stateful_widget(seasons_list, area, &mut state.season_list_state);
         }
 
-        let ep_items: Vec<ListItem> = if let Some(ep_numbers) = state
-            .available_episode_numbers
+        let ep_items: Vec<ListItem> = if let Some(season) = state
+            .available_seasons
             .get(state.season_list_state.selected().unwrap_or(0))
         {
-            ep_numbers
-                .iter()
-                .map(|&ep| ListItem::new(format!("Episode {}", ep)).style(theme.text))
+            let max_ep = season.get("maxEp").and_then(|m| m.as_i64()).unwrap_or(1);
+            (1..=max_ep)
+                .map(|ep| ListItem::new(format!("Episode {}", ep)).style(theme.text))
                 .collect()
         } else {
             vec![]
@@ -390,17 +367,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_type(if state.basic_terminal {
-                        ratatui::widgets::BorderType::Plain
-                    } else {
-                        ratatui::widgets::BorderType::Rounded
-                    })
+                    .border_type(ratatui::widgets::BorderType::Rounded)
                     .title(" Episodes ")
                     .border_style(eps_border)
                     .padding(ratatui::widgets::Padding::horizontal(1)),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
+            .highlight_symbol("▌ ");
 
         if let Some(area) = eps_area {
             frame.render_stateful_widget(eps_list, area, &mut state.episode_list_state);
@@ -428,11 +401,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
     let streams_block = Block::default()
         .borders(Borders::ALL)
-        .border_type(if state.basic_terminal {
-            ratatui::widgets::BorderType::Plain
-        } else {
-            ratatui::widgets::BorderType::Rounded
-        })
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .title(ratatui::text::Line::from(streams_title).alignment(Alignment::Left))
         .title_style(theme.title)
         .border_style(streams_border)
@@ -459,25 +428,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             .get("codecName")
                             .and_then(|c| c.as_str())
                             .unwrap_or("None");
-                        let upload_by = file
+                        let _upload_by = file
                             .get("uploadBy")
                             .and_then(|u| u.as_str())
-                            .unwrap_or("Unknown");
+                            .unwrap_or("None");
                         let size_str = file.get("size").and_then(|s| s.as_str()).unwrap_or("0");
-                        
-                        let duration = file.get("duration").and_then(|d| d.as_u64()).unwrap_or(0);
-                        let duration_str = if duration > 0 {
-                            let hours = duration / 3600;
-                            let mins = (duration % 3600) / 60;
-                            let secs = duration % 60;
-                            if hours > 0 {
-                                format!("{:02}:{:02}:{:02}", hours, mins, secs)
-                            } else {
-                                format!("{:02}:{:02}", mins, secs)
-                            }
-                        } else {
-                            "--:--".to_string()
-                        };
 
                         let size_formatted = if let Ok(bytes) = size_str.parse::<f64>() {
                             let mb = bytes / 1024.0 / 1024.0;
@@ -491,11 +446,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                         };
 
                         let is_selected = Some(i) == selected_idx;
-                        let pointer = if is_selected {
-                            if state.basic_terminal { "> " } else { "▌ " }
-                        } else {
-                            "  "
-                        };
+                        let pointer = if is_selected { "▌ " } else { "  " };
 
                         let stream_style = if is_selected {
                             theme.highlight
@@ -506,7 +457,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                         let stream_line = ratatui::text::Line::from(vec![
                             ratatui::text::Span::styled(pointer, theme.accent),
                             ratatui::text::Span::styled(
-                                format!("{:<7} | {:<5} | {} | By: {}", size_formatted, codec.to_uppercase(), duration_str, upload_by),
+                                format!("{:<7} {:<6} ", size_formatted, codec),
                                 stream_style,
                             ),
                         ]);
@@ -583,45 +534,34 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .and_then(|d| d.as_array())
                 .is_some_and(|a| a.len() > 1);
 
-            let is_busy = state.is_loading || state.is_fetching_streams;
-
-            let msg = if is_busy {
-                let spinner = if state.basic_terminal {
-                    let frames = ['-', '\\', '|', '/'];
-                    frames[(state.tick_count as usize) % frames.len()]
-                } else {
-                    let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-                    frames[(state.tick_count as usize) % frames.len()]
-                };
+            let msg = if state.is_loading {
+                let spinner_frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+                let spinner = spinner_frames[(state.tick_count as usize) % spinner_frames.len()];
                 format!("{} Loading streams...", spinner)
             } else if has_multiple_dubs && !state.language_chosen {
                 "Please select a language dubbing from the Audio panel to view streams.".to_string()
-            } else if state.status_message.to_lowercase().contains("no streams")
+            } else if state.status_message.to_lowercase().contains("failed")
                 || state.status_message.to_lowercase().contains("error")
             {
                 state.status_message.clone()
             } else {
-                String::new()
+                "Failed to load streams.".to_string()
             };
 
-            let style = if is_busy || (has_multiple_dubs && !state.language_chosen) {
+            let style = if state.is_loading || (has_multiple_dubs && !state.language_chosen) {
                 theme.text_dim
             } else {
                 theme.error
             };
 
-            if !msg.is_empty() {
-                let inner = streams_block.inner(streams_area);
-                let pad = "\n".repeat((inner.height.saturating_sub(1) / 2) as usize);
-                let p = Paragraph::new(format!("{}{}", pad, msg))
-                    .style(style)
-                    .alignment(Alignment::Center)
-                    .wrap(Wrap { trim: true })
-                    .block(streams_block.clone());
-                frame.render_widget(p, streams_area);
-            } else {
-                frame.render_widget(streams_block.clone(), streams_area);
-            }
+            let inner = streams_block.inner(streams_area);
+            let pad = "\n".repeat((inner.height.saturating_sub(1) / 2) as usize);
+            let p = Paragraph::new(format!("{}{}", pad, msg))
+                .style(style)
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true })
+                .block(streams_block.clone());
+            frame.render_widget(p, streams_area);
         }
     }
     if !state.selected_resources.is_some() {
@@ -653,15 +593,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .title(" Select Subtitle ")
                     .title_style(theme.title)
                     .borders(ratatui::widgets::Borders::ALL)
-                    .border_type(if state.basic_terminal {
-                        ratatui::widgets::BorderType::Plain
-                    } else {
-                        ratatui::widgets::BorderType::Rounded
-                    })
+                    .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
+            .highlight_symbol("▌ ");
 
         frame.render_stateful_widget(list, popup_area, &mut state.subtitle_list_state);
     }
@@ -699,21 +635,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .title(" Open With ")
                     .title_style(theme.title)
                     .borders(ratatui::widgets::Borders::ALL)
-                    .border_type(if state.basic_terminal {
-                        ratatui::widgets::BorderType::Plain
-                    } else {
-                        ratatui::widgets::BorderType::Rounded
-                    })
+                    .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(theme.border),
             )
             .highlight_style(theme.highlight)
-            .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
+            .highlight_symbol("▌ ");
 
         frame.render_stateful_widget(list, popup_area, &mut state.player_picker_state);
     }
 
     let footer_text =
-        "Enter Play      o Open With...      D Download      r Refresh      Esc Back";
+        "Enter Play      o Open With...      D Download      C Copy Link      Esc Back";
     let footer_p = Paragraph::new(footer_text)
         .alignment(Alignment::Center)
         .style(theme.muted);
