@@ -150,6 +150,22 @@ pub struct AppState {
     pub tv_wizard_options: Vec<String>,
     pub tv_wizard_selected_idx: usize,
     pub tv_wizard_selections: std::collections::HashSet<String>,
+    pub tv_wizard_filter: String,
+}
+
+impl AppState {
+    pub fn filtered_tv_wizard_options(&self) -> Vec<String> {
+        if self.tv_wizard_filter.is_empty() {
+            self.tv_wizard_options.clone()
+        } else {
+            let query = self.tv_wizard_filter.to_lowercase();
+            self.tv_wizard_options
+                .iter()
+                .filter(|opt| opt.to_lowercase().contains(&query))
+                .cloned()
+                .collect()
+        }
+    }
 }
 
 impl Default for AppState {
@@ -278,6 +294,7 @@ impl Default for AppState {
             ],
             tv_wizard_selected_idx: 0,
             tv_wizard_selections: std::collections::HashSet::new(),
+            tv_wizard_filter: String::new(),
         }
     }
 }
