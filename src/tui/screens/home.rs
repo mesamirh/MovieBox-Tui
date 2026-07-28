@@ -666,16 +666,24 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         }
     }
     if state.tv_config_popup {
-        let content_height = state.tv_wizard_options.len() as u16;
-        let max_height = area.height.saturating_sub(17).max(6);
-        let popup_height = (content_height + 4).clamp(6, max_height);
+        let filtered_options = state.filtered_tv_wizard_options();
+        let content_height = if state.tv_wizard_step == 1 {
+            (filtered_options.len() as u16 + 2).max(6)
+        } else {
+            state.tv_wizard_options.len() as u16
+        };
+        let max_height = area.height.saturating_sub(8).max(8);
+        let popup_height = (content_height + 4).clamp(8, max_height);
 
         let popup_area = ratatui::layout::Rect {
-            x: area.width.saturating_sub(44) / 2,
-            y: 13.min(area.height.saturating_sub(popup_height)),
-            width: 44,
+            x: area.width.saturating_sub(48) / 2,
+            y: (area.height.saturating_sub(popup_height)) / 2 + 2,
+            width: 48,
             height: popup_height,
         };
+
+        frame.render_widget(ratatui::widgets::Clear, popup_area);
+
         let popup_block = ratatui::widgets::Block::default()
             .title(if state.tv_wizard_step == 0 {
                 " TV Setup: Select Grouping "
@@ -691,8 +699,36 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         let inner_area = popup_block.inner(popup_area);
         frame.render_widget(popup_block, popup_area);
 
-        let items: Vec<ratatui::widgets::ListItem> = state
-            .tv_wizard_options
+        let (search_area, list_area, hint_area) = if state.tv_wizard_step == 1 {
+            let chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .constraints([
+                    ratatui::layout::Constraint::Length(1),
+                    ratatui::layout::Constraint::Min(1),
+                    ratatui::layout::Constraint::Length(1),
+                ])
+                .split(inner_area);
+            (Some(chunks[0]), chunks[1], chunks[2])
+        } else {
+            let chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .constraints([
+                    ratatui::layout::Constraint::Min(1),
+                    ratatui::layout::Constraint::Length(1),
+                ])
+                .split(inner_area);
+            (None, chunks[0], chunks[1])
+        };
+
+        if let Some(s_area) = search_area {
+            let search_line = ratatui::text::Line::from(vec![
+                ratatui::text::Span::styled(" Search: ", theme.highlight),
+                ratatui::text::Span::styled(format!("{}█", state.tv_wizard_filter), theme.text),
+            ]);
+            frame.render_widget(ratatui::widgets::Paragraph::new(search_line), s_area);
+        }
+
+        let items: Vec<ratatui::widgets::ListItem> = filtered_options
             .iter()
             .map(|opt| {
                 let is_checked = state.tv_wizard_selections.contains(opt);
@@ -715,9 +751,6 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             .highlight_style(theme.highlight.add_modifier(ratatui::style::Modifier::BOLD))
             .highlight_symbol(if state.basic_terminal { "> " } else { "▌ " });
 
-        let mut list_area = inner_area;
-        list_area.height = list_area.height.saturating_sub(1);
-
         let mut list_state = ratatui::widgets::ListState::default();
         list_state.select(Some(state.tv_wizard_selected_idx));
 
@@ -731,8 +764,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 .thumb_symbol("█");
 
         let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(
-            state
-                .tv_wizard_options
+            filtered_options
                 .len()
                 .saturating_sub(list_area.height as usize),
         )
@@ -747,16 +779,10 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             &mut scrollbar_state,
         );
 
-        let hint_area = ratatui::layout::Rect {
-            x: inner_area.x,
-            y: inner_area.y + inner_area.height.saturating_sub(1),
-            width: inner_area.width,
-            height: 1,
-        };
         let hint = if state.tv_wizard_step == 0 {
             " [Enter] Select   [Esc] Cancel "
         } else {
-            " [Space] Toggle   [Enter] Confirm   [Esc] Back "
+            " [Type] Filter   [Space] Toggle   [Enter] Confirm   [Esc] Back "
         };
         frame.render_widget(
             ratatui::widgets::Paragraph::new(hint)

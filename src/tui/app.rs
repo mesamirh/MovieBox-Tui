@@ -594,11 +594,16 @@ impl App {
                         Screen::Startup => {}
                         Screen::Home => {
                             if self.state.tv_config_popup {
+                                let filtered_opts = self.state.filtered_tv_wizard_options();
                                 match key.code {
                                     KeyCode::Esc => {
-                                        if self.state.tv_wizard_step == 1 {
+                                        if !self.state.tv_wizard_filter.is_empty() {
+                                            self.state.tv_wizard_filter.clear();
+                                            self.state.tv_wizard_selected_idx = 0;
+                                        } else if self.state.tv_wizard_step == 1 {
                                             self.state.tv_wizard_step = 0;
                                             self.state.tv_wizard_selected_idx = 0;
+                                            self.state.tv_wizard_filter.clear();
                                             self.state.tv_wizard_options = vec![
                                                 "Grouped by category".to_string(),
                                                 "Grouped by language".to_string(),
@@ -606,33 +611,36 @@ impl App {
                                             ];
                                         } else {
                                             self.state.tv_config_popup = false;
+                                            self.state.tv_wizard_filter.clear();
                                         }
                                     }
                                     KeyCode::Up => {
-                                        if self.state.tv_wizard_selected_idx > 0 {
-                                            self.state.tv_wizard_selected_idx -= 1;
-                                        } else {
-                                            self.state.tv_wizard_selected_idx = self
-                                                .state
-                                                .tv_wizard_options
-                                                .len()
-                                                .saturating_sub(1);
+                                        let len = filtered_opts.len();
+                                        if len > 0 {
+                                            if self.state.tv_wizard_selected_idx > 0 {
+                                                self.state.tv_wizard_selected_idx -= 1;
+                                            } else {
+                                                self.state.tv_wizard_selected_idx = len - 1;
+                                            }
                                         }
                                     }
                                     KeyCode::Down => {
-                                        if self.state.tv_wizard_selected_idx
-                                            < self.state.tv_wizard_options.len().saturating_sub(1)
-                                        {
-                                            self.state.tv_wizard_selected_idx += 1;
-                                        } else {
-                                            self.state.tv_wizard_selected_idx = 0;
+                                        let len = filtered_opts.len();
+                                        if len > 0 {
+                                            if self.state.tv_wizard_selected_idx < len.saturating_sub(1) {
+                                                self.state.tv_wizard_selected_idx += 1;
+                                            } else {
+                                                self.state.tv_wizard_selected_idx = 0;
+                                            }
                                         }
                                     }
-                                    KeyCode::Char(' ') => {
-                                        if self.state.tv_wizard_step == 1 {
-                                            if let Some(opt) = self
-                                                .state
-                                                .tv_wizard_options
+                                    KeyCode::Backspace if self.state.tv_wizard_step == 1 => {
+                                        self.state.tv_wizard_filter.pop();
+                                        self.state.tv_wizard_selected_idx = 0;
+                                    }
+                                    KeyCode::Char(c) if self.state.tv_wizard_step == 1 => {
+                                        if c == ' ' {
+                                            if let Some(opt) = filtered_opts
                                                 .get(self.state.tv_wizard_selected_idx)
                                                 .cloned()
                                             {
@@ -642,6 +650,9 @@ impl App {
                                                     self.state.tv_wizard_selections.insert(opt);
                                                 }
                                             }
+                                        } else {
+                                            self.state.tv_wizard_filter.push(c);
+                                            self.state.tv_wizard_selected_idx = 0;
                                         }
                                     }
                                     KeyCode::Enter => {
@@ -654,6 +665,7 @@ impl App {
                                             {
                                                 self.state.tv_wizard_step = 1;
                                                 self.state.tv_wizard_selected_idx = 0;
+                                                self.state.tv_wizard_filter.clear();
                                                 if selected_group == "Grouped by category" {
                                                     self.state.tv_wizard_options =
                                                         crate::tui::iptv_data::CATEGORIES
@@ -676,6 +688,7 @@ impl App {
                                             }
                                         } else {
                                             self.state.tv_config_popup = false;
+                                            self.state.tv_wizard_filter.clear();
 
                                             self.state.is_loading = true;
                                             self.state.status_message =
