@@ -1,0 +1,53 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  update-homebrew:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Release Data
+        id: release
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(curl -sI "https://github.com/${{ github.repository }}/releases/latest" | grep -i '^location:' | awk -F '/' '{print $NF}' | tr -d '\r')
+          fi
+          CLEAN_VERSION="${VERSION#v}"
+          echo "version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+          
+          ASSET_URL="https://github.com/${{ github.repository }}/releases/download/$VERSION/MovieBox_macOS_Universal.tar.gz"
+          echo "Downloading $ASSET_URL"
+          curl -sL "$ASSET_URL" -o macos_binary.tar.gz
+          
+          SHA256=$(sha256sum macos_binary.tar.gz | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Update Formula
+        run: |
+          FORMULA_FILE="Formula/moviebox-tui.rb"
+          VERSION="${{ steps.release.outputs.version }}"
+          TAG="${{ steps.release.outputs.tag }}"
+          SHA256="${{ steps.release.outputs.sha256 }}"
+          
+          sed -i "s/version \".*\"/version \"$VERSION\"/" "$FORMULA_FILE"
+          sed -i "s|url \".*\"|url \"https://github.com/${{ github.repository }}/releases/download/$TAG/MovieBox_macOS_Universal.tar.gz\"|" "$FORMULA_FILE"
+          sed -i "s/sha256 \".*\"/sha256 \"$SHA256\"/" "$FORMULA_FILE"
+
+      - name: Commit and Push Changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(homebrew): update formula to ${{ github.event.release.tag_name }}"
+          file_pattern: "Formula/moviebox-tui.rb"
+          branch: main
