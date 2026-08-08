@@ -11,6 +11,15 @@ use crate::tui::{
 use crate::v3::client::MovieBoxClient;
 use update_informer::Check;
 
+const DOWNLOAD_DIR_COMMAND: &str = "/download-dir";
+
+fn download_dir_arg(query: &str) -> Option<&str> {
+    query
+        .strip_prefix(DOWNLOAD_DIR_COMMAND)
+        .filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+        .map(str::trim)
+}
+
 pub struct App {
     state: AppState,
     theme: Theme,
@@ -148,7 +157,9 @@ impl App {
                 let current_query = self.state.search_query.trim().to_string();
                 if current_query != self.state.last_suggest_query && self.state.last_search_edit.elapsed() >= std::time::Duration::from_millis(250) {
                     self.state.last_suggest_query = current_query.clone();
-                    if !current_query.is_empty() {
+                    if DOWNLOAD_DIR_COMMAND.starts_with(&current_query) {
+                        self.state.search_suggestions = vec![format!("{} ", DOWNLOAD_DIR_COMMAND)];
+                    } else if !current_query.starts_with('/') && !current_query.is_empty() {
                         self.action_sender.send(Action::Suggest(current_query)).ok();
                     } else {
                         self.state.search_suggestions.clear();
@@ -195,7 +206,23 @@ impl App {
                         }
                         KeyCode::Enter => {
                             let query = self.state.search_query.trim().to_string();
-                            if !query.is_empty() {
+                            if let Some(path) = download_dir_arg(&query) {
+                                self.state.input_mode = InputMode::Normal;
+                                self.state.search_query.clear();
+                                self.state.search_suggestions.clear();
+                                if path.is_empty() {
+                                    self.state.status_message =
+                                        format!("Usage: {} <path>", DOWNLOAD_DIR_COMMAND);
+                                } else if std::path::Path::new(path).is_dir() {
+                                    self.state.download_dir = std::path::PathBuf::from(path);
+                                    self.state.status_message =
+                                        format!("Download directory: {}", path);
+                                } else {
+                                    self.state.status_message =
+                                        format!("Download directory does not exist: {}", path);
+                                }
+                                self.state.status_timer = 150;
+                            } else if !query.is_empty() {
                                 self.state.input_mode = InputMode::Normal;
                                 self.action_sender.send(Action::Search(query)).ok();
                             }
@@ -1039,9 +1066,7 @@ impl App {
                         ext
                     );
 
-                    let filepath = dirs::download_dir()
-                        .unwrap_or_else(|| std::path::PathBuf::from("."))
-                        .join(&filename);
+                    let filepath = self.state.download_dir.join(&filename);
 
                     if let Some(link) = link_opt {
                         self.state.toast_message =
@@ -1720,5 +1745,19 @@ impl App {
                 .style(Style::default().fg(Color::Green));
             frame.render_widget(p, toast_area);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::download_dir_arg;
+
+    #[test]
+    fn parses_download_directory_command() {
+        assert_eq!(
+            download_dir_arg("/download-dir /tmp/My Downloads"),
+            Some("/tmp/My Downloads")
+        );
+        assert_eq!(download_dir_arg("/download-directory /tmp"), None);
     }
 }

@@ -77,6 +77,7 @@ pub struct AppState {
 
     pub download_progress: Option<f64>,
     pub download_status: Option<String>,
+    pub download_dir: std::path::PathBuf,
     pub cancel_download: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     pub language_chosen: bool,
@@ -133,6 +134,7 @@ impl Default for AppState {
             update_available: None,
             download_progress: None,
             download_status: None,
+            download_dir: dirs::download_dir().unwrap_or_else(|| std::path::PathBuf::from(".")),
             cancel_download: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             language_chosen: false,
 

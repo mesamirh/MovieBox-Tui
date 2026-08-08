@@ -19,6 +19,7 @@ moviebox-tui
 ```
 
 - **Search**: Press `/` to search for movies or shows.
+- **Download directory**: Enter `/download-dir <path>` in the search box to change it for the current session.
 - **Play**: Select a result and press `Enter` to stream instantly.
 - **Logs**: Press `Ctrl+L` to view internal network logs.
 - **Quit**: Press `q` or `Esc` to exit.
