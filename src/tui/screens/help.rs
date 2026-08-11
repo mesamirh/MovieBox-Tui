@@ -120,6 +120,18 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
                 theme.header.add_modifier(ratatui::style::Modifier::BOLD),
             )]),
             Line::from(vec![
+                Span::styled("    [Alt+b]    ", theme.header),
+                Span::styled("Open Browse Menu", theme.text),
+            ]),
+            Line::from(vec![
+                Span::styled("    [s]        ", theme.header),
+                Span::styled("Toggle Sort Order (in Browse)", theme.text),
+            ]),
+            Line::from(vec![
+                Span::styled("    /browse    ", theme.header),
+                Span::styled("Trending / Top Rated / Popular", theme.text),
+            ]),
+            Line::from(vec![
                 Span::styled("    /home      ", theme.header),
                 Span::styled("Trending & Featured", theme.text),
             ]),

@@ -24,6 +24,7 @@ impl App {
                         commands.push("/config");
                     } else {
                         commands.extend(vec![
+                            "/browse",
                             "/discover",
                             "/home",
                             "/history",
@@ -68,6 +69,253 @@ impl App {
                         sender.send(Action::SuggestSuccess(query_clone, res)).ok();
                     }
                 });
+            }
+
+            Action::ToggleBrowseMenu => {
+                if self.state.is_tv_mode {
+                    return None;
+                }
+                self.state.browse_menu_open = !self.state.browse_menu_open;
+                if self.state.browse_menu_open {
+                    if let Some(view) = self.state.browse_view {
+                        if let Some(idx) = crate::providers::browse::BrowseView::ALL
+                            .iter()
+                            .position(|v| *v == view)
+                        {
+                            self.state.browse_list_state.select(Some(idx));
+                        }
+                    } else {
+                        self.state.browse_list_state.select(Some(0));
+                    }
+                }
+            }
+
+            Action::SelectBrowseView(view) => {
+                self.state.browse_menu_open = false;
+                self.state.browse_view = Some(view);
+                self.state.is_homepage_mode = false;
+                self.state.current_page = 1;
+                self.state.active_screen = Screen::Home;
+                self.state.selected_details = None;
+                self.state.selected_resources = None;
+                self.state.is_loading = true;
+                self.state.search_error = None;
+                self.state.search_results.clear();
+                self.state.search_list_state.select(Some(0));
+                self.state.search_suggestions.clear();
+                self.state.suggest_index = None;
+                self.state.search_preview = None;
+                self.state.preview_loading = false;
+                self.state.search_query.clear();
+                self.state
+                    .set_status(format!("Loading {}...", view.label()), 150);
+                let sort = self.state.browse_sort;
+                self.action_sender
+                    .send(Action::FetchBrowse { view, sort })
+                    .ok();
+            }
+
+            Action::ToggleBrowseSort => {
+                let view = self.state.browse_view?;
+                self.state.browse_sort = self.state.browse_sort.toggle();
+                let sort = self.state.browse_sort;
+                self.state.is_loading = true;
+                self.state.search_error = None;
+                self.state.search_results.clear();
+                self.state.search_list_state.select(Some(0));
+                self.state
+                    .set_status(format!("Sorting {}...", view.label()), 150);
+                self.action_sender
+                    .send(Action::FetchBrowse { view, sort })
+                    .ok();
+            }
+
+            Action::FetchBrowse { view, sort } => {
+                if self.state.is_tv_mode || self.state.active_provider != ProviderKind::MovieBox {
+                    self.state.is_loading = false;
+                    self.state.browse_view = None;
+                    self.state.browse_menu_open = false;
+                    self.state.set_status(
+                        "Browse is available on the MovieBox provider.".to_string(),
+                        180,
+                    );
+                    return None;
+                }
+                self.state.active_browse_request = self.state.active_browse_request.wrapping_add(1);
+                let request_id = self.state.active_browse_request;
+                let client = self.client.clone();
+                let sender = self.action_sender.clone();
+                tokio::spawn(async move {
+                    match crate::providers::browse::fetch_browse_feed(&client, view, sort).await {
+                        Ok(subjects) => {
+                            sender
+                                .send(Action::BrowseSuccess {
+                                    view,
+                                    request_id,
+                                    payload: serde_json::Value::Array(subjects),
+                                })
+                                .ok();
+                        }
+                        Err(error) => {
+                            sender.send(Action::BrowseFailure(error)).ok();
+                        }
+                    }
+                });
+            }
+
+            Action::BrowseSuccess {
+                view,
+                request_id,
+                payload,
+            } => {
+                if self.state.browse_view != Some(view)
+                    || request_id != self.state.active_browse_request
+                    || self.state.is_tv_mode
+                {
+                    return None;
+                }
+                self.state.is_loading = false;
+                self.state.search_error = None;
+                self.state.search_results.clear();
+
+                if let Some(subjects) = payload.as_array() {
+                    for item in subjects {
+                        let id = item
+                            .get("subjectId")
+                            .and_then(|si| si.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        if id.is_empty() {
+                            continue;
+                        }
+                        let raw_title = item
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("Unknown")
+                            .to_string();
+                        let clean_title =
+                            crate::providers::moviebox::clean_moviebox_title(&raw_title);
+                        let stype = item
+                            .get("subjectType")
+                            .and_then(|st| st.as_i64())
+                            .unwrap_or(0);
+                        let release_year = item
+                            .get("releaseDate")
+                            .and_then(|rd| rd.as_str())
+                            .unwrap_or("")
+                            .split('-')
+                            .next()
+                            .unwrap_or("")
+                            .to_string();
+                        let cover_url = item
+                            .get("cover")
+                            .and_then(|c| c.get("url"))
+                            .and_then(|u| u.as_str())
+                            .map(|s| s.to_string());
+                        let season =
+                            item.get("season").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
+                        let imdb_rating = crate::providers::browse::subject_rating_text(item);
+
+                        let raw_lower = raw_title.to_lowercase();
+                        let is_dub = raw_lower.contains("[hindi]")
+                            || raw_lower.contains("[tamil]")
+                            || raw_lower.contains("[telugu]")
+                            || raw_lower.contains("[english]");
+                        if is_dub
+                            && self
+                                .state
+                                .search_results
+                                .iter()
+                                .any(|r| r.title == clean_title && r.stype == stype)
+                        {
+                            continue;
+                        }
+                        if self.state.search_results.iter().any(|r| {
+                            r.title == clean_title
+                                && r.release_year == release_year
+                                && r.stype == stype
+                        }) {
+                            continue;
+                        }
+
+                        self.state.search_results.push(SearchResult {
+                            id,
+                            title: clean_title,
+                            stype,
+                            release_year,
+                            cover_url,
+                            season,
+                            episode: 1,
+                            provider: ProviderKind::MovieBox,
+                            imdb_rating,
+                        });
+                    }
+                }
+
+                if !self.state.search_results.is_empty() {
+                    let results_to_fetch = self
+                        .state
+                        .search_results
+                        .iter()
+                        .take(15)
+                        .map(|r| (r.id.clone(), r.stype, r.cover_url.clone()))
+                        .collect::<Vec<_>>();
+
+                    let sender = self.action_sender.clone();
+                    let req_client = self.client.http_client().clone();
+                    tokio::spawn(async move {
+                        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
+                        for (id, _stype, cover_url) in results_to_fetch {
+                            if let Some(url) = cover_url {
+                                let permit = sem.clone().acquire_owned().await.ok();
+                                let tx = sender.clone();
+                                let client = req_client.clone();
+                                tokio::spawn(async move {
+                                    let _permit = permit;
+                                    if let Some(bytes) =
+                                        network::fetch_poster_bytes(&client, &url).await
+                                    {
+                                        if let Some(img) = network::decode_poster(bytes).await {
+                                            tx.send(Action::SearchPosterLoaded(id, Some(img))).ok();
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+
+                self.prepare_image_refresh();
+
+                self.state
+                    .search_list_state
+                    .select(if self.state.search_results.is_empty() {
+                        None
+                    } else {
+                        Some(0)
+                    });
+                if let Some(first) = self.state.search_results.first() {
+                    self.action_sender
+                        .send(Action::FetchPreview(first.id.clone()))
+                        .ok();
+                }
+                let arrow = self.state.browse_sort.arrow();
+                self.state.set_status(
+                    format!(
+                        "{} {} · {} results",
+                        view.label(),
+                        arrow,
+                        self.state.search_results.len()
+                    ),
+                    150,
+                );
+            }
+
+            Action::BrowseFailure(error) => {
+                log::error!("browse failed: {error}");
+                self.state.is_loading = false;
+                self.state
+                    .set_status(format!("Browse failed: {error}"), 150);
             }
 
             Action::SuggestSuccess(query, payload) => {
@@ -177,6 +425,7 @@ impl App {
                                 season: item.season,
                                 episode: item.episode,
                                 provider,
+                                imdb_rating: None,
                             });
                         }
 
@@ -214,6 +463,13 @@ impl App {
                             }
                         });
                     }
+                    return None;
+                }
+
+                if lower_query == "/browse" {
+                    self.state.search_query.clear();
+                    self.state.input_mode = InputMode::Normal;
+                    self.action_sender.send(Action::ToggleBrowseMenu).ok();
                     return None;
                 }
 
@@ -344,6 +600,7 @@ impl App {
                             season: 1,
                             episode: 1,
                             provider: ProviderKind::MovieBox,
+                            imdb_rating: None,
                         })
                         .collect();
                     self.state.is_loading = false;
@@ -427,6 +684,8 @@ impl App {
                 }
 
                 self.state.is_homepage_mode = false;
+                self.state.browse_view = None;
+                self.state.browse_menu_open = false;
                 self.state.current_page = 1;
                 self.state.active_screen = Screen::Home;
                 self.state.selected_details = None;
@@ -513,6 +772,8 @@ impl App {
                     return None;
                 }
                 self.state.is_homepage_mode = true;
+                self.state.browse_view = None;
+                self.state.browse_menu_open = false;
                 self.state.current_tab_id = tab_id.clone();
                 self.state.current_page = page;
                 self.state.active_screen = Screen::Home;
@@ -695,6 +956,7 @@ impl App {
                                 season,
                                 episode: 1,
                                 provider: context.provider,
+                                imdb_rating: None,
                             });
                         }
                     }
@@ -919,6 +1181,7 @@ impl App {
                             season,
                             episode: 1,
                             provider: ProviderKind::MovieBox,
+                            imdb_rating: None,
                         });
                         count += 1;
                     }

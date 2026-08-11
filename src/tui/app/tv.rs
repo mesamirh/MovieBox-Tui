@@ -7,6 +7,8 @@ impl App {
             Action::ToggleTvMode => {
                 self.state.is_tv_mode = !self.state.is_tv_mode;
                 self.state.tick_count = 0;
+                self.state.browse_view = None;
+                self.state.browse_menu_open = false;
                 if self.state.is_tv_mode {
                     self.state.tv_config_popup = false;
                     self.state.search_query.clear();

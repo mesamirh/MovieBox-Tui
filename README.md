@@ -178,6 +178,8 @@ moviebox-tui
 | `o`        | Choose another player                                 |
 | `d`        | Download selected episode or season                   |
 | `r`        | Refresh current content                               |
+| `Alt+b`    | Open the Browse menu (Trending / Top Rated / Popular) |
+| `s`        | Toggle ascending / descending sort in Browse          |
 | `Ctrl+P`   | Switch content provider                               |
 | `Ctrl+T`   | Toggle IPTV mode                                      |
 | `?`        | Show help                                             |
@@ -187,6 +189,7 @@ moviebox-tui
 
 | Command              | Action                                    |
 | -------------------- | ----------------------------------------- |
+| `/browse`            | Open Browse: Trending / Top Rated / Popular |
 | `/discover`, `/home` | Open discovery view                       |
 | `/movies`            | Browse movies                             |
 | `/shows`             | Browse series                             |

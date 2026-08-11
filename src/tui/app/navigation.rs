@@ -19,6 +19,8 @@ impl App {
         self.state.active_provider = provider;
         self.state.active_screen = Screen::Home;
         self.state.is_homepage_mode = false;
+        self.state.browse_view = None;
+        self.state.browse_menu_open = false;
         self.state.is_tv_mode = false;
         self.state.is_loading = false;
         self.state.is_fetching_streams = false;
@@ -282,6 +284,21 @@ impl App {
                 match self.state.active_screen {
                     Screen::Startup => {}
                     Screen::Home => {
+                        if self.state.browse_menu_open {
+                            self.state.browse_menu_open = false;
+                            return None;
+                        }
+                        if self.state.browse_view.is_some() {
+                            self.state.browse_view = None;
+                            self.state.browse_menu_open = false;
+                            self.state.search_poster_protocols.clear();
+                            self.state.search_results.clear();
+                            self.state.search_error = None;
+                            self.state.search_query.clear();
+                            self.state.search_preview = None;
+                            self.state.set_status("Browse exited.".to_string(), 150);
+                            return None;
+                        }
                         if !self.state.search_results.is_empty()
                             || !self.state.search_query.is_empty()
                         {
@@ -445,6 +462,7 @@ impl App {
                         } else if !self.state.is_tv_mode
                             && !self.state.is_loading
                             && !self.state.search_results.is_empty()
+                            && self.state.browse_view.is_none()
                         {
                             let next_page = self.state.current_page + 1;
                             if self.state.is_homepage_mode {

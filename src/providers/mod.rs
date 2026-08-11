@@ -1,4 +1,5 @@
 pub mod bdix;
+pub mod browse;
 pub mod fourkhdhub;
 pub mod m3u;
 pub mod models;

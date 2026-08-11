@@ -62,6 +62,8 @@ pub struct SearchResult {
     pub season: usize,
     pub episode: usize,
     pub provider: crate::providers::models::ProviderKind,
+    /// IMDb rating badge shown on browse result rows (e.g. "8.4").
+    pub imdb_rating: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -178,6 +180,11 @@ pub struct AppState {
 
     pub is_tv_mode: bool,
     pub tv_config_popup: bool,
+    pub browse_view: Option<crate::providers::browse::BrowseView>,
+    pub browse_sort: crate::providers::browse::SortOrder,
+    pub browse_menu_open: bool,
+    pub browse_list_state: ListState,
+    pub active_browse_request: u64,
     pub tv_channels: Vec<crate::providers::m3u::Channel>,
     pub tv_playlists: Vec<String>,
     pub tv_manager_selected: usize,
@@ -285,6 +292,11 @@ impl Default for AppState {
             bdix_enabled: false,
             is_tv_mode: false,
             tv_config_popup: false,
+            browse_view: None,
+            browse_sort: crate::providers::browse::SortOrder::Desc,
+            browse_menu_open: false,
+            browse_list_state: ListState::default(),
+            active_browse_request: 0,
             tv_channels: Vec::new(),
             tv_playlists: Vec::new(),
             tv_manager_selected: 0,

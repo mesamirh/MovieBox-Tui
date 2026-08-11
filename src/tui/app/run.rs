@@ -157,6 +157,12 @@ impl App {
             | Action::SearchFailure(..)
             | Action::HomepageSuccess { .. }
             | Action::HomepageFailure(..)
+            | Action::ToggleBrowseMenu
+            | Action::SelectBrowseView(..)
+            | Action::ToggleBrowseSort
+            | Action::FetchBrowse { .. }
+            | Action::BrowseSuccess { .. }
+            | Action::BrowseFailure(..)
             | Action::FetchDetails(..)
             | Action::DetailsSuccess(..)
             | Action::DetailsFailure(..)

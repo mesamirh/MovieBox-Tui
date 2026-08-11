@@ -200,6 +200,56 @@ fn render_search_state(
     frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), rows[1]);
 }
 
+fn render_browse_bar(
+    frame: &mut Frame,
+    area: Rect,
+    state: &AppState,
+    theme: &Theme,
+    browse_view: crate::providers::browse::BrowseView,
+) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1)])
+        .split(area);
+
+    let count = state.search_results.len();
+    let status = if state.is_loading && count == 0 {
+        "loading…".to_string()
+    } else {
+        format!("{count} results")
+    };
+    let arrow = state.browse_sort.arrow();
+    let sort_label = state.browse_sort.label();
+    let text = format!(" {} {arrow} · {} ", browse_view.label(), status);
+    let text_width = crate::tui::text::width(&text) as u16;
+    let hint = if area.width >= 60 {
+        format!("[s] Sort {sort_label}  [Alt+b] Switch view  [Esc] Exit")
+    } else {
+        "[s] Sort  [Esc] Exit".to_string()
+    };
+    let hint_width = crate::tui::text::width(&hint) as u16;
+    let total = text_width.saturating_add(hint_width).saturating_add(4);
+    let pad = area.width.saturating_sub(total) / 2;
+    let mut spans = vec![
+        Span::styled(" ".repeat(pad as usize), theme.text_dim),
+        Span::styled(text, theme.accent),
+    ];
+    if area.width >= total + 4 {
+        spans.push(Span::styled(" ".repeat(2), theme.text_dim));
+        spans.push(Span::styled(hint.to_string(), theme.text_dim));
+    }
+    frame.render_widget(Paragraph::new(Line::from(spans)), rows[0]);
+
+    let rule = if state.basic_terminal { "-" } else { "─" };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            rule.repeat(area.width as usize),
+            theme.border,
+        ))),
+        rows[1],
+    );
+}
+
 fn search_content(
     state: &AppState,
     view: SearchViewState,
@@ -533,15 +583,21 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         search_bar_area = centered_width(chunks[0], search_width);
         let results_chunk = if has_results { chunks[1] } else { chunks[4] };
         suggestion_area = if has_results { chunks[1] } else { chunks[2] };
-        render_search_bar(
-            frame,
-            search_bar_area,
-            state,
-            theme,
-            view,
-            show_cursor,
-            false,
-        );
+        if let Some(browse_view) = state.browse_view
+            && state.input_mode == InputMode::Normal
+        {
+            render_browse_bar(frame, search_bar_area, state, theme, browse_view);
+        } else {
+            render_search_bar(
+                frame,
+                search_bar_area,
+                state,
+                theme,
+                view,
+                show_cursor,
+                false,
+            );
+        }
         let suggestions_open =
             state.input_mode == InputMode::Editing && !state.search_suggestions.is_empty();
         if !suggestions_open && !has_results {
@@ -756,6 +812,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     };
                 }
 
+                // IMDb badge from curated browse data — shown on every row.
+                if let Some(rating) = &res.imdb_rating {
+                    let star = if state.basic_terminal { "* " } else { "★ " };
+                    info_spans.push(ratatui::text::Span::styled(star, theme.rating));
+                    info_spans.push(ratatui::text::Span::styled(rating.clone(), theme.text));
+                    info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                }
+
                 if is_selected {
                     if state.preview_loading || state.is_loading {
                         push_year!();
@@ -763,15 +827,17 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                         info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
                         info_spans.push(ratatui::text::Span::styled("Loading...", theme.text_dim));
                     } else if let Some(meta) = &state.search_preview {
-                        let rating = meta
-                            .get("imdbRating")
-                            .or_else(|| meta.get("imdbRatingValue"))
-                            .and_then(|v| v.as_str());
-                        if let Some(r) = rating {
-                            let star = if state.basic_terminal { "* " } else { "★ " };
-                            info_spans.push(ratatui::text::Span::styled(star, theme.rating));
-                            info_spans.push(ratatui::text::Span::styled(r, theme.text));
-                            info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        if res.imdb_rating.is_none() {
+                            let rating = meta
+                                .get("imdbRating")
+                                .or_else(|| meta.get("imdbRatingValue"))
+                                .and_then(|v| v.as_str());
+                            if let Some(r) = rating {
+                                let star = if state.basic_terminal { "* " } else { "★ " };
+                                info_spans.push(ratatui::text::Span::styled(star, theme.rating));
+                                info_spans.push(ratatui::text::Span::styled(r, theme.text));
+                                info_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                            }
                         }
                         push_year!();
 
@@ -1136,6 +1202,26 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 title: "Open with",
                 confirm_label: "Open",
                 minimum_width: 24,
+            },
+            theme,
+            state.basic_terminal,
+        );
+    }
+
+    if state.browse_menu_open {
+        let items = crate::providers::browse::BrowseView::ALL
+            .iter()
+            .map(|view| view.label().to_string())
+            .collect::<Vec<_>>();
+        crate::tui::overlay::picker(
+            frame,
+            area,
+            &items,
+            &mut state.browse_list_state,
+            crate::tui::overlay::PickerSpec {
+                title: "Browse",
+                confirm_label: "Open",
+                minimum_width: 30,
             },
             theme,
             state.basic_terminal,

@@ -260,6 +260,54 @@ impl App {
                         }
                         return None;
                     }
+                    if self.state.browse_menu_open {
+                        match key.code {
+                            KeyCode::Esc => {
+                                self.state.browse_menu_open = false;
+                            }
+                            KeyCode::Up => {
+                                let max = crate::providers::browse::BrowseView::ALL.len() - 1;
+                                let i = match self.state.browse_list_state.selected() {
+                                    Some(i) => {
+                                        if i == 0 {
+                                            max
+                                        } else {
+                                            i - 1
+                                        }
+                                    }
+                                    None => 0,
+                                };
+                                self.state.browse_list_state.select(Some(i));
+                            }
+                            KeyCode::Down => {
+                                let max = crate::providers::browse::BrowseView::ALL.len() - 1;
+                                let i = match self.state.browse_list_state.selected() {
+                                    Some(i) => {
+                                        if i >= max {
+                                            0
+                                        } else {
+                                            i + 1
+                                        }
+                                    }
+                                    None => 0,
+                                };
+                                self.state.browse_list_state.select(Some(i));
+                            }
+                            KeyCode::Enter => {
+                                if let Some(idx) = self.state.browse_list_state.selected() {
+                                    if let Some(view) =
+                                        crate::providers::browse::BrowseView::ALL.get(idx).copied()
+                                    {
+                                        self.action_sender
+                                            .send(Action::SelectBrowseView(view))
+                                            .ok();
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        return None;
+                    }
                     match key.code {
                         KeyCode::Esc => {
                             self.action_sender.send(Action::GoBack).ok();
@@ -275,6 +323,17 @@ impl App {
                         }
                         KeyCode::Right => {
                             self.action_sender.send(Action::MoveRight).ok();
+                        }
+                        KeyCode::Char('b') | KeyCode::Char('B')
+                            if key.modifiers.contains(KeyModifiers::ALT)
+                                && !self.state.is_tv_mode =>
+                        {
+                            self.action_sender.send(Action::ToggleBrowseMenu).ok();
+                        }
+                        KeyCode::Char('s') | KeyCode::Char('S')
+                            if self.state.browse_view.is_some() && !self.state.is_tv_mode =>
+                        {
+                            self.action_sender.send(Action::ToggleBrowseSort).ok();
                         }
                         KeyCode::Enter => {
                             if self.state.search_results.is_empty()
