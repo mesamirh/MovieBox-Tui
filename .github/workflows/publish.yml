@@ -27,7 +27,7 @@ jobs:
           fi
           echo "target_ref=$REF" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.ref.outputs.target_ref }}
 
