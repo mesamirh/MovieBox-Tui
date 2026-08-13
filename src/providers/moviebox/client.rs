@@ -150,10 +150,12 @@ impl MovieBoxClient {
         body: Option<&str>,
     ) -> Result<Value, ScraperError> {
         let start_idx = self.active_base_idx.load(Ordering::Relaxed);
+        let mut backoff_ms: u64 = 50;
 
         for i in 0..HOST_POOL.len() {
             if i > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                backoff_ms = 50;
             }
             let idx = (start_idx + i) % HOST_POOL.len();
             let base = HOST_POOL[idx];
@@ -194,6 +196,15 @@ impl MovieBoxClient {
                             "moviebox host {idx} returned retryable status {status}: {}",
                             crate::logging::sanitize_url(&url)
                         );
+                        if status == 429 {
+                            backoff_ms = resp
+                                .headers()
+                                .get(reqwest::header::RETRY_AFTER)
+                                .and_then(|v| v.to_str().ok())
+                                .and_then(|v| v.parse::<u64>().ok())
+                                .map(|secs| secs.saturating_mul(1000).min(3000))
+                                .unwrap_or(400);
+                        }
                         continue;
                     }
 
