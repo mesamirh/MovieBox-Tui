@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Changed
-- **Seamless Playback Handoff**: Starting new playback while a player is already active no longer shows "Playback already active — stop the current player before starting another"; it now replaces the running session instead. The previous title's watch progress is still reconciled and saved before the new one takes over. Playback still keeps running after quitting the TUI, unchanged.
+- **Seamless Playback Handoff**: Starting new playback while a player is already active no longer shows "Playback already active: stop the current player before starting another"; it now replaces the running session instead. The previous title's watch progress is still reconciled and saved before the new one takes over. Playback still keeps running after quitting the TUI, unchanged.
 
 ## [0.1.13] - 2026-08-21
 
