@@ -59,5 +59,21 @@ reconciled into `history.json`.
 ## Spawning
 
 `launch_player` spawns the player with null stdin/stdout, piped stderr, and its own
-process group (Unix) or no-console flag (Windows). A blocking task reads stderr and
-reports a crash if the process exits non-zero within a few seconds with output.
+process group (Unix) or no-console flag (Windows), using `tokio::process` so the
+watcher task can wait on it without blocking a thread. The watcher reads stderr
+concurrently and reports a crash if the process exits non-zero within a few seconds
+with output.
+
+## Replacing an active session
+
+Starting new playback while a player is already running does **not** require closing
+the old one first: `launch_player` bumps a `playback_generation` counter and signals
+the previous session's watcher (via a `oneshot` channel) to kill its player and hand
+off. The old session's watcher still reconciles watch history and saves progress
+before exiting, exactly as it would on a normal exit. Only its `PlayerCrashed` /
+`PlayerExited` report is tagged with the now-superseded generation, so `handle_playback`
+ignores it instead of clobbering the flags for the session that's actually playing.
+
+A dropped-without-sending stop channel (e.g. the app quitting while playback is
+active) is deliberately **not** treated as a stop request, so playback keeps running
+after the TUI exits, matching the existing behavior.

@@ -142,6 +142,6 @@ pub enum Action {
         completed: bool,
     },
     ReconcileHistory,
-    PlayerCrashed(Option<i32>, String),
-    PlayerExited,
+    PlayerCrashed(u64, Option<i32>, String),
+    PlayerExited(u64),
 }

@@ -130,6 +130,8 @@ pub struct AppState {
     pub is_resolving_playback: bool,
     pub is_playing: bool,
     pub last_playback_launch: std::time::Instant,
+    pub playback_generation: u64,
+    pub playback_stop: Option<tokio::sync::oneshot::Sender<()>>,
     pub status_message: String,
     pub status_timer: usize,
     pub notifications: std::collections::VecDeque<crate::tui::overlay::Notification>,
@@ -275,6 +277,8 @@ impl Default for AppState {
             last_playback_launch: std::time::Instant::now()
                 .checked_sub(std::time::Duration::from_secs(5))
                 .unwrap_or_else(std::time::Instant::now),
+            playback_generation: 0,
+            playback_stop: None,
             status_message: String::new(),
             status_timer: 0,
             notifications: std::collections::VecDeque::new(),

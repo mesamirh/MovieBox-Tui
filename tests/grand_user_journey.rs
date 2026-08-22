@@ -79,7 +79,8 @@ async fn test_grand_user_journey_complete_lifecycle() {
     assert!(duplicate_play);
 
     app.state_mut().is_playing = false;
-    app.handle_action(Action::PlayerExited).await;
+    app.handle_action(Action::PlayerExited(app.state().playback_generation))
+        .await;
 
     let history_item = moviebox_tui::history::WatchHistoryItem {
         provider: "moviebox".to_string(),
