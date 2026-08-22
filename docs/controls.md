@@ -56,7 +56,7 @@ MovieBox-TUI is designed for fast keyboard navigation with complete mouse suppor
 | **Click suggestion item** | Search for that suggestion immediately |
 | **Click search result row** | Select item and load preview; click again to open full details |
 | **Click Favorites row (landing)** | Select a starred title; click again to open it |
-| **Click "+N more — /favorites"** | Open the full favorites list |
+| **Click "+N more • /favorites"** | Open the full favorites list |
 | **Click audio / season / episode / stream** | Switch audio language, change season, select episode, or start playback |
 | **Click footer buttons** | Switch provider / mode, open help (`[?]`), or quit (`[q]`) |
 | **Click modal buttons** | Choose a theme, subtitles, player, or confirm actions |

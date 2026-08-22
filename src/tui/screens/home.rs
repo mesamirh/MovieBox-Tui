@@ -278,7 +278,7 @@ fn render_favorites_landing(frame: &mut Frame, area: Rect, state: &AppState, the
     if overflow > 0 {
         if let Some(row_area) = sections.last() {
             frame.render_widget(
-                Paragraph::new(format!("+{overflow} more \u{2014} /favorites"))
+                Paragraph::new(format!("+{overflow} more • /favorites"))
                     .style(theme.text_dim)
                     .alignment(Alignment::Center),
                 *row_area,
