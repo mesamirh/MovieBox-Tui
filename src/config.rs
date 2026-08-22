@@ -40,15 +40,32 @@ impl Default for Config {
 
 pub const APP_NAME: &str = "moviebox-tui";
 
+/// Test-only escape hatch: several tests exercise `HistoryManager`/
+/// `FavoritesManager`/`Config` save paths directly, which write to whatever
+/// these functions return with no other isolation. Without this override
+/// those saves land on the real, shared config/data directories — on a
+/// machine where the app is also installed for actual use, that silently
+/// overwrites real user data with test fixtures. Set `MOVIEBOX_CONFIG_DIR`
+/// / `MOVIEBOX_DATA_DIR` to a throwaway directory before running `cargo
+/// test` to avoid this; production behavior (unset) is unchanged.
 pub fn config_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("MOVIEBOX_CONFIG_DIR") {
+        return Some(PathBuf::from(dir));
+    }
     dirs::config_dir().map(|dir| dir.join(APP_NAME))
 }
 
 pub fn data_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("MOVIEBOX_DATA_DIR") {
+        return Some(PathBuf::from(dir));
+    }
     dirs::data_dir().map(|dir| dir.join(APP_NAME))
 }
 
 pub fn cache_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("MOVIEBOX_CACHE_DIR") {
+        return PathBuf::from(dir);
+    }
     dirs::cache_dir()
         .map(|dir| dir.join(APP_NAME))
         .unwrap_or_else(|| std::env::temp_dir().join(APP_NAME))
@@ -82,6 +99,10 @@ pub fn tv_path() -> Option<PathBuf> {
 
 pub fn history_path() -> Option<PathBuf> {
     data_dir().map(|dir| dir.join("history.json"))
+}
+
+pub fn favorites_path() -> Option<PathBuf> {
+    data_dir().map(|dir| dir.join("favorites.json"))
 }
 
 pub fn load() -> Config {

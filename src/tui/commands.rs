@@ -4,6 +4,7 @@ use crate::tui::state::AppState;
 pub enum SlashCommand {
     Browse,
     History,
+    Favorites,
     List,
     Config,
     DownloadDir,
@@ -26,6 +27,7 @@ pub enum SlashCommand {
 pub enum ParsedCommand<'a> {
     Browse,
     History,
+    Favorites,
     List,
     Config,
     DownloadDir(&'a str),
@@ -45,9 +47,10 @@ pub enum ParsedCommand<'a> {
 }
 
 impl SlashCommand {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::Browse,
         Self::History,
+        Self::Favorites,
         Self::List,
         Self::Config,
         Self::DownloadDir,
@@ -70,6 +73,7 @@ impl SlashCommand {
         match self {
             Self::Browse => "/browse",
             Self::History => "/history",
+            Self::Favorites => "/favorites",
             Self::List => "/list",
             Self::Config => "/config",
             Self::DownloadDir => "/download-dir",
@@ -93,6 +97,7 @@ impl SlashCommand {
         match self {
             Self::Browse => "Curated, rated & most-watched views",
             Self::History => "Watch history",
+            Self::Favorites => "Starred titles",
             Self::List => "Show all TV channels",
             Self::Config => {
                 if state.is_addon_mode {
@@ -128,6 +133,7 @@ impl SlashCommand {
                 (state.streaming_enabled && !state.is_tv_mode && !state.is_addon_mode)
                     || (state.addons_enabled && state.is_addon_mode)
             }
+            Self::Favorites => state.favorites_available(),
             Self::List => state.tv_enabled && state.is_tv_mode,
             Self::Config => {
                 (state.tv_enabled && state.is_tv_mode)
@@ -220,6 +226,7 @@ impl SlashCommand {
         match command_name.to_ascii_lowercase().as_str() {
             "/browse" => Some(ParsedCommand::Browse),
             "/history" => Some(ParsedCommand::History),
+            "/favorites" => Some(ParsedCommand::Favorites),
             "/list" => Some(ParsedCommand::List),
             "/config" => Some(ParsedCommand::Config),
             "/download-dir" => Some(ParsedCommand::DownloadDir(arg)),
@@ -307,6 +314,26 @@ mod tests {
         state.is_tv_mode = true;
         let tv_sug = SlashCommand::suggest(&state, "/download-dir");
         assert!(tv_sug.contains(&"/download-dir reset".to_string()));
+    }
+
+    #[test]
+    fn test_favorites_command_parses_and_is_available_by_default() {
+        let state = AppState::default();
+        assert_eq!(
+            SlashCommand::parse("/favorites"),
+            Some(ParsedCommand::Favorites)
+        );
+        assert!(SlashCommand::Favorites.is_available(&state));
+        assert_eq!(SlashCommand::Favorites.name(), "/favorites");
+    }
+
+    #[test]
+    fn test_favorites_command_unavailable_in_tv_mode() {
+        let state = AppState {
+            is_tv_mode: true,
+            ..Default::default()
+        };
+        assert!(!SlashCommand::Favorites.is_available(&state));
     }
 
     #[test]

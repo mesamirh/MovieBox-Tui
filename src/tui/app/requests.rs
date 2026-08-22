@@ -204,6 +204,11 @@ impl App {
                     return None;
                 }
 
+                if lower_query == "/favorites" && self.state.favorites_available() {
+                    self.load_favorites_virtual_list();
+                    return None;
+                }
+
                 if self.handle_search_command(&query, &lower_query).is_some() {
                     return None;
                 }

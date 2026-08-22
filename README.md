@@ -37,6 +37,7 @@ Searching and watching media through web browsers often means dealing with heavy
 - **Addon Mode:** Install community HTTP addon manifests for custom catalog metadata (Cinemeta, Anime Kitsu) and direct stream resolution.
 - **Smooth Video Playback:** Plays directly in **mpv**, **VLC**, or **IINA** using your computer's hardware for smooth video.
 - **Easy Downloads:** Download single episodes or entire seasons with one keypress. Completed episodes are skipped automatically.
+- **Favorites:** Star any movie or series with `*` (or `f` on the details screen) and reach it instantly from a dedicated row on the home screen, or view the full list with `/favorites`.
 - **Simple Terminal Interface:** Full keyboard and mouse support, beautiful color themes, and movie poster art.
 
 ## Installation

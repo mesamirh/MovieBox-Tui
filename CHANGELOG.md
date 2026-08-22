@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Favorites**:
+  - Added a Favorites feature for starring whole movies and series (`src/favorites.rs`, `favorites.json`), independent of watch history and unaffected by `/clear-cache`.
+  - Added `*` on the Home screen and `f` / `F` on the Details screen to toggle a title's favorite status, with a `★` indicator on favorited rows and a `[f] Favorite` / `[f] Unfavorite` hint on the Details screen.
+  - Added an arrow-navigable Favorites row on the landing screen (Streaming and Addon modes) showing up to 5 recently-starred titles, with a `+N more • /favorites` overflow link; `Down` from the search bar focuses the row, `Enter` opens the selected title, `Esc` releases focus.
+  - Added the `/favorites` slash command, mirroring `/history`, to load the full starred list into the results view; `*` unstars the selected row there.
+  - Added mouse support for the landing Favorites row (select/open rows, open the full list via the overflow line).
+  - Extracted cross-provider title-identity matching into `SubjectIdentity` (`src/models.rs`), now shared by watch history and Favorites so remakes, cross-provider duplicates, and movie/series title collisions are deduplicated identically.
+
 ## [0.1.13] - 2026-08-21
 
 ### Added

@@ -192,6 +192,101 @@ fn render_search_state(
     frame.render_widget(Paragraph::new(line).alignment(Alignment::Center), rows[1]);
 }
 
+fn render_favorites_landing(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
+    if area.height < 2 || area.width < 20 {
+        return;
+    }
+
+    let items: Vec<crate::favorites::FavoriteItem> = state
+        .favorites_landing_items()
+        .into_iter()
+        .cloned()
+        .collect();
+    if items.is_empty() {
+        return;
+    }
+
+    let overflow = state.favorites.items.len().saturating_sub(items.len());
+    let card_width = area.width.clamp(20, 56);
+    let row_count = items.len() as u16;
+    let overflow_row = u16::from(overflow > 0);
+    let content_height = (1 + row_count + overflow_row).min(area.height);
+
+    let card = Rect {
+        x: area.x + area.width.saturating_sub(card_width) / 2,
+        y: area.y,
+        width: card_width,
+        height: content_height,
+    };
+
+    let mut constraints = vec![Constraint::Length(1)];
+    constraints.extend(std::iter::repeat_n(Constraint::Length(1), items.len()));
+    if overflow > 0 {
+        constraints.push(Constraint::Length(1));
+    }
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(card);
+
+    let header_style = if state.favorites_focus {
+        theme.title
+    } else {
+        theme.subtext1
+    };
+    frame.render_widget(
+        Paragraph::new("Favorites")
+            .style(header_style)
+            .alignment(Alignment::Center),
+        sections[0],
+    );
+
+    let selected = if state.favorites_focus {
+        state.favorites_landing_state.selected()
+    } else {
+        None
+    };
+
+    for (i, item) in items.iter().enumerate() {
+        let Some(row_area) = sections.get(1 + i) else {
+            break;
+        };
+        let is_selected = selected == Some(i);
+        let type_tag = if item.stype == 2 { "Series" } else { "Movie" };
+        let prefix = if is_selected {
+            if state.basic_terminal { "> " } else { "▌ " }
+        } else {
+            "  "
+        };
+        let title_style = if is_selected {
+            theme.title.add_modifier(Modifier::BOLD)
+        } else {
+            theme.text
+        };
+        let max_title_width = row_area.width.saturating_sub(14) as usize;
+        let line = Line::from(vec![
+            Span::styled(prefix, theme.accent),
+            Span::styled(
+                crate::tui::text::truncate_width(&item.title, max_title_width),
+                title_style,
+            ),
+            Span::styled(format!("  {type_tag}"), theme.text_dim),
+        ]);
+        frame.render_widget(Paragraph::new(line), *row_area);
+    }
+
+    if overflow > 0 {
+        if let Some(row_area) = sections.last() {
+            frame.render_widget(
+                Paragraph::new(format!("+{overflow} more • /favorites"))
+                    .style(theme.text_dim)
+                    .alignment(Alignment::Center),
+                *row_area,
+            );
+        }
+    }
+}
+
 fn search_content(
     state: &AppState,
     view: SearchViewState,
@@ -329,6 +424,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 Constraint::Length(1),
                 Constraint::Length(3),
                 Constraint::Length(1),
+                Constraint::Length(1),
                 Constraint::Min(0),
                 Constraint::Length(1),
                 Constraint::Length(1),
@@ -377,6 +473,10 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 show_cursor,
                 true,
             );
+        }
+
+        if state.favorites_landing_visible() {
+            render_favorites_landing(frame, vertical_chunks[6], state, theme);
         }
 
         let ctrl_s = crate::tui::text::ctrl_key("S");
@@ -452,7 +552,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
         frame.render_widget(
             Paragraph::new(Line::from(mode_spans)).alignment(Alignment::Center),
-            vertical_chunks[6],
+            vertical_chunks[7],
         );
 
         let util_spans = vec![
@@ -469,7 +569,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
         frame.render_widget(
             Paragraph::new(Line::from(util_spans)).alignment(Alignment::Center),
-            vertical_chunks[7],
+            vertical_chunks[8],
         );
     } else {
         if state.is_loading && state.search_results.is_empty() {
@@ -671,7 +771,20 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     .split(text_area);
 
                 let title_style = if is_selected { theme.title } else { theme.text };
-                let max_title_width = text_area.width.saturating_sub(4) as usize;
+                // TV channels are never favoritable (see current_favorite_candidate), so
+                // this is always false for TV mode's channel list, keeping it byte-identical.
+                let is_favorited = res.stype != 3
+                    && state
+                        .favorites
+                        .is_favorite(&crate::models::SubjectIdentity {
+                            provider: res.provider.cache_key(),
+                            subject_id: &res.id,
+                            title: &res.title,
+                            stype: res.stype,
+                            release_year: &res.release_year,
+                        });
+                let title_reserved = if is_favorited { 6 } else { 4 };
+                let max_title_width = text_area.width.saturating_sub(title_reserved) as usize;
                 let display_title = crate::tui::text::truncate_width(&res.title, max_title_width);
 
                 let mut type_tag = if state.is_tv_mode || res.stype == 3 {
@@ -689,10 +802,15 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                     type_tag = "Unknown".to_string();
                 }
 
-                let title_line = ratatui::text::Line::from(vec![
-                    ratatui::text::Span::raw(" "),
-                    ratatui::text::Span::styled(display_title, title_style),
-                ]);
+                let mut title_spans = vec![ratatui::text::Span::raw(" ")];
+                if is_favorited {
+                    title_spans.push(ratatui::text::Span::styled(
+                        if state.basic_terminal { "* " } else { "★ " },
+                        theme.rating,
+                    ));
+                }
+                title_spans.push(ratatui::text::Span::styled(display_title, title_style));
+                let title_line = ratatui::text::Line::from(title_spans);
                 if text_layout[1].height > 0 {
                     frame.render_widget(Paragraph::new(title_line), text_layout[1]);
                 }

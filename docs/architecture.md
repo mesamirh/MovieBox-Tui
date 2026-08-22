@@ -14,9 +14,11 @@ src/
   cache.rs                      disk cache: provider-namespaced, TTL'd, atomic writes
   config.rs                     Config load/save (config.json)
   download.rs                   download engine (resume, ranges, segments, retry)
+  favorites.rs                  starred-titles persistence (favorites.json)
   history.rs                    watch history persistence
   logging.rs                    file logging (rotation, sanitization)
-  models.rs                     shared domain models (SearchResult, BrowseMetrics, StreamPool, Notification)
+  models.rs                     shared domain models (SearchResult, BrowseMetrics, StreamPool,
+                                Notification, SubjectIdentity)
   player.rs                     player detection (OnceLock) and command construction (mpv/VLC/IINA/Android)
   providers/
     mod.rs                      provider module tree
@@ -29,7 +31,8 @@ src/
     addons/                     Community HTTP addons provider
     tv/                         Live TV / IPTV provider (M3U parser and models)
   service.rs                    MovieBoxService headless engine (search, details, streams, captions)
-  updater.rs                    GitHub release update check
+  updater/                      GitHub release update check (mod, check, download, verify,
+                                extract, apply, artifact)
   tui/
     app/                        the application object and all behavior
       mod.rs                    App struct, App::new, helpers
@@ -40,6 +43,7 @@ src/
                                 provider search dispatch, poster prefetch
       playback.rs               player launching + playback actions
       download.rs               download orchestration actions
+      favorites.rs              favorite toggle/open actions, /favorites virtual list
       requests.rs               suggest/history/homepage/details/preview/
                                 episode-stream actions
       navigation.rs             list navigation, submit actions, provider helpers
@@ -111,6 +115,7 @@ interval, forwarding them into the action channel (capacity 128).
 - `addons_config.json` — installed HTTP community addons in the config dir.
 - `tv_config.json` — user M3U playlist sources (URLs or file paths) in the config dir.
 - `history.json` — watch history in the system data dir.
+- `favorites.json`: starred titles in the system data dir, independent of `history.json`.
 - `playback/` — temporary playback states for session crash/kill reconciliation in the system data dir.
 - `scripts/` — bundled player scripts (`moviebox_tracker.lua`) in the system data dir.
 - Cache lives under the system cache dir, keyed per provider.

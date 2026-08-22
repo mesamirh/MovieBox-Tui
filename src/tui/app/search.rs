@@ -205,6 +205,20 @@ impl App {
                     None
                 }
             }
+            crate::tui::commands::ParsedCommand::Favorites => {
+                if current_mode == crate::tui::state::AppMode::Tv {
+                    self.state.search_query.clear();
+                    self.state.input_mode = InputMode::Normal;
+                    self.state.notify(
+                        NotificationKind::Info,
+                        "TV Mode",
+                        format!("Command /favorites is available in Streaming Mode ({ctrl_s}) or Addon Mode ({ctrl_a})."),
+                    );
+                    Some(true)
+                } else {
+                    None
+                }
+            }
             crate::tui::commands::ParsedCommand::List => {
                 if current_mode == crate::tui::state::AppMode::Tv {
                     self.apply_tv_search_results(query, lower_query);

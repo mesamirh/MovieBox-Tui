@@ -559,11 +559,16 @@ impl App {
                                 }
                             }
                         }
+                        KeyCode::Char('*') if self.state.favorites_available() => {
+                            self.action_sender.send(Action::ToggleFavorite).ok();
+                        }
                         KeyCode::Char(c)
                             if (key.modifiers.is_empty()
                                 || key.modifiers == KeyModifiers::SHIFT) =>
                         {
                             self.state.input_mode = InputMode::Editing;
+                            self.state.favorites_focus = false;
+                            self.state.favorites_landing_state.select(None);
                             if c == '/' {
                                 self.state.search_query.clear();
                             }
@@ -638,6 +643,16 @@ impl App {
                     }
                     KeyCode::Char('b') => {
                         self.action_sender.send(Action::GoBack).ok();
+                    }
+                    KeyCode::Char('f') | KeyCode::Char('F') => {
+                        if !self.state.subtitle_popup
+                            && !self.state.player_picker_popup
+                            && !self.state.show_season_download_confirm
+                            && !self.state.show_episode_download_confirm
+                            && self.state.favorites_available()
+                        {
+                            self.action_sender.send(Action::ToggleFavorite).ok();
+                        }
                     }
 
                     KeyCode::Up => {

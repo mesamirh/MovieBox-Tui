@@ -24,8 +24,11 @@ MovieBox-TUI is designed for fast keyboard navigation with complete mouse suppor
 - **`o`**: Open player selection picker for the current stream.
 - **`d`**: Download current episode or full season batch.
 - **`r`**: Refresh search results / stream list.
+- **`*`**: Favorite / unfavorite the selected title on the Home screen.
+- **`f`**: Favorite / unfavorite the open title on the Details screen.
 - **`/browse`**: Open curated browse categories (Trending, Popular, Top Rated, etc.).
 - **`/history`**: Open watch history.
+- **`/favorites`**: Open your starred titles.
 
 ### TV Mode (Live IPTV)
 - **`Enter`**: Play selected TV channel immediately.
@@ -40,7 +43,10 @@ MovieBox-TUI is designed for fast keyboard navigation with complete mouse suppor
 - **`o`**: Open player selection picker for the stream.
 - **`d`**: Download HTTP stream release.
 - **`r`**: Refresh addon catalog search results.
+- **`*`**: Favorite / unfavorite the selected title on the Home screen.
+- **`f`**: Favorite / unfavorite the open title on the Details screen.
 - **`/browse`**: Browse curated addon catalogs (Top Movies, Top Series, Top Rated).
+- **`/favorites`**: Open your starred titles.
 
 ## Mouse Controls
 
@@ -49,6 +55,8 @@ MovieBox-TUI is designed for fast keyboard navigation with complete mouse suppor
 | **Click search bar** | Enter search input mode |
 | **Click suggestion item** | Search for that suggestion immediately |
 | **Click search result row** | Select item and load preview; click again to open full details |
+| **Click Favorites row (landing)** | Select a starred title; click again to open it |
+| **Click "+N more • /favorites"** | Open the full favorites list |
 | **Click audio / season / episode / stream** | Switch audio language, change season, select episode, or start playback |
 | **Click footer buttons** | Switch provider / mode, open help (`[?]`), or quit (`[q]`) |
 | **Click modal buttons** | Choose a theme, subtitles, player, or confirm actions |
@@ -62,6 +70,7 @@ Type these commands directly into the search bar:
 | :--- | :--- | :--- |
 | `/browse` | Streaming / Addon | Browse curated views (Trending, Popular) or Addon catalogs (Top Movies, Top Series) |
 | `/history` | Streaming / Addon | View watch history with latest progress |
+| `/favorites` | Streaming / Addon | View all starred titles |
 | `/list` | TV | View live TV channels |
 | `/config` | TV / Addon | Manage IPTV playlists (TV Mode) or configure HTTP addons (Addon Mode) |
 | `/enable-streaming` | All | Enable Streaming Mode navigation in bottom dock |

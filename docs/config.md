@@ -24,6 +24,7 @@ macOS `~/Library/Application Support/moviebox-tui`, Linux `~/.config/moviebox-tu
 - `addons_config.json` — list of installed HTTP addons in the config directory (see [addons-mode.md](addons-mode.md)).
 - `tv_config.json` — list of M3U playlist sources in the config directory (see [tv-mode.md](tv-mode.md)).
 - `history.json` — watch history in the system data directory (`dirs::data_dir()/moviebox-tui/`).
+- `favorites.json`: starred titles in the system data directory. Independent of `history.json`; clearing watch history or running `/clear-cache` never touches it.
 - `playback/` — temporary playback states in the system data directory for resilient progress tracking.
 - `scripts/` — bundled player scripts (`moviebox_tracker.lua`) in the system data directory.
 - `iptv_cache/` — legacy TV image cache directory that `ClearCache` still removes.

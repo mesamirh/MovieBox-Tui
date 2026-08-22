@@ -23,6 +23,16 @@ pub struct WatchHistoryItem {
 }
 
 impl WatchHistoryItem {
+    pub fn identity(&self) -> crate::models::SubjectIdentity<'_> {
+        crate::models::SubjectIdentity {
+            provider: &self.provider,
+            subject_id: &self.subject_id,
+            title: &self.title,
+            stype: self.stype,
+            release_year: &self.release_year,
+        }
+    }
+
     pub fn is_in_progress(&self) -> bool {
         if self.completed {
             return false;
@@ -188,36 +198,7 @@ impl HistoryManager {
     }
 
     pub fn is_same_show(a: &WatchHistoryItem, b: &WatchHistoryItem) -> bool {
-        if a.stype != b.stype {
-            return false;
-        }
-
-        let prov_a = crate::providers::models::ProviderKind::parse(&a.provider);
-        let prov_b = crate::providers::models::ProviderKind::parse(&b.provider);
-        let same_provider = match (prov_a, prov_b) {
-            (Some(pa), Some(pb)) => pa == pb,
-            _ => a.provider.trim().eq_ignore_ascii_case(b.provider.trim()),
-        };
-
-        if !same_provider {
-            return false;
-        }
-
-        if !a.subject_id.is_empty() && !b.subject_id.is_empty() {
-            return a.subject_id == b.subject_id;
-        }
-
-        let clean_a = crate::providers::moviebox::clean_moviebox_title(&a.title);
-        let clean_b = crate::providers::moviebox::clean_moviebox_title(&b.title);
-        if !clean_a.is_empty() && clean_a.eq_ignore_ascii_case(&clean_b) {
-            let year_a = a.release_year.trim();
-            let year_b = b.release_year.trim();
-            if !year_a.is_empty() && !year_b.is_empty() {
-                return year_a == year_b;
-            }
-            return true;
-        }
-        false
+        a.identity().matches(&b.identity())
     }
 
     fn hydrate_watched_index(&mut self) {

@@ -405,6 +405,11 @@ impl App {
                     self.state.browse_list_state.select(None);
                     return None;
                 }
+                if self.state.favorites_focus {
+                    self.state.favorites_focus = false;
+                    self.state.favorites_landing_state.select(None);
+                    return None;
+                }
                 match self.state.active_screen {
                     Screen::Home => {
                         self.state.is_loading = false;
@@ -513,6 +518,14 @@ impl App {
                 }
                 match self.state.active_screen {
                     Screen::Home => {
+                        if self.state.favorites_focus {
+                            let current =
+                                self.state.favorites_landing_state.selected().unwrap_or(0);
+                            if current > 0 {
+                                self.state.favorites_landing_state.select(Some(current - 1));
+                            }
+                            return None;
+                        }
                         let current = self.state.search_list_state.selected().unwrap_or(0);
                         if current > 0 {
                             self.state.search_list_state.select(Some(current - 1));
@@ -587,6 +600,23 @@ impl App {
                 }
                 match self.state.active_screen {
                     Screen::Home => {
+                        if self.state.favorites_focus {
+                            let total = self.state.favorites_landing_items().len();
+                            let current =
+                                self.state.favorites_landing_state.selected().unwrap_or(0);
+                            if current + 1 < total {
+                                self.state.favorites_landing_state.select(Some(current + 1));
+                            }
+                            return None;
+                        }
+                        if self.state.search_results.is_empty()
+                            && self.state.search_query.trim().is_empty()
+                            && self.state.favorites_landing_visible()
+                        {
+                            self.state.favorites_focus = true;
+                            self.state.favorites_landing_state.select(Some(0));
+                            return None;
+                        }
                         let current = self.state.search_list_state.selected().unwrap_or(0);
                         if current + 1 < self.state.search_results.len() {
                             self.state.search_list_state.select(Some(current + 1));
@@ -765,6 +795,12 @@ impl App {
                     self.action_sender
                         .send(Action::DownloadStream(sub_url_final))
                         .ok();
+                    return None;
+                }
+                if self.state.favorites_focus {
+                    if let Some(idx) = self.state.favorites_landing_state.selected() {
+                        self.action_sender.send(Action::OpenFavorite(idx)).ok();
+                    }
                     return None;
                 }
                 if self.state.active_screen == Screen::Home {
