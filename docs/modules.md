@@ -8,8 +8,8 @@ responsibility.
 src/
   main.rs            Entry point. Logging init, panic hook, raw mode, alternate
                      screen, TerminalGuard, App::new + App::run.
-  lib.rs             Crate root: declares pub mod cache/config/download/history/
-                     logging/models/player/providers/service/tui/updater.
+  lib.rs             Crate root: declares pub mod cache/config/download/favorites/
+                     history/logging/models/player/providers/service/tui/updater.
 
   cache.rs           Disk cache: provider-namespaced directories, TTL expiry,
                      atomic temp-file writes, payload validation, background purge.
@@ -22,6 +22,9 @@ src/
                      HTTP ranges, optional multi-segment download, retries, cancel
                      via an AtomicBool, Windows-safe file stems.
 
+  favorites.rs       Starred titles: read/write favorites.json, whole-title identity
+                     dedupe via SubjectIdentity, no cap.
+
   history.rs         Watch history: read/write history.json, dedupe exact
                      provider/subject/episode entries, cap 100.
 
@@ -29,7 +32,9 @@ src/
                      MOVIEBOX_LOG level, URL/path sanitization for sharing.
 
   models.rs          Pure domain data models: SearchResult, BrowseMetric,
-                     BrowsePreset, BrowseMetrics, SubjectStreamPool, Notification.
+                     BrowsePreset, BrowseMetrics, SubjectStreamPool, Notification,
+                     SubjectIdentity (cross-provider identity rules shared by
+                     history and favorites).
 
   player.rs          Player detection (OnceLock) and command construction for
                      mpv / VLC / IINA / Android intent, subtitle args, headers,
@@ -62,7 +67,14 @@ src/
                      engine (suggest, search, details, homepage, resolutions,
                      captions, subtitle download, path resolution).
 
-  updater.rs         GitHub release update check.
+  updater/           GitHub release update check.
+    mod.rs           Module declarations, re-exports, perform_self_update orchestration.
+    check.rs         GitHub release API query (with redirect fallback) and version compare.
+    download.rs      Release asset download (https-only) with retry.
+    verify.rs        SHA-256 hashing and sha256sums parsing for artifact verification.
+    extract.rs       tar.gz / archive extraction for the staged binary.
+    apply.rs         Swap in the new binary, install-environment detection, restart.
+    artifact.rs      Release/ReleaseAsset types, target-platform matching.
 
   tui/
     action.rs        The Action enum: every UI event/message (input, network
@@ -95,6 +107,8 @@ src/
     playback.rs      handle_playback: play/subtitle/picker/launch/crash actions
                      + launch_player.
     download.rs      handle_download: download orchestration + start_resilient_download.
+    favorites.rs     handle_favorites: toggle/open favorite actions, /favorites virtual
+                     list builder.
     navigation.rs    handle_navigation + provider/nav helpers.
     keyboard.rs      handle_key: raw key-event handling.
     mouse.rs         handle_mouse: mouse click routing and hitboxes across screens,

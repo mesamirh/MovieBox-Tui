@@ -182,6 +182,9 @@ pub struct AppState {
     pub addon_input_buffer: String,
     pub addon_input_cursor: usize,
     pub history: crate::history::HistoryManager,
+    pub favorites: crate::favorites::FavoritesManager,
+    pub favorites_focus: bool,
+    pub favorites_landing_state: ListState,
 }
 
 impl Default for AppState {
@@ -322,6 +325,9 @@ impl Default for AppState {
             addon_input_buffer: String::new(),
             addon_input_cursor: 0,
             history: crate::history::HistoryManager::new(),
+            favorites: crate::favorites::FavoritesManager::new(),
+            favorites_focus: false,
+            favorites_landing_state: ListState::default(),
         }
     }
 }
@@ -408,6 +414,8 @@ impl AppState {
         self.in_flight_posters.clear();
         self.search_list_state.select(None);
         self.is_homepage_mode = false;
+        self.favorites_focus = false;
+        self.favorites_landing_state.select(None);
     }
 
     pub fn clear_details_state(&mut self) {
@@ -424,6 +432,27 @@ impl AppState {
         self.resource_list_state.select(None);
         self.language_list_state.select(None);
         self.details_pane = DetailsPane::Streams;
+    }
+
+    /// Same availability predicate `/history` and `/browse` already use:
+    /// Streaming and Addon modes only.
+    pub fn favorites_available(&self) -> bool {
+        (self.streaming_enabled && !self.is_tv_mode && !self.is_addon_mode)
+            || (self.addons_enabled && self.is_addon_mode)
+    }
+
+    pub fn favorites_landing_visible(&self) -> bool {
+        self.favorites_available() && !self.favorites.items.is_empty()
+    }
+
+    /// Up to 5 most-recently-favorited titles, newest first. This is the
+    /// fixed set the landing row navigates over; the rest are reachable via
+    /// `/favorites`.
+    pub fn favorites_landing_items(&self) -> Vec<&crate::favorites::FavoriteItem> {
+        let mut items: Vec<&crate::favorites::FavoriteItem> = self.favorites.items.iter().collect();
+        items.sort_by_key(|item| std::cmp::Reverse(item.added_at));
+        items.truncate(5);
+        items
     }
 
     pub fn loading_dots(&self) -> &'static str {

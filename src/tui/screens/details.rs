@@ -351,15 +351,34 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
     }
 
     let display_title = title.to_string();
+    let details_subject_id = state.active_subject_id.as_deref().unwrap_or("");
+    let is_favorited = state
+        .favorites
+        .is_favorite(&crate::models::SubjectIdentity {
+            provider: subject_provider(state, details_subject_id).cache_key(),
+            subject_id: details_subject_id,
+            title: &title,
+            stype: type_val,
+            release_year: year,
+        });
 
-    let title_line = Line::from(vec![
-        Span::styled(
-            display_title,
-            theme.text.add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        Span::styled("   ", theme.text),
-        Span::styled(format!("★ IMDb {}", imdb_rating), theme.rating),
-    ]);
+    let mut title_spans = Vec::new();
+    if is_favorited {
+        title_spans.push(Span::styled(
+            if state.basic_terminal { "* " } else { "★ " },
+            theme.rating,
+        ));
+    }
+    title_spans.push(Span::styled(
+        display_title,
+        theme.text.add_modifier(ratatui::style::Modifier::BOLD),
+    ));
+    title_spans.push(Span::styled("   ", theme.text));
+    title_spans.push(Span::styled(
+        format!("★ IMDb {}", imdb_rating),
+        theme.rating,
+    ));
+    let title_line = Line::from(title_spans);
 
     let duration_str = if duration.is_empty() || duration == "N/A" {
         "".to_string()
@@ -399,6 +418,16 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 metadata.push("[✓ Watched]".to_string());
             }
         }
+    }
+    if state.favorites_available() {
+        metadata.push(
+            if is_favorited {
+                "[f] Unfavorite"
+            } else {
+                "[f] Favorite"
+            }
+            .to_string(),
+        );
     }
     metadata.retain(|s| !s.trim().is_empty());
     let meta_line = Line::from(vec![Span::styled(

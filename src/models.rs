@@ -3,6 +3,56 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
+/// Cross-provider identity rules shared by watch history and favorites: same
+/// `stype`, same provider (canonicalized via `ProviderKind::parse`), then
+/// `subject_id` if both are non-empty, else cleaned title plus release year.
+#[derive(Debug, Clone, Copy)]
+pub struct SubjectIdentity<'a> {
+    pub provider: &'a str,
+    pub subject_id: &'a str,
+    pub title: &'a str,
+    pub stype: i64,
+    pub release_year: &'a str,
+}
+
+impl<'a> SubjectIdentity<'a> {
+    pub fn matches(&self, other: &SubjectIdentity<'_>) -> bool {
+        if self.stype != other.stype {
+            return false;
+        }
+
+        let prov_a = crate::providers::models::ProviderKind::parse(self.provider);
+        let prov_b = crate::providers::models::ProviderKind::parse(other.provider);
+        let same_provider = match (prov_a, prov_b) {
+            (Some(pa), Some(pb)) => pa == pb,
+            _ => self
+                .provider
+                .trim()
+                .eq_ignore_ascii_case(other.provider.trim()),
+        };
+
+        if !same_provider {
+            return false;
+        }
+
+        if !self.subject_id.is_empty() && !other.subject_id.is_empty() {
+            return self.subject_id == other.subject_id;
+        }
+
+        let clean_a = crate::providers::moviebox::clean_moviebox_title(self.title);
+        let clean_b = crate::providers::moviebox::clean_moviebox_title(other.title);
+        if !clean_a.is_empty() && clean_a.eq_ignore_ascii_case(&clean_b) {
+            let year_a = self.release_year.trim();
+            let year_b = other.release_year.trim();
+            if !year_a.is_empty() && !year_b.is_empty() {
+                return year_a == year_b;
+            }
+            return true;
+        }
+        false
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub id: String,

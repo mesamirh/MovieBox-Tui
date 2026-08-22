@@ -234,6 +234,10 @@ impl App {
                 self.handle_playback(action).await;
             }
 
+            Action::ToggleFavorite | Action::ShowFavorites | Action::OpenFavorite(..) => {
+                self.handle_favorites(action).await;
+            }
+
             Action::DownloadStream(..)
             | Action::StartDownload(..)
             | Action::PromptDownloadEpisode

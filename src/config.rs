@@ -84,6 +84,10 @@ pub fn history_path() -> Option<PathBuf> {
     data_dir().map(|dir| dir.join("history.json"))
 }
 
+pub fn favorites_path() -> Option<PathBuf> {
+    data_dir().map(|dir| dir.join("favorites.json"))
+}
+
 pub fn load() -> Config {
     config_path()
         .and_then(|p| std::fs::read_to_string(p).ok())

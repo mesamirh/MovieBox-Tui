@@ -295,18 +295,24 @@ impl App {
                     Constraint::Length(1),
                     Constraint::Length(3),
                     Constraint::Length(1),
+                    Constraint::Length(1),
                     Constraint::Min(0),
                     Constraint::Length(1),
                     Constraint::Length(1),
                 ])
                 .split(area);
 
-            if row == vertical_chunks[6].y {
+            if row == vertical_chunks[7].y {
                 self.handle_home_mode_click(col, area.width);
                 return None;
             }
-            if row == vertical_chunks[7].y {
+            if row == vertical_chunks[8].y {
                 self.handle_home_util_click(col, area.width);
+                return None;
+            }
+            if self.state.favorites_landing_visible()
+                && self.handle_favorites_landing_click(col, row, vertical_chunks[6])
+            {
                 return None;
             }
 
@@ -357,6 +363,8 @@ impl App {
 
         if row >= search_bar_area.y && row < search_bar_area.y + search_bar_area.height {
             self.state.input_mode = InputMode::Editing;
+            self.state.favorites_focus = false;
+            self.state.favorites_landing_state.select(None);
             return None;
         }
 
@@ -395,6 +403,54 @@ impl App {
         }
 
         None
+    }
+
+    /// Mirrors the layout math in `screens::home::render_favorites_landing`
+    /// so hitboxes stay in sync with what's drawn. Returns `true` if the
+    /// click landed inside the favorites card (handled either way).
+    fn handle_favorites_landing_click(&mut self, col: u16, row: u16, area: Rect) -> bool {
+        let row_count = self.state.favorites_landing_items().len() as u16;
+        if row_count == 0 || area.height < 2 || area.width < 20 {
+            return false;
+        }
+        let overflow = self
+            .state
+            .favorites
+            .items
+            .len()
+            .saturating_sub(row_count as usize);
+        let overflow_row = u16::from(overflow > 0);
+        let card_width = area.width.clamp(20, 56);
+        let content_height = (1 + row_count + overflow_row).min(area.height);
+        let card = Rect {
+            x: area.x + area.width.saturating_sub(card_width) / 2,
+            y: area.y,
+            width: card_width,
+            height: content_height,
+        };
+        if !card.contains(ratatui::layout::Position::new(col, row)) {
+            return false;
+        }
+
+        let rel_row = row - card.y;
+        if rel_row == 0 {
+            // Header row; no action.
+        } else if rel_row <= row_count {
+            let idx = (rel_row - 1) as usize;
+            let prev_selected = if self.state.favorites_focus {
+                self.state.favorites_landing_state.selected()
+            } else {
+                None
+            };
+            self.state.favorites_focus = true;
+            self.state.favorites_landing_state.select(Some(idx));
+            if prev_selected == Some(idx) {
+                self.action_sender.send(Action::OpenFavorite(idx)).ok();
+            }
+        } else if overflow > 0 && rel_row == row_count + 1 {
+            self.action_sender.send(Action::ShowFavorites).ok();
+        }
+        true
     }
 
     fn handle_home_mode_click(&mut self, col: u16, width: u16) {

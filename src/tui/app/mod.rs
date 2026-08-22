@@ -5,6 +5,7 @@ use crate::tui::{action::Action, state::AppState, theme::Theme};
 
 mod addons;
 mod download;
+mod favorites;
 mod keyboard;
 mod mouse;
 mod navigation;
