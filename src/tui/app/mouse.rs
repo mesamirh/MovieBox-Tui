@@ -1,7 +1,6 @@
 use super::App;
 use crate::tui::{
     action::Action,
-    overlay::NotificationKind,
     state::{BrowsePreset, DetailsPane, InputMode, Screen},
 };
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -711,13 +710,7 @@ impl App {
                 self.state.resource_list_state.select(Some(target_idx));
 
                 if prev_selected == Some(target_idx) {
-                    if self.state.is_playing {
-                        self.state.notify(
-                            NotificationKind::Warning,
-                            "Playback already active",
-                            "Stop the current player before starting another.",
-                        );
-                    } else if !self.state.is_resolving_playback
+                    if !self.state.is_resolving_playback
                         && self.state.last_playback_launch.elapsed().as_millis() >= 500
                     {
                         self.action_sender.send(Action::PlayStream(false)).ok();

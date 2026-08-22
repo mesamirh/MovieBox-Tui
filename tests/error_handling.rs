@@ -130,18 +130,61 @@ async fn test_rapid_playback_invocations_debounced_and_single_flight() {
 }
 
 #[tokio::test]
-async fn test_active_player_session_blocks_duplicate_playback_and_recovers_on_exit() {
+async fn test_new_playback_request_replaces_active_session_instead_of_blocking() {
     let mut app = App::new();
     app.state_mut().is_playing = true;
+    let notifications_before = app.state().notifications.len();
 
+    // A new playback request while one is already active must no longer be
+    // refused with a "Playback already active" warning; it should be free to
+    // proceed and hand off from the old session.
     let res = app.handle_action(Action::PlayStream(false)).await;
     assert_eq!(res, None);
-    assert!(!app.state().notifications.is_empty());
-    let notif = app.state().notifications.back().unwrap();
-    assert_eq!(notif.kind, NotificationKind::Warning);
-    assert_eq!(notif.title, "Playback already active");
+    assert_eq!(app.state().notifications.len(), notifications_before);
+    assert!(
+        app.state()
+            .notifications
+            .iter()
+            .all(|n| n.title != "Playback already active")
+    );
+}
 
-    app.handle_action(Action::PlayerExited).await;
+#[tokio::test]
+async fn test_stale_player_exit_does_not_clobber_a_newer_playback_session() {
+    let mut app = App::new();
+
+    // Simulate a second launch having already bumped the generation past the
+    // exiting (replaced) session's generation.
+    app.state_mut().playback_generation = 5;
+    app.state_mut().is_playing = true;
+    app.state_mut().is_resolving_playback = true;
+
+    app.handle_action(Action::PlayerExited(3)).await;
+    assert!(app.state().is_playing, "stale exit must not stop playback");
+    assert!(app.state().is_resolving_playback);
+
+    app.handle_action(Action::PlayerExited(5)).await;
     assert!(!app.state().is_playing);
     assert!(!app.state().is_resolving_playback);
+}
+
+#[tokio::test]
+async fn test_stale_player_crash_is_suppressed_but_current_generation_crash_notifies() {
+    let mut app = App::new();
+    app.state_mut().playback_generation = 5;
+    app.state_mut().is_playing = true;
+    let notifications_before = app.state().notifications.len();
+
+    app.handle_action(Action::PlayerCrashed(3, Some(1), "stale error".to_string()))
+        .await;
+    assert!(app.state().is_playing, "stale crash must not stop playback");
+    assert_eq!(app.state().notifications.len(), notifications_before);
+
+    app.handle_action(Action::PlayerCrashed(5, Some(1), "real error".to_string()))
+        .await;
+    assert!(!app.state().is_playing);
+    assert_eq!(app.state().notifications.len(), notifications_before + 1);
+    let notif = app.state().notifications.back().unwrap();
+    assert_eq!(notif.kind, NotificationKind::Error);
+    assert_eq!(notif.title, "Player Error");
 }

@@ -230,7 +230,7 @@ impl App {
             | Action::UpdateProgress { .. }
             | Action::ReconcileHistory
             | Action::PlayerCrashed(..)
-            | Action::PlayerExited => {
+            | Action::PlayerExited(..) => {
                 self.handle_playback(action).await;
             }
 

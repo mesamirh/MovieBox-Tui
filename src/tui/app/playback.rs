@@ -122,6 +122,17 @@ impl App {
             return;
         }
 
+        // Replace whatever's currently playing instead of blocking on it: signal
+        // the previous session's watcher to kill its player and hand off cleanly
+        // (progress is still saved; see the `was_replaced` handling below).
+        if let Some(stop_tx) = self.state.playback_stop.take() {
+            let _ = stop_tx.send(());
+        }
+        self.state.playback_generation = self.state.playback_generation.wrapping_add(1);
+        let generation = self.state.playback_generation;
+        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+        self.state.playback_stop = Some(stop_tx);
+
         let history_item = self.build_watch_history_item();
         let resume_seconds = if let Some(item) = &history_item {
             self.state
@@ -200,7 +211,7 @@ impl App {
                 .as_ref()
                 .map(|(p, s, se, ep)| (p.as_str(), s.as_str(), *se, *ep));
 
-            let mut command = crate::tui::player::command(
+            let mut command: tokio::process::Command = crate::tui::player::command(
                 kind,
                 &link,
                 local_subtitle.as_deref(),
@@ -208,7 +219,8 @@ impl App {
                 window,
                 resume_seconds,
                 tracker_ref,
-            );
+            )
+            .into();
             command.stdin(std::process::Stdio::null());
             command.stdout(std::process::Stdio::null());
             command.stderr(std::process::Stdio::piped());
@@ -220,7 +232,6 @@ impl App {
             }
             #[cfg(windows)]
             {
-                use std::os::windows::process::CommandExt;
                 command.creation_flags(0x08000000);
             }
 
@@ -229,59 +240,94 @@ impl App {
                     let start_time = std::time::Instant::now();
                     let stderr_stream = child.stderr.take();
 
-                    tokio::task::spawn_blocking(move || {
+                    let stderr_task = tokio::spawn(async move {
                         let mut error_output = String::new();
                         if let Some(mut stderr) = stderr_stream {
-                            use std::io::Read;
-                            let _ = stderr.read_to_string(&mut error_output);
+                            use tokio::io::AsyncReadExt;
+                            let _ = stderr.read_to_string(&mut error_output).await;
                         }
+                        error_output
+                    });
 
-                        let result = child.wait();
-
-                        if let Ok(status) = result {
-                            let clean_error = error_output.trim().to_string();
-                            if !status.success()
-                                && start_time.elapsed().as_secs() < 3
-                                && !clean_error.is_empty()
-                            {
-                                sender
-                                    .send(Action::PlayerCrashed(status.code(), clean_error))
-                                    .ok();
-                            } else {
-                                sender.send(Action::ReconcileHistory).ok();
-
-                                if let Some(item) = history_item {
-                                    let elapsed = start_time.elapsed().as_secs();
-                                    if elapsed >= 30 {
-                                        let duration = item.duration_seconds;
-                                        let start_pos = resume_seconds.unwrap_or(0);
-                                        let total_pos = start_pos.saturating_add(elapsed);
-                                        let progress = if let Some(d) = duration {
-                                            total_pos.min(d)
-                                        } else {
-                                            total_pos
-                                        };
-                                        let completed = duration.is_some_and(|d| {
-                                            d > 0 && progress >= (d as f64 * 0.90) as u64
-                                        });
-                                        sender
-                                            .send(Action::UpdateProgress {
-                                                item,
-                                                progress,
-                                                duration,
-                                                completed,
-                                            })
-                                            .ok();
+                    // Wait for the child to exit on its own, unless a newer
+                    // playback request explicitly asks us to hand off. A
+                    // dropped-without-sending stop channel (e.g. the app
+                    // quitting) must NOT be treated as a stop request, since
+                    // playback is expected to keep running after the TUI
+                    // exits.
+                    let mut stop_rx = Some(stop_rx);
+                    let mut was_replaced = false;
+                    let wait_result = loop {
+                        match stop_rx.take() {
+                            Some(mut rx) => {
+                                tokio::select! {
+                                    status = child.wait() => break status,
+                                    signal = &mut rx => {
+                                        match signal {
+                                            Ok(()) => {
+                                                was_replaced = true;
+                                                let _ = child.kill().await;
+                                                break child.wait().await;
+                                            }
+                                            Err(_) => continue,
+                                        }
                                     }
                                 }
                             }
+                            None => break child.wait().await,
                         }
+                    };
 
-                        if let Some(path) = temporary_subtitle {
-                            let _ = std::fs::remove_file(path);
+                    let error_output = stderr_task.await.unwrap_or_default();
+
+                    if let Ok(status) = wait_result {
+                        let clean_error = error_output.trim().to_string();
+                        if !was_replaced
+                            && !status.success()
+                            && start_time.elapsed().as_secs() < 3
+                            && !clean_error.is_empty()
+                        {
+                            sender
+                                .send(Action::PlayerCrashed(
+                                    generation,
+                                    status.code(),
+                                    clean_error,
+                                ))
+                                .ok();
+                        } else {
+                            sender.send(Action::ReconcileHistory).ok();
+
+                            if let Some(item) = history_item {
+                                let elapsed = start_time.elapsed().as_secs();
+                                if elapsed >= 30 {
+                                    let duration = item.duration_seconds;
+                                    let start_pos = resume_seconds.unwrap_or(0);
+                                    let total_pos = start_pos.saturating_add(elapsed);
+                                    let progress = if let Some(d) = duration {
+                                        total_pos.min(d)
+                                    } else {
+                                        total_pos
+                                    };
+                                    let completed = duration.is_some_and(|d| {
+                                        d > 0 && progress >= (d as f64 * 0.90) as u64
+                                    });
+                                    sender
+                                        .send(Action::UpdateProgress {
+                                            item,
+                                            progress,
+                                            duration,
+                                            completed,
+                                        })
+                                        .ok();
+                                }
+                            }
                         }
-                        sender.send(Action::PlayerExited).ok();
-                    });
+                    }
+
+                    if let Some(path) = temporary_subtitle {
+                        let _ = tokio::fs::remove_file(path).await;
+                    }
+                    sender.send(Action::PlayerExited(generation)).ok();
                 }
                 Err(error) => {
                     log::error!(
@@ -294,11 +340,12 @@ impl App {
                     }
                     sender
                         .send(Action::PlayerCrashed(
+                            generation,
                             None,
                             format!("Failed to spawn player executable: {error}"),
                         ))
                         .ok();
-                    sender.send(Action::PlayerExited).ok();
+                    sender.send(Action::PlayerExited(generation)).ok();
                 }
             }
         });
@@ -309,14 +356,6 @@ impl App {
     pub(super) async fn handle_playback(&mut self, action: Action) -> Option<()> {
         match action {
             Action::PlayStream(open_with) => {
-                if self.state.is_playing {
-                    self.state.notify(
-                        NotificationKind::Warning,
-                        "Playback already active",
-                        "Stop the current player before starting another.",
-                    );
-                    return None;
-                }
                 if self.state.is_resolving_playback
                     || self.state.last_playback_launch.elapsed().as_millis() < 500
                 {
@@ -537,14 +576,6 @@ impl App {
                 }
             }
             Action::LaunchMpv(link, subtitle_url) => {
-                if self.state.is_playing {
-                    self.state.notify(
-                        NotificationKind::Warning,
-                        "Playback already active",
-                        "Stop the current player before starting another.",
-                    );
-                    return None;
-                }
                 if self.state.last_playback_launch.elapsed().as_millis() < 500 {
                     return None;
                 }
@@ -656,11 +687,22 @@ impl App {
             Action::ReconcileHistory => {
                 self.state.history.reconcile_pending_playback_states();
             }
-            Action::PlayerExited => {
-                self.state.is_playing = false;
-                self.state.is_resolving_playback = false;
+            Action::PlayerExited(generation) => {
+                // A superseded session (the user switched to a different
+                // title) exits after the new one already started; don't let
+                // its stale exit clear the flags for the session that's
+                // actually playing now.
+                if generation == self.state.playback_generation {
+                    self.state.is_playing = false;
+                    self.state.is_resolving_playback = false;
+                }
             }
-            Action::PlayerCrashed(code, error_msg) => {
+            Action::PlayerCrashed(generation, code, error_msg) => {
+                if generation != self.state.playback_generation {
+                    // A replaced session's forced-kill exit can look like a
+                    // crash; the user already moved on, so stay quiet.
+                    return None;
+                }
                 self.state.is_playing = false;
                 self.state.is_resolving_playback = false;
                 let code_str = code
