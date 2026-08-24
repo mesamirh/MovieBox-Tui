@@ -2,6 +2,15 @@ pub mod tracker;
 
 use std::{path::Path, process::Command};
 
+/// Preferred audio track languages, most preferred first. Falls back to the
+/// container's default track if none of these are present.
+const PREFERRED_AUDIO_LANGS: &str = "eng,en,english";
+
+/// Preferred embedded subtitle track languages, most preferred first. Only
+/// affects tracks muxed into the container; external subtitle files passed
+/// via `subtitle` are shown regardless of this preference.
+const PREFERRED_SUBTITLE_LANGS: &str = "eng,en,english";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerKind {
     Mpv,
@@ -222,6 +231,9 @@ fn mpv_command(
         command.arg(format!("{opt}={subtitle}"));
     }
 
+    command.arg(format!("{prefix}alang={PREFERRED_AUDIO_LANGS}"));
+    command.arg(format!("{prefix}slang={PREFERRED_SUBTITLE_LANGS}"));
+
     command.arg(url);
 
     command
@@ -333,6 +345,9 @@ fn vlc_command(
     if let Some(subtitle) = subtitle {
         command.arg(format!("--sub-file={subtitle}"));
     }
+
+    command.arg(format!("--audio-language={PREFERRED_AUDIO_LANGS}"));
+    command.arg(format!("--sub-language={PREFERRED_SUBTITLE_LANGS}"));
 
     command.arg(url);
     command
