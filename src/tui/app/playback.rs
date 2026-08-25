@@ -240,30 +240,47 @@ impl App {
 
                         if let Ok(status) = result {
                             let clean_error = error_output.trim().to_string();
-                            if !status.success()
-                                && start_time.elapsed().as_secs() < 3
-                                && !clean_error.is_empty()
-                            {
+                            if !status.success() {
+                                let message = if clean_error.is_empty() {
+                                    #[cfg(unix)]
+                                    {
+                                        use std::os::unix::process::ExitStatusExt;
+                                        match status.signal() {
+                                            Some(sig) => format!(
+                                                "Player terminated by signal {sig} (no output captured)."
+                                            ),
+                                            None => {
+                                                "Player exited with no output captured.".to_string()
+                                            }
+                                        }
+                                    }
+                                    #[cfg(not(unix))]
+                                    {
+                                        "Player exited with no output captured.".to_string()
+                                    }
+                                } else {
+                                    clean_error
+                                };
                                 sender
-                                    .send(Action::PlayerCrashed(status.code(), clean_error))
+                                    .send(Action::PlayerCrashed(status.code(), message))
                                     .ok();
                             } else {
                                 sender.send(Action::ReconcileHistory).ok();
 
                                 if let Some(item) = history_item {
                                     let elapsed = start_time.elapsed().as_secs();
-                                    if elapsed >= 30 {
-                                        let duration = item.duration_seconds;
+                                    let duration = item.duration_seconds;
+                                    // Without a known duration we can't tell playback time
+                                    // from time spent paused/buffering, so `start + elapsed`
+                                    // isn't trustworthy; skip saving rather than risk the
+                                    // resume point drifting past the end of the file.
+                                    if elapsed >= 30
+                                        && let Some(d) = duration
+                                    {
                                         let start_pos = resume_seconds.unwrap_or(0);
-                                        let total_pos = start_pos.saturating_add(elapsed);
-                                        let progress = if let Some(d) = duration {
-                                            total_pos.min(d)
-                                        } else {
-                                            total_pos
-                                        };
-                                        let completed = duration.is_some_and(|d| {
-                                            d > 0 && progress >= (d as f64 * 0.90) as u64
-                                        });
+                                        let progress = start_pos.saturating_add(elapsed).min(d);
+                                        let completed =
+                                            d > 0 && progress >= (d as f64 * 0.90) as u64;
                                         sender
                                             .send(Action::UpdateProgress {
                                                 item,
