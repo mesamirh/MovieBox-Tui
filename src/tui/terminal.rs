@@ -4,8 +4,10 @@ fn env(name: &str) -> String {
 
 pub fn uses_basic_ui() -> bool {
     let term = env("TERM");
-
-    term == "dumb" || term == "linux"
+    if term == "dumb" || term == "linux" {
+        return true;
+    }
+    crate::tui::theme::ColorSupport::current() == crate::tui::theme::ColorSupport::Basic
 }
 
 pub fn should_query_images() -> bool {
@@ -64,7 +66,9 @@ pub fn background_is_light() -> bool {
         return matches!(background, 7 | 10..=15);
     }
 
-    std::env::var("TERM_BACKGROUND").is_ok_and(|value| value.eq_ignore_ascii_case("light"))
+    std::env::var("TERM_BACKGROUND")
+        .or_else(|_| std::env::var("BACKGROUND"))
+        .is_ok_and(|value| value.eq_ignore_ascii_case("light"))
 }
 
 pub fn set_window_title(title: &str) -> std::io::Result<()> {

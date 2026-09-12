@@ -12,7 +12,11 @@ pub struct Config {
     pub active_mode: String,
     pub active_provider: ProviderKind,
     pub active_theme: String,
-    pub bdix_enabled: bool,
+    pub moviebox_enabled: bool,
+    pub fourkhdhub_enabled: bool,
+    pub bdix_circleftp_enabled: bool,
+    pub bdix_dhakaflix_enabled: bool,
+    pub bdix_probed: bool,
     pub streaming_enabled: bool,
     pub tv_enabled: bool,
     pub addons_enabled: bool,
@@ -27,7 +31,11 @@ impl Default for Config {
             active_mode: "streaming".to_string(),
             active_provider: ProviderKind::MovieBox,
             active_theme: String::new(),
-            bdix_enabled: false,
+            moviebox_enabled: true,
+            fourkhdhub_enabled: true,
+            bdix_circleftp_enabled: false,
+            bdix_dhakaflix_enabled: false,
+            bdix_probed: false,
             streaming_enabled: true,
             tv_enabled: true,
             addons_enabled: false,
@@ -150,7 +158,19 @@ pub fn load() -> Config {
     };
     if path.exists() {
         if let Ok(content) = std::fs::read_to_string(&path) {
-            if let Ok(config) = serde_json::from_str::<Config>(&content) {
+            let mut val: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+            let old_bdix = val
+                .get("bdix_enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if let Some(obj) = val.as_object_mut() {
+                obj.remove("bdix_enabled");
+            }
+            if let Ok(mut config) = serde_json::from_value::<Config>(val) {
+                if old_bdix {
+                    config.bdix_circleftp_enabled = true;
+                    config.bdix_dhakaflix_enabled = true;
+                }
                 return config;
             }
         }

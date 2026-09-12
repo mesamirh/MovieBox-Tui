@@ -146,6 +146,7 @@ impl ColorSupport {
 pub(crate) fn classify_terminal(colorterm: &str, term: &str, term_program: &str) -> ColorSupport {
     let colorterm = colorterm.to_lowercase();
     let term = term.to_lowercase();
+    let term_program = term_program.to_lowercase();
     let truecolor = colorterm == "truecolor"
         || colorterm == "24bit"
         || term.contains("truecolor")
@@ -153,25 +154,30 @@ pub(crate) fn classify_terminal(colorterm: &str, term: &str, term_program: &str)
         || term.contains("ghostty")
         || term.starts_with("foot")
         || term.contains("alacritty")
-        || term_program == "iTerm.app"
-        || term_program == "Hyper"
-        || term_program == "Tabby"
-        || term_program == "WezTerm"
-        || term_program == "WarpTerminal"
+        || term_program == "iterm.app"
+        || term_program == "hyper"
+        || term_program == "tabby"
+        || term_program == "wezterm"
+        || term_program == "warpterminal"
+        || term_program == "warp"
         || term_program == "vscode"
-        || term_program == "ghostty";
+        || term_program == "ghostty"
+        || term_program == "konsole"
+        || term_program == "xfce4-terminal"
+        || std::env::var("VTE_VERSION").is_ok()
+        || std::env::var("WEZTERM_EXECUTABLE").is_ok()
+        || std::env::var("ALACRITTY_WINDOW_ID").is_ok()
+        || std::env::var("TILIX_ID").is_ok();
     let basic =
         term == "dumb" || term == "linux" || term.contains("fbterm") || term.starts_with("vt");
-    let apple_term = term.contains("apple") || term_program == "Apple_Terminal";
+    let apple_term = term.contains("apple") || term_program == "apple_terminal";
     let has_256 = term.contains("256") || term.contains("xterm") || term.contains("screen");
-    if basic || (apple_term && !has_256) || term == "xterm" {
+    if basic || (apple_term && !has_256) || (term == "xterm" && !truecolor) {
         ColorSupport::Basic
     } else if truecolor {
         ColorSupport::Truecolor
-    } else if has_256 {
+    } else if has_256 || cfg!(target_os = "windows") {
         ColorSupport::Color256
-    } else if cfg!(target_os = "windows") {
-        ColorSupport::Truecolor
     } else {
         ColorSupport::Basic
     }
@@ -966,6 +972,10 @@ mod tests {
             ColorSupport::Truecolor
         );
         assert_eq!(
+            classify_terminal("truecolor", "xterm", ""),
+            ColorSupport::Truecolor
+        );
+        assert_eq!(
             classify_terminal("", "xterm-kitty", ""),
             ColorSupport::Truecolor
         );
@@ -992,12 +1002,26 @@ mod tests {
         );
         assert_eq!(classify_terminal("", "vt100", ""), ColorSupport::Basic);
         assert_eq!(classify_terminal("", "dumb", ""), ColorSupport::Basic);
+        assert_eq!(classify_terminal("", "xterm", ""), ColorSupport::Basic);
         assert_eq!(
             classify_terminal("", "xterm", "Apple_Terminal"),
             ColorSupport::Basic
         );
+        assert_eq!(
+            classify_terminal("", "", "iterm.app"),
+            ColorSupport::Truecolor
+        );
+        assert_eq!(
+            classify_terminal("", "", "wezterm"),
+            ColorSupport::Truecolor
+        );
+        assert_eq!(
+            classify_terminal("", "", "warpterminal"),
+            ColorSupport::Truecolor
+        );
+        assert_eq!(classify_terminal("", "", "warp"), ColorSupport::Truecolor);
         #[cfg(target_os = "windows")]
-        assert_eq!(classify_terminal("", "", ""), ColorSupport::Truecolor);
+        assert_eq!(classify_terminal("", "", ""), ColorSupport::Color256);
         #[cfg(not(target_os = "windows"))]
         assert_eq!(classify_terminal("", "", ""), ColorSupport::Basic);
     }
@@ -1098,5 +1122,16 @@ mod tests {
         assert_eq!(theme_color(with_fg, Color::Blue), Color::Red);
         let without_fg = Style::default();
         assert_eq!(theme_color(without_fg, Color::Blue), Color::Blue);
+    }
+    #[test]
+    fn test_classify_terminal_konsole_and_xfce4_are_truecolor() {
+        assert_eq!(
+            classify_terminal("", "xterm-256color", "Konsole"),
+            ColorSupport::Truecolor
+        );
+        assert_eq!(
+            classify_terminal("", "xterm-256color", "xfce4-terminal"),
+            ColorSupport::Truecolor
+        );
     }
 }

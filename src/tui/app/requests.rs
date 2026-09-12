@@ -132,8 +132,7 @@ impl App {
                 let lower_query = query.trim().to_lowercase();
 
                 if lower_query == "/history"
-                    && (self.state.mode() == crate::tui::state::AppMode::Streaming
-                        || self.state.mode() == crate::tui::state::AppMode::Addon)
+                    && self.state.mode() == crate::tui::state::AppMode::Streaming
                 {
                     self.state.input_mode = InputMode::Normal;
                     self.state.is_loading = false;

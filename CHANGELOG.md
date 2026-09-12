@@ -1,5 +1,60 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- **Modal and Overlay Declutter — Keyhint Footer Removal**:
+  - Removed redundant boilerplate footer keyhint bars (`render_modal_footer` / `render_footer`) and top divider borders across all modal dialogs and overlay pickers (Settings, Streaming Sources, Themes, Players, Subtitles, TV Config, Addon Manager, Provider popup).
+  - Removed duplicate and truncated popup title headers on option-selection pickers (Media Player, Themes, Sources) so they cleanly present options without repeating row labels.
+  - Compacted Settings modal vertical geometry to snap directly to the search bar row position and eliminated dead spacer gaps between category tabs and content rows.
+  - Added background dimming overlays behind all modal pickers to prevent background text bleed-through.
+  - Streamlined Settings rows into single-line entries with aligned label and value spans, removing redundant explanatory subtexts.
+  - Expanded Settings → Content Modes from a coarse global toggle to individual provider controls covering MovieBox, 4KHDHub, CircleFTP (BDIX), and DhakaFlix (BDIX) alongside Streaming and Live TV mode toggles.
+  - Added an active provider guard ensuring at least one streaming provider remains enabled at all times and automatically falling back to the next available source if the currently active provider is disabled.
+  - Preserved backward compatibility with legacy `bdix_enabled` configs by automatically migrating enabled BDIX state to both CircleFTP and DhakaFlix flags on startup.
+- **Automatic BDIX Network Availability Probing**:
+  - Added non-blocking HTTP network probes (`probe_url`) on first application startup with a 3-second timeout against CircleFTP and DhakaFlix endpoints, automatically enabling accessible optical mirrors on local networks while disabling unreachable ones.
+  - Added a dedicated "Re-check BDIX Network" action in Settings → Maintenance allowing users to manually re-probe and refresh BDIX provider availability at any time.
+- **Unified Streaming and Stremio Addons Engine**:
+  - Merged separate Addon Mode into standard Streaming Mode; Stremio Addons (`ProviderKind::Addons`) is now a first-class streaming provider selectable directly via `Ctrl+P`.
+  - Simplified application state model by removing `AppMode::Addon` and `AppState.is_addon_mode`, making navigation two-mode (`Streaming` and `Live TV`).
+  - Routed Addon Manager dialog access through `/config` when the active provider is `Addons`.
+
+- **Provider Selection Popup UX and Layout Unification**:
+  - Replaced manual paragraph iteration in `render_provider_popup` with `ratatui::widgets::List` and canonical `selection_style`, eliminating competing dual-indicator visuals (left bar and background highlight) into a single cohesive selection cue.
+  - Added persistent `✓` active provider prefix glyph in `theme.success`, ensuring the currently active source remains visually distinguishable while navigating through options.
+  - Added compact key hints footer (`[↑↓] [↵] [Esc]`) anchored to the bottom of the popup with automatic geometry expansion in `provider_popup_bounds`.
+  - Styled popup block title with `theme.title` matching modal frame standards and restored unselected item labels to `theme.text`.
+- **TUI Declutter and OS/Terminal Native-Feel Adaptation**:
+  - Standardized `key_hint` with split styling (`[`/`]` in `theme.overlay0`, key in `theme.shortcut`, label in `theme.subtext1`), improving shortcut readability across all modals and popups.
+  - Stripped instructional "Press X" prose from stream failure messages, details error cards, and the update modal.
+  - Streamlined home screen bottom bar on compact terminals by dropping redundant mode word labels and keeping clean shortcut glyphs.
+  - Trimmed dynamic rotating search placeholder hints to three focused prompts per mode.
+  - Added Truecolor detection support for `Konsole` and `xfce4-terminal` via `TERM_PROGRAM`.
+  - Added `BACKGROUND` environment variable fallback for light/dark terminal detection.
+  - Updated Help modal title from "Help · Streaming Mode" to clean "Help · Streaming".
+- **Universal Solid Highlight Bar Selection Overhaul**:
+  - Replaced floating cursor and indicator glyphs (`▌`, `>`, `▸`) across all application screens with full-width solid inverted highlight bars (`Modifier::REVERSED` with `theme.highlight` and dark bold text), unifying selection styling across the entire TUI to match the provider selection standard.
+  - Upgraded search results cards by eliminating the floating vertical `▌` indicator paragraph and styling the selected card's title with a tight inverted highlight pill (`" " + title + " "` in `Modifier::REVERSED`), stopping exactly where the title text ends rather than stretching across empty card space, preserving rich metadata badge colors on transparent background underneath, and recovering 2 horizontal columns in `item_slot_rects`.
+  - Refactored Continue Watching and Favorites landing deck lists to use empty highlight symbols (`""`) with clean 2-space padding, ensuring the active row renders as an uninterrupted solid highlight bar.
+  - Converted search autocomplete suggestions to use empty highlight symbols (`""`) with 1-space leading padding, rendering active suggestions as solid highlight bars.
+  - Updated all four Media Details panes (Audio, Seasons, Episodes, Streams) to use canonical `overlay::selection_style` with `Modifier::REVERSED` and empty highlight symbols (`""`), eliminating the `▌` glyph and horizontal layout shifts when alternating focus between panes.
+  - Unified Provider popup, TV playlist manager, Addons manager, and overlay modal pickers (themes, players, subtitles, browse presets) by removing leading `▌` symbols and rendering clean solid highlight bars.
+- **Terminal Color Support and Capability Detection Precision**:
+  - Fixed a critical precedence bug in `classify_terminal` where `term == "xterm"` degraded truecolor-capable terminals to 16-color Basic even when `COLORTERM=truecolor` was set.
+  - Made `term_program` matching case-insensitive across all checks (`iterm.app`, `hyper`, `tabby`, `wezterm`, `warpterminal`, `warp`, `vscode`, `ghostty`, `konsole`, `xfce4-terminal`, `apple_terminal`).
+  - Added truecolor recognition for VTE-based terminals via `VTE_VERSION` (GNOME Terminal, Tilix), Warp via `warp` / `WARP_IS_LOCAL_SHELL_SESSION`, and Alacritty / WezTerm socket and executable environment variables.
+  - Corrected Windows fallback in `classify_terminal` to `ColorSupport::Color256` instead of `Truecolor`, preventing legacy Windows ConHost sessions from receiving garbled truecolor escapes while preserving automatic `Truecolor` for Windows Terminal via `WT_SESSION`.
+  - Connected `uses_basic_ui` directly to `ColorSupport::Basic`, ensuring all basic and 16-color terminals automatically receive plain borders and simplified ASCII controls.
+### Removed
+- **Legacy Addon Mode Routing and Keybindings**:
+  - Removed `Ctrl+A` shortcut and the bottom bar Addon Mode button.
+  - Removed obsolete `Action::ToggleAddonMode`.
+
+
+### Fixed
+- **Notification Toast Title Text Coloring**:
+  - Styled notification toast title spans with `badge_style` rather than the default foreground text style, ensuring that Error (red), Warning (yellow), Success (green), and Info (blue) toasts render consistent title colors matching their borders and badges.
 ## [0.1.18] - 2026-09-06
 
 ### Added

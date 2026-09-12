@@ -22,7 +22,6 @@ MovieBox-TUI is designed for fast keyboard navigation with complete mouse suppor
 | **`x` / `X`** | Cancel active download and preserve partial `.part` data |
 | **`Ctrl+S`** | Switch to standard **Streaming Mode** |
 | **`Ctrl+T`** | Toggle / switch to **TV Mode** |
-| **`Ctrl+A`** | Toggle / switch to **Addon Mode** |
 | **`?`** | Open interactive in-app help menu |
 | **`Ctrl+C` / `q`** | Quit application and restore terminal |
 
@@ -59,7 +58,7 @@ All popup dialogs (Theme picker, Browse categories, Provider menu, Settings Medi
 ## Mode-Specific Controls
 
 ### Streaming Mode
-- **`Ctrl+P`**: Cycle content providers (`MovieBox` → `4KHDHub` → `BDIX`). On the Details screen, re-searches and fetches alternate streams for the current movie in-place.
+- **`Ctrl+P`**: Cycle content providers (`MovieBox` → `4KHDHub` → `BDIX` → `Addons`). On the Details screen, re-searches and fetches alternate streams for the current movie in-place.
 - **`←` / `→` / `h` / `l` / `Tab` / `Shift+Tab`**: Switch Details screen selector panes (Audio Languages, Seasons, Episodes, Streams).
 - **`Enter`**: Play selected stream or open selected title.
 - **`d`**: Download current episode or full season batch.
@@ -75,15 +74,12 @@ All popup dialogs (Theme picker, Browse categories, Provider menu, Settings Medi
 - **`Enter`**: Play selected TV channel immediately with default player.
 - **`r`**: Reload all active M3U playlist sources.
 - **`/list`**: Show all loaded channels.
-### Addon Mode (HTTP Addons)
-- **`/settings`**: Open Settings Hub to manage addons and configuration.
+### Stremio Addons Provider
+- **`/config`**: Open the Addon Manager directly when the active provider is `Addons`.
 - **`Enter`**: Select title or play resolved stream.
 - **`d`**: Download HTTP stream release.
 - **`r`**: Refresh addon catalog search results.
 - **`f`**: Favorite / unfavorite the selected title (Home & Details screens).
-- **`/history`**: Open watch history (`Space` or `P` to instantly resume recorded episode/movie).
-- **`/favorites`**: Open your starred titles.
-- **`/clear`**: Clear active search query and return to landing.
 ## Mouse Controls
 
 | Action | Result |

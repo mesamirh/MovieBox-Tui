@@ -96,7 +96,6 @@ impl App {
         let current_mode = self.state.mode();
         let ctrl_s = crate::tui::text::CTRL_S_STR;
         let ctrl_t = crate::tui::text::CTRL_T_STR;
-        let ctrl_a = crate::tui::text::CTRL_A_STR;
 
         let will_handle = !matches!(
             &parsed,
@@ -124,7 +123,9 @@ impl App {
                     if self.state.is_tv_mode {
                         self.action_sender.send(Action::ShowTvConfig).ok();
                         return Some(true);
-                    } else if self.state.is_addon_mode {
+                    } else if self.state.active_provider
+                        == crate::providers::models::ProviderKind::Addons
+                    {
                         self.action_sender.send(Action::ShowAddonManager).ok();
                         return Some(true);
                     }
@@ -146,7 +147,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!("Command /browse is available in Streaming Mode ({ctrl_s}) or Addon Mode ({ctrl_a})."),
+                        format!("Command /browse is available in Streaming Mode ({ctrl_s})."),
                     );
                 } else {
                     self.action_sender.send(Action::ShowBrowseMenu).ok();
@@ -158,7 +159,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!("Command /history is available in Streaming Mode ({ctrl_s}) or Addon Mode ({ctrl_a})."),
+                        format!("Command /history is available in Streaming Mode ({ctrl_s})."),
                     );
                     Some(true)
                 } else {
@@ -170,7 +171,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!("Command /favorites is available in Streaming Mode ({ctrl_s}) or Addon Mode ({ctrl_a})."),
+                        format!("Command /favorites is available in Streaming Mode ({ctrl_s})."),
                     );
                     Some(true)
                 } else {

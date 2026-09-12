@@ -14,9 +14,11 @@ shared typed models in `providers/models.rs` and the moviebox JSON schema used b
 | **BdixDhakaFlix** | `providers/bdix/dhakaflix` | BDIX indexer. |
 | **Addons** | `providers/addons` | Community HTTP addons (Cinemeta, streams). |
 
-BDIX sources are only reachable from supported Bangladeshi ISPs and are hidden by
-default (`bdix_enabled` in config; `/settings` → Content Modes → BDIX Sources).
-
+BDIX sources are local optical mirrors reachable from supported Bangladeshi ISPs.
+On first startup, MovieBox-Tui automatically probes BDIX mirror endpoints on your local network
+and enables available ones. Individual providers (MovieBox, 4KHDHub, CircleFTP, DhakaFlix) can
+also be manually toggled in `/settings` (or `s`) → Content Modes. A manual re-probe can be
+triggered via `/settings` → Maintenance → Re-check BDIX Network.
 Active streaming providers can be cycled via `Ctrl+P` or visually selected by clicking the provider badge (`[MovieBox · ^P]`) on the landing search bar to open the anchored provider popup menu.
 ## Shared Provider Contract
 

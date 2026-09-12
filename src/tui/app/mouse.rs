@@ -71,7 +71,7 @@ impl App {
                 .collect::<Vec<_>>();
             let confirm_label = "Select";
             match click_in_picker(
-                crate::tui::overlay::picker_layout(area, &items, confirm_label, 24),
+                crate::tui::overlay::picker_layout(area, &items, confirm_label, 20),
                 col,
                 row,
                 &self.state.player_picker_state,
@@ -90,21 +90,56 @@ impl App {
             }
             return true;
         }
+        if self.state.show_sources_popup {
+            let items = crate::providers::models::ProviderKind::ENABLED
+                .iter()
+                .map(|p| format!(" [✓] {} ", p.label()))
+                .collect::<Vec<_>>();
+            match click_in_picker(
+                crate::tui::overlay::picker_layout(area, &items, "Toggle", 20),
+                col,
+                row,
+                &self.state.sources_list_state,
+                items.len(),
+                area,
+            ) {
+                Some(Some(clicked_idx)) => {
+                    self.state.sources_list_state.select(Some(clicked_idx));
+                    if let Some(&provider) =
+                        crate::providers::models::ProviderKind::ENABLED.get(clicked_idx)
+                    {
+                        self.action_sender
+                            .send(Action::ToggleProvider(provider))
+                            .ok();
+                    }
+                }
+                Some(None) => {}
+                None => {
+                    self.state.show_sources_popup = false;
+                }
+            }
+            return true;
+        }
 
         if self.state.show_theme_popup {
             let theme_names = crate::tui::theme::AVAILABLE_THEMES;
+            let longest_name = theme_names
+                .iter()
+                .map(|name| crate::tui::text::width(name))
+                .max()
+                .unwrap_or(10);
             let items: Vec<String> = theme_names
                 .iter()
                 .map(|name| {
                     if self.state.basic_terminal {
-                        format!("{name:<12} * * *")
+                        format!("  {name:<pad$}   * * *  ", pad = longest_name)
                     } else {
-                        format!("{name:<12} ■ ■ ■")
+                        format!("  {name:<pad$}   ■ ■ ■  ", pad = longest_name)
                     }
                 })
                 .collect();
             match click_in_picker(
-                crate::tui::overlay::picker_layout(area, &items, "Apply", 32),
+                crate::tui::overlay::picker_layout(area, &items, "Apply", 24),
                 col,
                 row,
                 &self.state.theme_list_state,
@@ -167,7 +202,8 @@ impl App {
         }
 
         if self.state.show_browse_popup {
-            let is_addon = self.state.mode() == crate::tui::state::AppMode::Addon;
+            let is_addon =
+                self.state.active_provider == crate::providers::models::ProviderKind::Addons;
             let raw_labels: Vec<String> = if is_addon {
                 crate::providers::addons::models::curated_catalog_presets(
                     &self.state.installed_addons,
@@ -497,7 +533,7 @@ impl App {
                 if col >= inner_area.left()
                     && col < inner_area.right()
                     && row >= inner_area.top()
-                    && row < inner_area.bottom()
+                    && row < inner_area.bottom().saturating_sub(1)
                 {
                     let clicked_idx = (row - inner_area.top()) as usize;
                     if let Some(&provider) = available.get(clicked_idx) {
@@ -593,8 +629,6 @@ impl App {
                             self.state.input_mode = InputMode::Normal;
                         } else if self.state.mode() == crate::tui::state::AppMode::Tv {
                             self.action_sender.send(Action::ToggleTvMode).ok();
-                        } else if self.state.mode() == crate::tui::state::AppMode::Addon {
-                            self.action_sender.send(Action::ToggleAddonMode).ok();
                         }
                         return None;
                     }
@@ -691,7 +725,9 @@ impl App {
                         && row >= discover_card_area.top()
                         && row < discover_card_area.bottom()
                     {
-                        if self.state.is_addon_mode {
+                        if self.state.active_provider
+                            == crate::providers::models::ProviderKind::Addons
+                        {
                             self.action_sender.send(Action::ShowBrowseMenu).ok();
                         } else {
                             let rel_row = row - discover_card_area.top();
@@ -813,13 +849,15 @@ impl App {
                     next_label,
                     ctrl_p,
                     self.state.is_tv_mode,
-                    self.state.is_addon_mode,
+                    self.state.active_provider == crate::providers::models::ProviderKind::Addons,
                 );
                 let pos = ratatui::layout::Position::new(col, row);
                 if btn1.contains(pos) {
                     if self.state.is_tv_mode {
                         self.action_sender.send(Action::TvReloadPlaylists).ok();
-                    } else if self.state.is_addon_mode {
+                    } else if self.state.active_provider
+                        == crate::providers::models::ProviderKind::Addons
+                    {
                         self.action_sender.send(Action::ShowAddonManager).ok();
                     } else {
                         self.cycle_provider();
@@ -879,16 +917,10 @@ impl App {
         } else {
             crate::tui::text::CTRL_T_STR
         };
-        let ctrl_a = if ultra_compact || compact {
-            "A"
-        } else {
-            crate::tui::text::CTRL_A_STR
-        };
 
         enum BottomBtn {
             Stream,
             Tv,
-            Addon,
         }
 
         let current_mode = self.state.mode();
@@ -901,10 +933,6 @@ impl App {
         if self.state.tv_enabled && current_mode != crate::tui::state::AppMode::Tv {
             let len = (3 + ctrl_t.len() + 2) as u16;
             buttons.push((BottomBtn::Tv, len));
-        }
-        if self.state.addons_enabled && current_mode != crate::tui::state::AppMode::Addon {
-            let len = (3 + ctrl_a.len() + 5) as u16;
-            buttons.push((BottomBtn::Addon, len));
         }
 
         let mode_count = buttons.len();
@@ -942,11 +970,6 @@ impl App {
                     BottomBtn::Tv => {
                         if self.state.mode() != crate::tui::state::AppMode::Tv {
                             self.action_sender.send(Action::ToggleTvMode).ok();
-                        }
-                    }
-                    BottomBtn::Addon => {
-                        if self.state.mode() != crate::tui::state::AppMode::Addon {
-                            self.action_sender.send(Action::ToggleAddonMode).ok();
                         }
                     }
                 }
@@ -1390,7 +1413,7 @@ mod tests {
             next_label,
             ctrl_p,
             app.state.is_tv_mode,
-            app.state.is_addon_mode,
+            app.state.active_provider == crate::providers::models::ProviderKind::Addons,
         );
 
         app.handle_home_mouse(btn2.x + 1, btn2.y, area);

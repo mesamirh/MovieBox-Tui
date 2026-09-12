@@ -37,8 +37,8 @@ prevent escape sequence probe leakage (`Gi=31...`):
   `MOVIEBOX_CELL_SIZE=WxH` overrides metrics.
 - **Colors & Themes**: With no explicit theme, `NO_COLOR` wins, then truecolor RGB
   (auto-detected across Ghostty, Kitty, WezTerm, iTerm2, Alacritty, Foot, Windows Terminal,
-  Hyper, Tabby, Warp, and VSCode; enabled by default on Windows 10/11 console host and Windows Terminal),
-  quantized 256-color palettes for strict terminals, and a tuned high-contrast 16-color ANSI
+  Hyper, Tabby, Warp, VSCode, Konsole, xfce4-terminal, GNOME Terminal, and Tilix; enabled by
+  default on Windows Terminal via `WT_SESSION`), quantized 256-color palettes for strict terminals,
   fallback palette (`Theme::fallback`) using crisp cyan accents; an OSC 11 background query
   picks light/dark variants. Light mode themes (including Catppuccin Latte) are tuned for
   WCAG AA compliance, ensuring high-contrast readability across light terminal backgrounds.
@@ -85,5 +85,5 @@ MovieBox-TUI embeds an in-app binary upgrade engine (`src/updater/`) with cross-
 - Poster rendering across Sixel (Windows Terminal, foot), Kitty, iTerm2, and basic
   non-graphics terminals.
 - TV mode with a sample M3U playlist (URL and local file).
-- Addon Mode with sample HTTP addon manifests (Cinemeta, torrent/stream addons).
+- Stremio Addons provider with sample HTTP addon manifests (Cinemeta, torrent/stream addons).
 - Termux: on-device check that Play opens the Android chooser and the stream plays.

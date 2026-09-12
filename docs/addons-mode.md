@@ -1,6 +1,6 @@
-# Addon Mode (HTTP Addons)
+# Stremio Addons Provider (HTTP Addons)
 
-Addon Mode enables support for community HTTP addon manifests. You can install any standard addon manifest URL to fetch metadata catalogs and aggregate direct HTTP/HTTPS media streams.
+Stremio Addons are integrated directly into standard Streaming Mode as a first-class content provider alongside MovieBox, 4KHDHub, and BDIX mirrors. You can install any standard addon manifest URL to fetch metadata catalogs and aggregate direct HTTP/HTTPS media streams.
 
 ## Features
 
@@ -15,14 +15,12 @@ Addon Mode enables support for community HTTP addon manifests. You can install a
 - **Watch History & Progress Parity**: Full `/history` support in Addon Mode with real-time `mpv` position tracking, scrub lines, and auto-resume.
 - **High-Performance Caching**: Curated `/browse` catalogs are cached for `1 hour`, manifests for `24 hours`, and stream aggregations for `2 hours`.
 
-## Entering Addon Mode
+## Accessing Addon Streams
 
-- `Ctrl+A`: Toggle / Enter **Addon Mode**.
-- `Ctrl+S`: Return to standard **Streaming Mode**.
-- `Ctrl+T`: Toggle **TV Mode**.
+- `Ctrl+P`: Cycle providers in Streaming Mode to select **Addons**.
+- `/config`: Open the **Addon Manager** directly when the active provider is `Addons`.
+- `Ctrl+S`: Return smoothly to **MovieBox** provider.
 - `/browse`: Browse curated addon catalogs (`Top Movies`, `Top Series`, `Top Rated Movies`, `Top Rated Series`).
-- `/settings` → Content Modes: Enable or disable Addon Mode navigation.
-
 ## Addon Manager
 
 - Interactive modal listing installed addons with capability badges (`[Core]`, `[Meta]`, `[Streams]`, `[Catalog]`).

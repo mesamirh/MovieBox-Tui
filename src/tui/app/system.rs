@@ -285,11 +285,13 @@ impl App {
                     self.state.settings_selected_row = 0;
                     self.state.settings_download_dir_input = None;
                     self.state.settings_player_picker = false;
+                    self.state.show_sources_popup = false;
                     self.state.input_mode = crate::tui::state::InputMode::Normal;
                 } else {
                     self.state.show_settings_popup = false;
                     self.state.settings_download_dir_input = None;
                     self.state.settings_player_picker = false;
+                    self.state.show_sources_popup = false;
                     self.persist_config();
                 }
             }
@@ -306,6 +308,7 @@ impl App {
                 self.state.settings_selected_row = 0;
                 self.state.settings_download_dir_input = None;
                 self.state.settings_player_picker = false;
+                self.state.show_sources_popup = false;
                 self.state.input_mode = crate::tui::state::InputMode::Normal;
             }
 
@@ -313,6 +316,7 @@ impl App {
                 self.state.show_settings_popup = false;
                 self.state.settings_download_dir_input = None;
                 self.state.settings_player_picker = false;
+                self.state.show_sources_popup = false;
                 self.persist_config();
             }
 
@@ -359,21 +363,18 @@ impl App {
                             } else {
                                 self.state.streaming_enabled = enable_req;
                                 self.persist_config();
-                                if !self.state.streaming_enabled
-                                    && !self.state.is_tv_mode
-                                    && !self.state.is_addon_mode
-                                {
+                                if !self.state.streaming_enabled && !self.state.is_tv_mode {
                                     if self.state.tv_enabled {
                                         self.state.set_mode(crate::tui::state::AppMode::Tv);
-                                    } else if self.state.addons_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Addon);
                                     }
                                 }
                             }
                         }
                         1 => {
-                            self.state.bdix_enabled = !self.state.bdix_enabled;
-                            self.persist_config();
+                            self.state.show_sources_popup = true;
+                            if self.state.sources_list_state.selected().is_none() {
+                                self.state.sources_list_state.select(Some(0));
+                            }
                         }
                         2 => {
                             let enable_req = !self.state.tv_enabled;
@@ -389,28 +390,6 @@ impl App {
                                 if !self.state.tv_enabled && self.state.is_tv_mode {
                                     if self.state.streaming_enabled {
                                         self.state.set_mode(crate::tui::state::AppMode::Streaming);
-                                    } else if self.state.addons_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Addon);
-                                    }
-                                }
-                            }
-                        }
-                        3 => {
-                            let enable_req = !self.state.addons_enabled;
-                            if !enable_req && !self.state.can_disable_addons_mode() {
-                                self.state.notify(
-                                    NotificationKind::Warning,
-                                    "Addon Mode",
-                                    "Cannot disable: at least one mode must remain active.",
-                                );
-                            } else {
-                                self.state.addons_enabled = enable_req;
-                                self.persist_config();
-                                if !self.state.addons_enabled && self.state.is_addon_mode {
-                                    if self.state.streaming_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Streaming);
-                                    } else if self.state.tv_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Tv);
                                     }
                                 }
                             }
@@ -513,21 +492,18 @@ impl App {
                             } else {
                                 self.state.streaming_enabled = enable_req;
                                 self.persist_config();
-                                if !self.state.streaming_enabled
-                                    && !self.state.is_tv_mode
-                                    && !self.state.is_addon_mode
-                                {
+                                if !self.state.streaming_enabled && !self.state.is_tv_mode {
                                     if self.state.tv_enabled {
                                         self.state.set_mode(crate::tui::state::AppMode::Tv);
-                                    } else if self.state.addons_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Addon);
                                     }
                                 }
                             }
                         }
                         1 => {
-                            self.state.bdix_enabled = !self.state.bdix_enabled;
-                            self.persist_config();
+                            self.state.show_sources_popup = true;
+                            if self.state.sources_list_state.selected().is_none() {
+                                self.state.sources_list_state.select(Some(0));
+                            }
                         }
                         2 => {
                             let enable_req = !self.state.tv_enabled;
@@ -543,28 +519,6 @@ impl App {
                                 if !self.state.tv_enabled && self.state.is_tv_mode {
                                     if self.state.streaming_enabled {
                                         self.state.set_mode(crate::tui::state::AppMode::Streaming);
-                                    } else if self.state.addons_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Addon);
-                                    }
-                                }
-                            }
-                        }
-                        3 => {
-                            let enable_req = !self.state.addons_enabled;
-                            if !enable_req && !self.state.can_disable_addons_mode() {
-                                self.state.notify(
-                                    NotificationKind::Warning,
-                                    "Addon Mode",
-                                    "Cannot disable: at least one mode must remain active.",
-                                );
-                            } else {
-                                self.state.addons_enabled = enable_req;
-                                self.persist_config();
-                                if !self.state.addons_enabled && self.state.is_addon_mode {
-                                    if self.state.streaming_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Streaming);
-                                    } else if self.state.tv_enabled {
-                                        self.state.set_mode(crate::tui::state::AppMode::Tv);
                                     }
                                 }
                             }
@@ -625,6 +579,15 @@ impl App {
                                 }
                             }
                         }
+                        3 => {
+                            self.state.bdix_probed = false;
+                            self.action_sender.send(Action::CheckBdixNetwork).ok();
+                            self.state.notify(
+                                NotificationKind::Info,
+                                "BDIX Check",
+                                "Probing BDIX mirrors on local network...",
+                            );
+                        }
                         _ => {}
                     }
                 }
@@ -654,11 +617,10 @@ impl App {
                 let current_mode = self.state.mode();
                 if current_mode == crate::tui::state::AppMode::Tv {
                     let ctrl_s = crate::tui::text::CTRL_S_STR;
-                    let ctrl_a = crate::tui::text::CTRL_A_STR;
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!("Command /browse is available in Streaming Mode ({ctrl_s}) or Addon Mode ({ctrl_a})."),
+                        format!("Command /browse is available in Streaming Mode ({ctrl_s})."),
                     );
                 } else if current_mode == crate::tui::state::AppMode::Streaming
                     && self.state.active_provider
@@ -899,8 +861,92 @@ impl App {
                     }
                 }
             }
+
+            Action::ToggleProvider(provider) => {
+                self.toggle_provider(provider);
+            }
+
+            Action::CheckBdixNetwork => {
+                let sender = self.action_sender.clone();
+                tokio::spawn(async move {
+                    let timeout = std::time::Duration::from_secs(3);
+                    let circleftp =
+                        crate::net::probe_url("http://new.circleftp.net:5000/api", timeout).await;
+                    let dhakaflix = crate::net::probe_url("http://172.16.50.7/", timeout).await;
+                    sender
+                        .send(Action::BdixProbeResult {
+                            circleftp,
+                            dhakaflix,
+                        })
+                        .ok();
+                });
+            }
+
+            Action::BdixProbeResult {
+                circleftp,
+                dhakaflix,
+            } => {
+                self.state.bdix_circleftp_enabled = circleftp;
+                self.state.bdix_dhakaflix_enabled = dhakaflix;
+                self.state.bdix_probed = true;
+                if !self.state.provider_enabled(self.state.active_provider) {
+                    let next = self
+                        .state
+                        .available_providers()
+                        .into_iter()
+                        .next()
+                        .unwrap_or(crate::providers::models::ProviderKind::MovieBox);
+                    self.switch_provider(next);
+                }
+                self.persist_config();
+                if circleftp || dhakaflix {
+                    let mut found = Vec::new();
+                    if circleftp {
+                        found.push("CircleFTP");
+                    }
+                    if dhakaflix {
+                        found.push("DhakaFlix");
+                    }
+                    self.state.notify(
+                        NotificationKind::Info,
+                        "BDIX Network Detected",
+                        format!("Automatically enabled: {}", found.join(", ")),
+                    );
+                }
+            }
             _ => return None,
         }
         None
+    }
+
+    fn toggle_provider(&mut self, provider: crate::providers::models::ProviderKind) {
+        let currently_enabled = self.state.provider_enabled(provider);
+        if currently_enabled {
+            let would_remain: Vec<crate::providers::models::ProviderKind> =
+                crate::providers::models::ProviderKind::ENABLED
+                    .into_iter()
+                    .filter(|p| *p != provider && self.state.provider_enabled(*p))
+                    .collect();
+            if would_remain.is_empty() {
+                self.state.notify(
+                    NotificationKind::Warning,
+                    provider.label(),
+                    "Cannot disable: at least one streaming provider must remain active.",
+                );
+                return;
+            }
+        }
+        self.state
+            .set_provider_enabled(provider, !currently_enabled);
+        if currently_enabled && self.state.active_provider == provider {
+            let next = self
+                .state
+                .available_providers()
+                .into_iter()
+                .next()
+                .unwrap_or(crate::providers::models::ProviderKind::MovieBox);
+            self.switch_provider(next);
+        }
+        self.persist_config();
     }
 }

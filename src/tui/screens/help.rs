@@ -57,7 +57,7 @@ pub fn build_help_columns(
         left.push(help_row("[Enter]", "Play Selected Channel", theme));
         left.push(help_row("[r]", "Reload M3U Playlists", theme));
         left.push(help_row("/list", "Show All TV Channels", theme));
-    } else if state.is_addon_mode {
+    } else if state.active_provider == crate::providers::models::ProviderKind::Addons {
         left.push(help_section_header("Addon Actions", theme));
         left.push(help_row("[Enter]", "Select Title / Play Stream", theme));
         left.push(help_row("[d]", "Download Video Stream", theme));
@@ -86,17 +86,13 @@ pub fn build_help_columns(
         let key = format!("[{}]", crate::tui::text::CTRL_T_STR);
         right.push(help_row(&key, "Switch to Live TV Mode", theme));
     }
-    if state.addons_enabled {
-        let key = format!("[{}]", crate::tui::text::CTRL_A_STR);
-        right.push(help_row(&key, "Switch to Addon Mode", theme));
-    }
     right.push(Line::from(""));
 
     right.push(help_section_header("Commands & Shortcuts", theme));
     right.push(help_row("/settings", "Preferences, Themes & Modes", theme));
     if state.is_tv_mode {
         right.push(help_row("/list", "Show All TV Channels", theme));
-    } else if state.is_addon_mode {
+    } else if state.active_provider == crate::providers::models::ProviderKind::Addons {
         right.push(help_row("/browse", "Browse Addon Catalogs", theme));
     } else {
         right.push(help_row("/browse", "Browse Curated Categories", theme));
@@ -118,11 +114,9 @@ pub fn build_help_columns(
 
 pub fn draw(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
     let mode_title = if state.is_tv_mode {
-        "TV Mode"
-    } else if state.is_addon_mode {
-        "Addon Mode"
+        "Live TV"
     } else {
-        "Streaming Mode"
+        "Streaming"
     };
 
     let (left_col, right_col) = build_help_columns(state, theme);
@@ -276,7 +270,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
 
-        assert!(content.contains("Help · Streaming Mode"));
+        assert!(content.contains("Help · Streaming"));
         assert!(content.contains("Navigation"));
         assert!(content.contains("Streaming Actions"));
         assert!(content.contains("Commands & Shortcuts"));

@@ -55,9 +55,6 @@ impl App {
             crate::tui::state::AppMode::Tv => {
                 self.state.set_status_long("Loading TV playlists...");
             }
-            crate::tui::state::AppMode::Addon => {
-                self.state.set_status_default("Addon mode active.");
-            }
         }
     }
 
@@ -68,10 +65,8 @@ impl App {
                 let will_be_tv = !self.state.is_tv_mode;
                 if will_be_tv {
                     self.state.set_mode(crate::tui::state::AppMode::Tv);
-                } else if self.state.streaming_enabled {
+                } else {
                     self.state.set_mode(crate::tui::state::AppMode::Streaming);
-                } else if self.state.addons_enabled {
-                    self.state.set_mode(crate::tui::state::AppMode::Addon);
                 }
                 if self.state.is_tv_mode {
                     self.state.tv_config_popup = false;
@@ -81,16 +76,6 @@ impl App {
                     self.reload_tv_playlists();
                     if self.state.tv_playlists.is_empty() {
                         self.action_sender.send(Action::ShowTvConfig).ok();
-                    }
-                } else if self.state.is_addon_mode {
-                    self.state.tv_config_popup = false;
-                    self.state.search_results.clear();
-                    self.state.active_provider = crate::providers::models::ProviderKind::Addons;
-                    self.load_installed_addons_from_config();
-                    if self.state.installed_addons.is_empty() {
-                        self.action_sender.send(Action::ShowAddonManager).ok();
-                    } else {
-                        self.announce_mode();
                     }
                 } else {
                     self.state.tv_config_popup = false;

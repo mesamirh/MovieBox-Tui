@@ -45,22 +45,15 @@ impl App {
                     }
                     return None;
                 }
-                if let KeyCode::Char('a') = key.code {
-                    if self.state.addons_enabled {
-                        self.action_sender.send(Action::ToggleAddonMode).ok();
-                        self.state.set_status_short("Switched to Addon Mode.");
-                    } else {
-                        self.state
-                            .set_status_short("Addon Mode is disabled. Use /settings to enable.");
-                    }
-                    return None;
-                }
                 if let KeyCode::Char('s') = key.code {
                     if !self.state.streaming_enabled {
                         self.state.set_status_short(
                             "Streaming Mode is disabled. Use /settings to enable.",
                         );
-                    } else if !self.state.is_tv_mode && !self.state.is_addon_mode {
+                    } else if !self.state.is_tv_mode
+                        && self.state.active_provider
+                            != crate::providers::models::ProviderKind::Addons
+                    {
                         self.state.set_status_short("Already in Streaming Mode.");
                     } else {
                         self.action_sender.send(Action::SwitchToStreamingMode).ok();
@@ -69,7 +62,7 @@ impl App {
                     return None;
                 }
                 if let KeyCode::Char('p') = key.code {
-                    if !self.state.is_tv_mode && !self.state.is_addon_mode {
+                    if !self.state.is_tv_mode {
                         self.cycle_provider();
                     }
                     return None;
@@ -180,7 +173,8 @@ impl App {
         }
 
         if self.state.show_browse_popup {
-            let is_addon = self.state.mode() == crate::tui::state::AppMode::Addon;
+            let is_addon =
+                self.state.active_provider == crate::providers::models::ProviderKind::Addons;
             let total_count = if is_addon {
                 crate::providers::addons::models::curated_catalog_presets(
                     &self.state.installed_addons,
@@ -267,6 +261,40 @@ impl App {
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     self.action_sender.send(Action::Submit).ok();
+                }
+                _ => {}
+            }
+            return None;
+        }
+
+        if self.state.show_sources_popup {
+            match key.code {
+                KeyCode::Esc => {
+                    self.state.show_sources_popup = false;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    crate::tui::state::cycle_list_selection(
+                        &mut self.state.sources_list_state,
+                        crate::providers::models::ProviderKind::ENABLED.len(),
+                        false,
+                    );
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    crate::tui::state::cycle_list_selection(
+                        &mut self.state.sources_list_state,
+                        crate::providers::models::ProviderKind::ENABLED.len(),
+                        true,
+                    );
+                }
+                KeyCode::Enter | KeyCode::Char(' ') => {
+                    let idx = self.state.sources_list_state.selected().unwrap_or(0);
+                    if let Some(&provider) =
+                        crate::providers::models::ProviderKind::ENABLED.get(idx)
+                    {
+                        self.action_sender
+                            .send(Action::ToggleProvider(provider))
+                            .ok();
+                    }
                 }
                 _ => {}
             }

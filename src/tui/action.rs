@@ -11,7 +11,6 @@ pub enum Action {
     Resize(u16, u16),
     ToggleHelp,
     ToggleTvMode,
-    ToggleAddonMode,
     SwitchToStreamingMode,
     SwitchProvider(crate::providers::models::ProviderKind),
     ShowTvConfig,
@@ -159,4 +158,10 @@ pub enum Action {
     ShowFavorites,
     OpenFavorite(usize),
     OpenContinueWatching(usize),
+    ToggleProvider(crate::providers::models::ProviderKind),
+    CheckBdixNetwork,
+    BdixProbeResult {
+        circleftp: bool,
+        dhakaflix: bool,
+    },
 }

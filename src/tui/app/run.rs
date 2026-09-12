@@ -35,6 +35,10 @@ impl App {
             });
         }
 
+        if !self.state.bdix_probed {
+            self.action_sender.send(Action::CheckBdixNetwork).ok();
+        }
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -288,9 +292,15 @@ impl App {
     pub fn contextual_title(&self) -> String {
         match self.state.active_screen {
             Screen::Home => match self.state.mode() {
-                crate::tui::state::AppMode::Streaming => "MovieBox-Tui — Streaming".to_string(),
+                crate::tui::state::AppMode::Streaming => {
+                    if self.state.active_provider == crate::providers::models::ProviderKind::Addons
+                    {
+                        "MovieBox-Tui — Addons".to_string()
+                    } else {
+                        "MovieBox-Tui — Streaming".to_string()
+                    }
+                }
                 crate::tui::state::AppMode::Tv => "MovieBox-Tui — Live TV".to_string(),
-                crate::tui::state::AppMode::Addon => "MovieBox-Tui — Addons".to_string(),
             },
             Screen::Details => {
                 if let Some(details) = &self.state.selected_details {
@@ -390,7 +400,10 @@ impl App {
             | Action::SelectSettingsCategory(..)
             | Action::SettingsAdjustValue(..)
             | Action::SettingsActivateRow
-            | Action::SettingsResetDownloadDir => {
+            | Action::SettingsResetDownloadDir
+            | Action::ToggleProvider(..)
+            | Action::CheckBdixNetwork
+            | Action::BdixProbeResult { .. } => {
                 self.handle_system(action).await;
             }
 
@@ -404,8 +417,7 @@ impl App {
                 self.handle_tv(action).await;
             }
 
-            Action::ToggleAddonMode
-            | Action::SwitchToStreamingMode
+            Action::SwitchToStreamingMode
             | Action::ShowAddonManager
             | Action::AddonAddManifest(..)
             | Action::AddonToggleEnabled(..)
@@ -534,6 +546,7 @@ impl App {
 
         self.draw_download_gauge(frame, download_area);
         self.draw_settings_modal(frame, area);
+        self.draw_sources_picker(frame, area);
         self.draw_theme_picker(frame, area);
         self.draw_player_picker(frame, area);
         self.draw_subtitle_picker(frame, area);
@@ -896,13 +909,18 @@ impl App {
             use ratatui::text::{Line, Span};
 
             let theme_names = crate::tui::theme::AVAILABLE_THEMES;
+            let longest_name = theme_names
+                .iter()
+                .map(|name| crate::tui::text::width(name))
+                .max()
+                .unwrap_or(10);
             let raw_items: Vec<String> = theme_names
                 .iter()
                 .map(|name| {
                     if self.state.basic_terminal {
-                        format!("{name:<12} * * *")
+                        format!("  {name:<pad$}  * * * ", pad = longest_name)
                     } else {
-                        format!("{name:<12} ■ ■ ■")
+                        format!("  {name:<pad$}  ■ ■ ■ ", pad = longest_name)
                     }
                 })
                 .collect();
@@ -910,11 +928,16 @@ impl App {
             let lines: Vec<Line<'static>> = theme_names
                 .iter()
                 .map(|name| {
-                    let mut spans = vec![Span::styled(format!("{name:<12} "), self.theme.text)];
+                    let mut spans = vec![
+                        Span::raw("  "),
+                        Span::styled(format!("{name:<pad$}", pad = longest_name), self.theme.text),
+                        Span::raw("  "),
+                    ];
                     spans.extend(crate::tui::theme::Theme::palette_swatch_spans(
                         name,
                         self.state.basic_terminal,
                     ));
+                    spans.push(Span::raw(" "));
                     Line::from(spans)
                 })
                 .collect();
@@ -926,9 +949,10 @@ impl App {
                 &raw_items,
                 &mut self.state.theme_list_state,
                 crate::tui::overlay::PickerSpec {
-                    title: "Select Theme",
+                    title: "",
                     confirm_label: "Apply",
-                    minimum_width: 32,
+                    minimum_width: 16,
+                    show_counter: false,
                 },
                 &self.theme,
                 self.state.basic_terminal,
@@ -940,23 +964,85 @@ impl App {
             crate::tui::widgets::settings::draw(frame, area, &mut self.state, &self.theme);
         }
     }
+    fn draw_sources_picker(&mut self, frame: &mut Frame, area: Rect) {
+        if self.state.show_sources_popup {
+            let providers = crate::providers::models::ProviderKind::ENABLED;
+            let raw_items: Vec<String> = providers
+                .iter()
+                .map(|p| format!(" [✓] {} ", p.label()))
+                .collect();
+            let lines: Vec<ratatui::text::Line<'static>> = providers
+                .iter()
+                .map(|p| {
+                    let is_enabled = self.state.provider_enabled(*p);
+                    let (check, check_style) = if is_enabled {
+                        if self.state.basic_terminal {
+                            (
+                                "[X] ",
+                                self.theme
+                                    .success
+                                    .add_modifier(ratatui::style::Modifier::BOLD),
+                            )
+                        } else {
+                            (
+                                "[✓] ",
+                                self.theme
+                                    .success
+                                    .add_modifier(ratatui::style::Modifier::BOLD),
+                            )
+                        }
+                    } else {
+                        ("[ ] ", self.theme.text_dim)
+                    };
+                    let label_style = if is_enabled {
+                        self.theme.text
+                    } else {
+                        self.theme.text_dim
+                    };
+                    ratatui::text::Line::from(vec![
+                        ratatui::text::Span::raw(" "),
+                        ratatui::text::Span::styled(check, check_style),
+                        ratatui::text::Span::styled(p.label(), label_style),
+                        ratatui::text::Span::raw(" "),
+                    ])
+                })
+                .collect();
+
+            crate::tui::overlay::picker_with_lines(
+                frame,
+                area,
+                &lines,
+                &raw_items,
+                &mut self.state.sources_list_state,
+                crate::tui::overlay::PickerSpec {
+                    title: "",
+                    confirm_label: "Toggle",
+                    minimum_width: 20,
+                    show_counter: false,
+                },
+                &self.theme,
+                self.state.basic_terminal,
+            );
+        }
+    }
     fn draw_player_picker(&mut self, frame: &mut Frame, area: Rect) {
         if self.state.player_picker_popup {
-            let items = self
+            let raw_items = self
                 .state
                 .available_players
                 .iter()
-                .map(|k| k.label().to_string())
+                .map(|k| format!("  {} ", k.label()))
                 .collect::<Vec<_>>();
             crate::tui::overlay::picker(
                 frame,
                 area,
-                &items,
+                &raw_items,
                 &mut self.state.player_picker_state,
                 crate::tui::overlay::PickerSpec {
-                    title: "Default Media Player",
+                    title: "",
                     confirm_label: "Select",
-                    minimum_width: 24,
+                    minimum_width: 10,
+                    show_counter: false,
                 },
                 &self.theme,
                 self.state.basic_terminal,
@@ -982,9 +1068,14 @@ impl App {
                 &items,
                 &mut self.state.subtitle_list_state,
                 crate::tui::overlay::PickerSpec {
-                    title: "Subtitles",
+                    title: if self.state.is_download_subtitle_popup {
+                        "Download Subtitles"
+                    } else {
+                        "Subtitles"
+                    },
                     confirm_label,
                     minimum_width: 32,
+                    show_counter: true,
                 },
                 &self.theme,
                 self.state.basic_terminal,
@@ -1010,7 +1101,7 @@ impl App {
             let layout = crate::tui::overlay::update_modal_layout(area, notes);
             let popup_area = layout.popup_area;
             let display_count = layout.display_count;
-            let has_more = layout.has_more;
+            let _ = layout.has_more;
 
             let note_lines: Vec<&str> = notes
                 .lines()
@@ -1224,12 +1315,6 @@ impl App {
                 text.push(Line::from(spans));
             }
 
-            let more_msg = if has_more {
-                "    Press [o] to read full changelog on GitHub"
-            } else {
-                "    Press [o] to view release on GitHub"
-            };
-            text.push(Line::from(Span::styled(more_msg, self.theme.text_dim)));
             text.push(Line::from(Span::styled(divider_str, self.theme.surface1)));
 
             let is_compact_modal = inner_area.width < 58;

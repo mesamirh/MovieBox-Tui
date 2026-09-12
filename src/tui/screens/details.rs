@@ -230,16 +230,15 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                 let err_msg =
                     crate::tui::text::truncate_width(err, (box_width.saturating_sub(4)) as usize);
-                let text = vec![
+                let mut text = vec![
                     Line::from(""),
                     Line::from(Span::styled(err_msg, theme.text)),
                     Line::from(""),
-                    Line::from(vec![
-                        crate::tui::overlay::key_hint("r", "Retry fetch", theme),
-                        Span::raw("   "),
-                        crate::tui::overlay::key_hint("Esc", "Back", theme),
-                    ]),
                 ];
+                let mut hint_spans = crate::tui::overlay::key_hint("r", "Retry", theme);
+                hint_spans.push(Span::raw("   "));
+                hint_spans.extend(crate::tui::overlay::key_hint("Esc", "Back", theme));
+                text.push(Line::from(hint_spans));
 
                 let error_p = Paragraph::new(text)
                     .block(error_block)
@@ -1282,12 +1281,12 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         let msg = if waiting_for_language {
             "Choose an audio track to load streams.".to_string()
         } else if let Some(error) = &state.stream_error {
-            if state.is_addon_mode {
+            if state.active_provider == crate::providers::ProviderKind::Addons {
                 error.clone()
             } else if error.contains("No stream sources") || error.contains("not listed") {
-                format!("{error}.\nPress Ctrl+P to try another provider, or r to refresh.")
+                format!("{error}.")
             } else {
-                format!("{error} — press r to retry or Ctrl+P to switch provider.")
+                error.clone()
             }
         } else if is_loading_streams {
             let spinner = stream_loading_spinner(state.tick_count, state.basic_terminal);
@@ -1297,9 +1296,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 format!("{spinner}  Loading streams...")
             }
         } else if state.has_streams_settled && state.selected_resources.is_empty() {
-            format!(
-                "No stream sources found on {provider_label} (Ctrl+P to switch provider, r to retry)"
-            )
+            format!("No stream sources found on {provider_label}.")
         } else {
             let spinner = stream_loading_spinner(state.tick_count, state.basic_terminal);
             if state.basic_terminal {
@@ -1641,25 +1638,19 @@ fn metadata_style(theme: &Theme) -> Style {
     theme.subtext1
 }
 
-fn with_selection_surface(style: Style, basic_terminal: bool, theme: &Theme) -> Style {
+fn with_selection_surface(style: Style, basic_terminal: bool, _theme: &Theme) -> Style {
     if basic_terminal {
         style
     } else {
-        style.bg(theme_color(theme.surface1, theme.base))
+        style.add_modifier(Modifier::BOLD)
     }
 }
 
 fn selection_style(focused: bool, basic_terminal: bool, theme: &Theme) -> Style {
     if focused {
-        let style =
-            with_selection_surface(theme.text, basic_terminal, theme).add_modifier(Modifier::BOLD);
-        if basic_terminal {
-            style.add_modifier(Modifier::UNDERLINED)
-        } else {
-            style
-        }
+        crate::tui::overlay::selection_style(theme, basic_terminal)
     } else {
-        theme.text.add_modifier(Modifier::BOLD)
+        theme.subtext1.add_modifier(Modifier::BOLD)
     }
 }
 
@@ -1667,14 +1658,8 @@ fn focus_title_marker(basic_terminal: bool) -> &'static str {
     if basic_terminal { "> " } else { "● " }
 }
 
-fn selection_symbol(focused: bool, basic_terminal: bool) -> &'static str {
-    if focused {
-        if basic_terminal { "> " } else { "▌ " }
-    } else if basic_terminal {
-        "* "
-    } else {
-        "· "
-    }
+fn selection_symbol(_focused: bool, _basic_terminal: bool) -> &'static str {
+    ""
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1882,7 +1867,7 @@ fn details_footer(
     } else {
         "Favorite"
     };
-    let show_provider = !state.is_addon_mode
+    let show_provider = state.active_provider != crate::providers::ProviderKind::Addons
         && !state
             .selected_details
             .as_ref()
@@ -2202,7 +2187,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(content.contains("Error Loading Details"));
-        assert!(content.contains("Retry fetch"));
+        assert!(content.contains("Retry"));
         assert!(content.contains("Back"));
     }
 
@@ -2267,13 +2252,13 @@ mod tests {
         let compact_text: String = compact_spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(compact_text.contains("[d] Save"));
 
-        state.is_addon_mode = true;
+        state.active_provider = crate::providers::ProviderKind::Addons;
         let (addon_primary, addon_secondary) = details_footer(&state, &theme, 120, false);
         let mut addon_spans = addon_primary;
         addon_spans.extend(addon_secondary);
         let addon_text: String = addon_spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(!addon_text.contains("Provider"));
-        state.is_addon_mode = false;
+        state.active_provider = crate::providers::ProviderKind::MovieBox;
 
         state.details_pane = crate::tui::state::DetailsPane::Seasons;
         let (primary, secondary) = details_footer(&state, &theme, 120, false);

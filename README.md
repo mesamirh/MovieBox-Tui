@@ -13,7 +13,7 @@ MovieBox-TUI replaces ad-heavy streaming websites and clunky browser players wit
 - **Automatic Subtitles**: Automatically searches, downloads, and syncs subtitles in your preferred language directly into your player.
 - **Season Batch Downloads**: Download individual episodes or entire seasons with one keypress (`d`), with HTTP range resume support and clean folder structure (`Movies/` and `Series/`).
 - **Interactive Settings Hub**: Configure your default media player, download folder, content modes, and themes inside an in-app visual modal via `/settings` (`Ctrl+S`).
-- **Modes**: Switch instantly between standard Streaming, Live TV (`Ctrl+T`), and Addon Mode (`Ctrl+A`).
+- **Modes**: Switch between Streaming and Live TV (`Ctrl+T`), with community Stremio addons available directly as a streaming provider.
 - **Ergonomics & Themes**: Full keyboard navigation (vim-style `j`/`k`, `/`, `Tab`) and mouse support (click, scroll, drag) with 6 built-in themes (Catppuccin, TokyoNight, Nord, Dracula, Gruvbox, Rosé Pine) and terminal theme autodetection.
 
 ## Prerequisites

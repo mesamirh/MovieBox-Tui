@@ -23,7 +23,6 @@ pub enum DetailsPane {
 pub enum AppMode {
     Streaming,
     Tv,
-    Addon,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -77,9 +76,9 @@ impl SettingsCategory {
     pub fn row_count(self) -> usize {
         match self {
             Self::General => 3,
-            Self::ContentModes => 4,
+            Self::ContentModes => 3,
             Self::Appearance => 1,
-            Self::StorageInfo => 3,
+            Self::StorageInfo => 4,
         }
     }
     pub fn next(self) -> Self {
@@ -163,6 +162,7 @@ pub struct UiState {
     pub details_pane: DetailsPane,
     pub player_picker_popup: bool,
     pub settings_player_picker: bool,
+    pub show_sources_popup: bool,
     pub subtitle_popup: bool,
     pub is_download_subtitle_popup: bool,
     pub tv_config_popup: bool,
@@ -284,6 +284,8 @@ pub struct AppState {
     pub settings_category: SettingsCategory,
     pub settings_selected_row: usize,
     pub settings_download_dir_input: Option<crate::tui::text::TextInputBuffer>,
+    pub show_sources_popup: bool,
+    pub sources_list_state: ListState,
 
     pub poster_protocol: Option<(ratatui::layout::Rect, ratatui_image::protocol::Protocol)>,
     pub image_picker: Option<ratatui_image::picker::Picker>,
@@ -349,7 +351,11 @@ pub struct AppState {
     pub pending_play_link: Option<String>,
     pub pending_playback_source: Option<crate::providers::models::PlaybackSource>,
     pub basic_terminal: bool,
-    pub bdix_enabled: bool,
+    pub moviebox_enabled: bool,
+    pub fourkhdhub_enabled: bool,
+    pub bdix_circleftp_enabled: bool,
+    pub bdix_dhakaflix_enabled: bool,
+    pub bdix_probed: bool,
     pub streaming_enabled: bool,
 
     pub is_tv_mode: bool,
@@ -362,7 +368,6 @@ pub struct AppState {
     pub tv_input_buffer: crate::tui::text::TextInputBuffer,
     pub tv_input_is_file: bool,
 
-    pub is_addon_mode: bool,
     pub addons_enabled: bool,
     pub installed_addons: Vec<crate::providers::addons::models::InstalledAddon>,
     pub addon_manager_popup: bool,
@@ -447,6 +452,8 @@ impl Default for AppState {
             settings_category: SettingsCategory::General,
             settings_selected_row: 0,
             settings_download_dir_input: None,
+            show_sources_popup: false,
+            sources_list_state: ListState::default(),
 
             poster_protocol: None,
             image_picker: None,
@@ -510,7 +517,11 @@ impl Default for AppState {
             subtitle_list_state: ListState::default(),
             pending_play_link: None,
             pending_playback_source: None,
-            bdix_enabled: false,
+            moviebox_enabled: true,
+            fourkhdhub_enabled: true,
+            bdix_circleftp_enabled: false,
+            bdix_dhakaflix_enabled: false,
+            bdix_probed: false,
             streaming_enabled: true,
             is_tv_mode: false,
             tv_enabled: true,
@@ -521,7 +532,6 @@ impl Default for AppState {
             tv_input_active: false,
             tv_input_buffer: crate::tui::text::TextInputBuffer::new(),
             tv_input_is_file: false,
-            is_addon_mode: false,
             addons_enabled: false,
             installed_addons: Vec::new(),
             addon_manager_popup: false,
@@ -546,10 +556,8 @@ const fn cache_capacity(n: usize) -> std::num::NonZeroUsize {
 
 impl AppState {
     pub fn mode(&self) -> AppMode {
-        if self.is_tv_mode && !self.is_addon_mode {
+        if self.is_tv_mode {
             AppMode::Tv
-        } else if self.is_addon_mode && !self.is_tv_mode {
-            AppMode::Addon
         } else {
             AppMode::Streaming
         }
@@ -559,15 +567,9 @@ impl AppState {
         match mode {
             AppMode::Streaming => {
                 self.is_tv_mode = false;
-                self.is_addon_mode = false;
             }
             AppMode::Tv => {
                 self.is_tv_mode = true;
-                self.is_addon_mode = false;
-            }
-            AppMode::Addon => {
-                self.is_tv_mode = false;
-                self.is_addon_mode = true;
             }
         }
     }
@@ -611,11 +613,35 @@ impl AppState {
         })
     }
 
+    pub fn provider_enabled(&self, p: ProviderKind) -> bool {
+        match p {
+            ProviderKind::MovieBox => self.moviebox_enabled,
+            ProviderKind::FourKHdHub => self.fourkhdhub_enabled,
+            ProviderKind::BdixCircleFtp => self.bdix_circleftp_enabled,
+            ProviderKind::BdixDhakaFlix => self.bdix_dhakaflix_enabled,
+            ProviderKind::Addons => self.addons_enabled,
+        }
+    }
+
+    pub fn set_provider_enabled(&mut self, p: ProviderKind, enabled: bool) {
+        match p {
+            ProviderKind::MovieBox => self.moviebox_enabled = enabled,
+            ProviderKind::FourKHdHub => self.fourkhdhub_enabled = enabled,
+            ProviderKind::BdixCircleFtp => self.bdix_circleftp_enabled = enabled,
+            ProviderKind::BdixDhakaFlix => self.bdix_dhakaflix_enabled = enabled,
+            ProviderKind::Addons => self.addons_enabled = enabled,
+        }
+    }
+
     pub fn available_providers(&self) -> Vec<ProviderKind> {
-        crate::models::ProviderKind::ENABLED
+        let mut providers: Vec<ProviderKind> = crate::models::ProviderKind::ENABLED
             .into_iter()
-            .filter(|p| !p.is_bdix() || self.bdix_enabled)
-            .collect()
+            .filter(|p| self.provider_enabled(*p))
+            .collect();
+        if self.addons_enabled || !self.installed_addons.is_empty() {
+            providers.push(ProviderKind::Addons);
+        }
+        providers
     }
 
     pub fn next_provider(&self) -> ProviderKind {
@@ -760,6 +786,7 @@ impl AppState {
             || self.show_browse_popup
             || self.show_provider_popup
             || self.show_settings_popup
+            || self.show_sources_popup
             || self.addon_manager_popup
             || self.tv_config_popup
             || self.player_picker_popup
@@ -813,8 +840,7 @@ impl AppState {
     }
 
     pub fn favorites_available(&self) -> bool {
-        (self.streaming_enabled && !self.is_tv_mode && !self.is_addon_mode)
-            || (self.addons_enabled && self.is_addon_mode)
+        self.streaming_enabled && !self.is_tv_mode
     }
 
     pub fn favorites_landing_visible(&self) -> bool {
@@ -1017,11 +1043,7 @@ impl AppState {
     }
 
     pub fn can_disable_tv_mode(&self) -> bool {
-        self.streaming_enabled || self.addons_enabled
-    }
-
-    pub fn can_disable_addons_mode(&self) -> bool {
-        self.streaming_enabled || self.tv_enabled
+        self.streaming_enabled
     }
     pub fn expand_download_path(raw: &str) -> Option<std::path::PathBuf> {
         let clean = raw.trim_matches(|c| c == '\'' || c == '"').trim();
@@ -1297,6 +1319,17 @@ mod tests {
         assert_eq!(result_columns_for(279), 4);
         assert_eq!(result_columns_for(280), 5);
         assert_eq!(result_columns_for(320), 5);
+    }
+
+    #[test]
+    fn addons_provider_appears_when_enabled() {
+        let mut s = AppState {
+            addons_enabled: true,
+            ..Default::default()
+        };
+        assert!(s.available_providers().contains(&ProviderKind::Addons));
+        s.addons_enabled = false;
+        assert!(!s.available_providers().contains(&ProviderKind::Addons));
     }
 
     #[test]

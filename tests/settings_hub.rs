@@ -86,7 +86,6 @@ fn test_settings_toggle_modes_safety_guard() {
     };
     assert!(!state.can_disable_streaming_mode());
     assert!(state.can_disable_tv_mode());
-    assert!(state.can_disable_addons_mode());
 
     state.tv_enabled = true;
     assert!(state.can_disable_streaming_mode());
@@ -220,21 +219,16 @@ async fn test_settings_modes_toggle_keeps_popup_open() {
     );
 
     app.state_mut().settings_selected_row = 1;
-    let initial_bdix = app.state().bdix_enabled;
     app.handle_action(Action::SettingsActivateRow).await;
     assert!(app.state().show_settings_popup);
-    assert_eq!(app.state().bdix_enabled, !initial_bdix);
-
-    app.handle_action(Action::SettingsAdjustValue(true)).await;
-    assert!(app.state().show_settings_popup);
-    assert_eq!(app.state().bdix_enabled, initial_bdix);
+    assert!(app.state().show_sources_popup);
+    app.state_mut().show_sources_popup = false;
 
     app.state_mut().settings_selected_row = 2;
     app.state_mut().tv_enabled = false;
     app.handle_action(Action::SettingsActivateRow).await;
     assert!(app.state().show_settings_popup);
     assert!(app.state().tv_enabled);
-
     app.state_mut().settings_selected_row = 0;
     app.state_mut().streaming_enabled = true;
     app.handle_action(Action::SettingsActivateRow).await;
@@ -244,11 +238,6 @@ async fn test_settings_modes_toggle_keeps_popup_open() {
 
     app.handle_action(Action::SettingsActivateRow).await;
     assert!(app.state().show_settings_popup);
-    app.state_mut().settings_selected_row = 3;
-    app.state_mut().addons_enabled = false;
-    app.handle_action(Action::SettingsActivateRow).await;
-    assert!(app.state().show_settings_popup);
-    assert!(app.state().addons_enabled);
 
     app.state_mut()
         .set_mode(moviebox_tui::tui::state::AppMode::Streaming);
@@ -337,7 +326,7 @@ async fn test_settings_mouse_tab_and_row_clicks() {
             rows[0].x + 2,
             rows[0].y + 1
         ),
-        Some(0)
+        Some(1)
     );
     assert_eq!(
         settings_row_at(popup, SettingsCategory::General, rows[1].x + 2, rows[1].y),

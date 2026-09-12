@@ -20,28 +20,26 @@ pub struct PickerSpec<'a> {
     pub title: &'a str,
     pub confirm_label: &'a str,
     pub minimum_width: u16,
+    pub show_counter: bool,
 }
 
 pub fn picker_layout(
     area: Rect,
     items: &[String],
-    confirm_label: &str,
+    _confirm_label: &str,
     minimum_width: u16,
 ) -> Rect {
     let visible_rows = items.len().clamp(1, max_picker_rows(area));
-    let footer_str = format!("[↑↓] Move  [Enter] {confirm_label}  [Esc] Back");
-    let footer_width = crate::tui::text::width(&footer_str);
     let content_width = items
         .iter()
         .map(|item| crate::tui::text::width(item))
         .max()
         .unwrap_or(0)
-        .max(footer_width)
-        .saturating_add(4);
+        .saturating_add(2);
     centered(
         area,
         content_width as u16,
-        (visible_rows as u16 + 4).max(5),
+        (visible_rows as u16 + 2).max(3),
         minimum_width,
         64,
     )
@@ -60,9 +58,9 @@ pub fn tv_config_layout(
         .max(content_width.saturating_add(6) as u16)
         .min(area.width.saturating_sub(4));
     let popup_height = if input_active {
-        7u16
+        5u16
     } else {
-        total_rows.min(10).saturating_add(6) as u16
+        total_rows.min(10).saturating_add(4) as u16
     };
     centered(area, popup_width, popup_height, 36, 74)
 }
@@ -70,22 +68,30 @@ pub fn tv_config_layout(
 pub fn addon_manager_layout(area: Rect, addons_count: usize, input_active: bool) -> Rect {
     let popup_width = 76u16.min(area.width.saturating_sub(4)).max(56);
     let popup_height = if input_active {
-        7u16
+        5u16
     } else {
         (addons_count as u16)
-            .saturating_add(6)
+            .saturating_add(4)
             .min(area.height.saturating_sub(4))
-            .max(7)
+            .max(5)
     };
     centered(area, popup_width, popup_height, 36, 80)
 }
 pub fn settings_modal_layout(area: Rect, category: crate::tui::state::SettingsCategory) -> Rect {
-    let min_width = 46u16.min(area.width.saturating_sub(2));
-    let popup_width = 76u16.min(area.width.saturating_sub(2)).max(min_width);
-    let content_height = (category.row_count() as u16 * 2).max(4);
-    let desired_height = 2 + 1 + content_height + 2 + 2;
-    let popup_height = desired_height.min(area.height.saturating_sub(2)).max(11);
-    centered(area, popup_width, popup_height, min_width, 76)
+    let min_width = 44u16.min(area.width.saturating_sub(2));
+    let popup_width = 68u16.min(area.width.saturating_sub(2)).max(min_width);
+    let content_height = (category.row_count() as u16).max(1);
+    let popup_height = (content_height + 4).min(area.height.saturating_sub(2));
+    let available_width = area.width.saturating_sub(2).max(1);
+    let width = popup_width.min(available_width);
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let search_y = if area.height >= 24 {
+        area.y + 2 + 6 + 1 + 2
+    } else {
+        area.y + 1 + 2 + 1 + 1
+    };
+    let y = search_y.min(area.bottom().saturating_sub(popup_height));
+    Rect::new(x, y, width, popup_height)
 }
 
 pub fn download_confirm_layout(
@@ -116,7 +122,10 @@ pub fn picker(
     theme: &Theme,
     basic_terminal: bool,
 ) {
-    let lines: Vec<Line<'static>> = items.iter().map(|item| Line::from(item.clone())).collect();
+    let lines: Vec<Line<'static>> = items
+        .iter()
+        .map(|item| Line::from(vec![Span::raw(item.clone())]))
+        .collect();
     picker_with_lines(
         frame,
         area,
@@ -146,29 +155,34 @@ pub fn picker_with_lines<'a>(
         .min(lines.len().saturating_sub(1));
     let visible_rows = lines.len().clamp(1, max_picker_rows(area));
     let popup = picker_layout(area, raw_items, spec.confirm_label, spec.minimum_width);
-    let title = format!(
-        "{} · {}/{}",
-        spec.title,
-        selected.saturating_add(1),
-        lines.len().max(1)
-    );
+    let title = if spec.title.is_empty() {
+        String::new()
+    } else if spec.show_counter && lines.len() > 1 {
+        format!(
+            "{} · {}/{}",
+            spec.title,
+            selected.saturating_add(1),
+            lines.len().max(1)
+        )
+    } else {
+        spec.title.to_string()
+    };
     let inner = crate::tui::widgets::ModalFrame::new(&title, theme, basic_terminal)
         .render(frame, popup, area);
 
-    let sections = Layout::vertical([Constraint::Min(1), Constraint::Length(2)]).split(inner);
     let list_items = lines
         .iter()
         .map(|line| ListItem::new(line.clone()).style(theme.text))
         .collect::<Vec<_>>();
     let list = List::new(list_items)
         .highlight_style(selection_style(theme, basic_terminal))
-        .highlight_symbol(if basic_terminal { "> " } else { "▌ " });
-    frame.render_stateful_widget(list, sections[0], state);
+        .highlight_symbol("");
+    frame.render_stateful_widget(list, inner, state);
 
     if lines.len() > visible_rows {
         crate::tui::widgets::render_scrollbar(
             frame,
-            sections[0],
+            inner,
             lines.len(),
             visible_rows,
             selected,
@@ -176,20 +190,6 @@ pub fn picker_with_lines<'a>(
             basic_terminal,
         );
     }
-
-    let confirm_label = if sections[1].width < 40 && spec.confirm_label == "Download" {
-        "Save"
-    } else {
-        spec.confirm_label
-    };
-    let footer = vec![
-        key_hint("↑↓", "Move", theme),
-        Span::raw("  "),
-        key_hint("Enter", confirm_label, theme),
-        Span::raw("  "),
-        key_hint("Esc", "Back", theme),
-    ];
-    crate::tui::widgets::render_modal_footer(frame, sections[1], footer, theme);
 }
 
 pub fn browse_category_badge<'a>(label: &str, theme: &'a Theme) -> (Span<'a>, &'static str) {
@@ -345,7 +345,7 @@ pub fn notifications(
         let mut lines = Vec::new();
         lines.push(Line::from(vec![Span::styled(
             crate::tui::text::truncate_width(&notification.title, inner_width),
-            theme.text.add_modifier(Modifier::BOLD),
+            badge_style.add_modifier(Modifier::BOLD),
         )]));
 
         for line in &msg_lines {
@@ -438,33 +438,35 @@ pub fn border_type(basic_terminal: bool) -> BorderType {
     }
 }
 
-pub(crate) fn key_hint(key: &str, action: &str, theme: &Theme) -> Span<'static> {
+pub(crate) fn key_hint(key: &'static str, action: &str, theme: &Theme) -> Vec<Span<'static>> {
     if action.is_empty() {
-        Span::styled(format!("[{key}]"), theme.text_dim)
+        vec![
+            Span::styled("[", theme.overlay0),
+            Span::styled(key, theme.shortcut),
+            Span::styled("]", theme.overlay0),
+        ]
     } else {
-        Span::styled(format!("[{key}] {action}"), theme.text_dim)
+        vec![
+            Span::styled("[", theme.overlay0),
+            Span::styled(key, theme.shortcut),
+            Span::styled("] ", theme.overlay0),
+            Span::styled(action.to_string(), theme.subtext1),
+        ]
     }
 }
 
 pub(crate) fn selection_style(theme: &Theme, basic_terminal: bool) -> Style {
-    let style = if theme.is_light {
-        theme.text
-    } else {
-        theme.highlight
-    }
-    .add_modifier(Modifier::BOLD);
-    if crate::tui::theme::ColorSupport::current() == crate::tui::theme::ColorSupport::NoColor {
-        return style.add_modifier(Modifier::REVERSED);
-    }
     if basic_terminal {
-        style.add_modifier(Modifier::UNDERLINED)
+        Style::default()
+            .fg(theme.highlight.fg.unwrap_or(theme.base))
+            .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
     } else {
-        let bg_color = if theme.is_light {
-            theme.surface1.fg.unwrap_or(ratatui::style::Color::DarkGray)
-        } else {
-            theme.surface1.fg.unwrap_or(theme.base)
-        };
-        style.bg(bg_color)
+        let bg = theme.surface1.fg.unwrap_or(theme.base);
+        let fg = theme
+            .highlight
+            .fg
+            .unwrap_or(theme.text.fg.unwrap_or(theme.base));
+        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
     }
 }
 
@@ -809,6 +811,7 @@ mod tests {
                         title: "Browse",
                         confirm_label: "Open",
                         minimum_width: 36,
+                        show_counter: true,
                     },
                     &theme,
                     false,
@@ -830,10 +833,27 @@ mod tests {
         let area = Rect::new(0, 0, 80, 24);
         let items_single = vec!["Single Item".to_string()];
         let layout_single = picker_layout(area, &items_single, "Open", 20);
-        assert_eq!(layout_single.height, 5);
+        assert_eq!(layout_single.height, 3);
 
         let items_two = vec!["Item 1".to_string(), "Item 2".to_string()];
         let layout_two = picker_layout(area, &items_two, "Use", 20);
-        assert_eq!(layout_two.height, 6);
+        assert_eq!(layout_two.height, 4);
+    }
+
+    #[test]
+    fn test_notification_style_colors_match_kind() {
+        let theme = Theme::mocha();
+
+        let (_, info_style) = notification_style(NotificationKind::Info, &theme, false);
+        assert_eq!(info_style.fg, theme.sapphire.fg);
+
+        let (_, success_style) = notification_style(NotificationKind::Success, &theme, false);
+        assert_eq!(success_style.fg, theme.success.fg);
+
+        let (_, warning_style) = notification_style(NotificationKind::Warning, &theme, false);
+        assert_eq!(warning_style.fg, theme.rating.fg);
+
+        let (_, error_style) = notification_style(NotificationKind::Error, &theme, false);
+        assert_eq!(error_style.fg, theme.error.fg);
     }
 }

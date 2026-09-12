@@ -342,7 +342,6 @@ async fn test_mouse_scroll_maps_to_key_actions() {
 async fn test_full_user_journey_movie_search_details_and_back_navigation() {
     let mut app = App::new();
     app.state_mut().is_tv_mode = false;
-    app.state_mut().is_addon_mode = false;
     app.state_mut().active_screen = Screen::Home;
     app.state_mut().last_search_edit =
         std::time::Instant::now() - std::time::Duration::from_millis(600);
@@ -372,14 +371,13 @@ async fn test_full_user_journey_movie_search_details_and_back_navigation() {
 #[tokio::test]
 async fn test_full_user_journey_mode_switching_and_theme_selection() {
     let mut app = App::new();
-    app.state_mut().is_addon_mode = false;
     app.state_mut().is_tv_mode = false;
 
-    app.handle_action(Action::ToggleAddonMode).await;
-    assert!(app.state().is_addon_mode);
+    app.handle_action(Action::ToggleTvMode).await;
+    assert!(app.state().is_tv_mode);
 
     app.handle_action(Action::SwitchToStreamingMode).await;
-    assert!(!app.state().is_addon_mode);
+    assert!(!app.state().is_tv_mode);
 
     app.handle_action(Action::SelectTheme("TokyoNight".to_string()))
         .await;
@@ -570,6 +568,7 @@ async fn test_contextual_window_title() {
     app.state_mut().active_screen = Screen::Home;
     app.state_mut()
         .set_mode(moviebox_tui::tui::state::AppMode::Streaming);
+    app.state_mut().active_provider = moviebox_tui::providers::models::ProviderKind::MovieBox;
     assert_eq!(app.contextual_title(), "MovieBox-Tui — Streaming");
 
     app.state_mut()
@@ -577,7 +576,8 @@ async fn test_contextual_window_title() {
     assert_eq!(app.contextual_title(), "MovieBox-Tui — Live TV");
 
     app.state_mut()
-        .set_mode(moviebox_tui::tui::state::AppMode::Addon);
+        .set_mode(moviebox_tui::tui::state::AppMode::Streaming);
+    app.state_mut().active_provider = moviebox_tui::providers::models::ProviderKind::Addons;
     assert_eq!(app.contextual_title(), "MovieBox-Tui — Addons");
 
     app.state_mut().active_screen = Screen::Details;
@@ -779,7 +779,9 @@ async fn test_history_item_enter_pre_seeds_season_and_episode() {
 #[tokio::test]
 async fn test_search_series_submit_defaults_to_season_one() {
     let mut app = App::new();
+    app.state_mut().is_tv_mode = false;
     app.state_mut().active_screen = Screen::Home;
+    app.state_mut().is_loading = false;
     app.state_mut().input_mode = InputMode::Normal;
     app.state_mut().search_query.set_content("Breaking Bad");
     app.state_mut().search_results.push(SearchResult {
@@ -862,10 +864,8 @@ async fn test_ctrl_p_scoped_strictly_to_streaming_mode() {
     app.handle_action(Action::Key(ctrl_p)).await;
     assert!(!app.state().tv_config_popup);
 
-    app.state_mut()
-        .set_mode(moviebox_tui::tui::state::AppMode::Addon);
+    app.state_mut().active_provider = moviebox_tui::providers::models::ProviderKind::Addons;
     app.state_mut().is_tv_mode = false;
-    app.state_mut().is_addon_mode = true;
     app.state_mut().addons_enabled = true;
     app.state_mut().addon_manager_popup = false;
     app.handle_action(Action::Key(ctrl_p)).await;

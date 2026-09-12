@@ -74,6 +74,20 @@ pub fn http_client_builder() -> reqwest::ClientBuilder {
         .pool_max_idle_per_host(8)
 }
 
+pub async fn probe_url(url: &str, timeout: std::time::Duration) -> bool {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(timeout)
+        .connect_timeout(timeout)
+        .build()
+    else {
+        return false;
+    };
+    if client.head(url).send().await.is_ok() {
+        return true;
+    }
+    client.get(url).send().await.is_ok()
+}
+
 pub fn is_http_url(source: &str) -> bool {
     let trimmed = source.trim();
     trimmed.starts_with("http://") || trimmed.starts_with("https://")

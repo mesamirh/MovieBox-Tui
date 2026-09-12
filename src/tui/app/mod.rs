@@ -89,16 +89,25 @@ impl App {
         let config = crate::tui::config::load();
         state.auto_update = config.auto_update;
         state.last_update_check = config.last_update_check;
-        state.bdix_enabled = config.bdix_enabled;
+        state.moviebox_enabled = config.moviebox_enabled;
+        state.fourkhdhub_enabled = config.fourkhdhub_enabled;
+        state.bdix_circleftp_enabled = config.bdix_circleftp_enabled;
+        state.bdix_dhakaflix_enabled = config.bdix_dhakaflix_enabled;
+        state.bdix_probed = config.bdix_probed;
         state.streaming_enabled = config.streaming_enabled;
         state.tv_enabled = config.tv_enabled;
         state.addons_enabled = config.addons_enabled;
-        if !state.streaming_enabled && !state.tv_enabled && !state.addons_enabled {
+        if !state.streaming_enabled && !state.tv_enabled {
             state.streaming_enabled = true;
         }
-        let provider_was_sanitized = !state.bdix_enabled && config.active_provider.is_bdix();
+        let provider_was_sanitized = !state.provider_enabled(config.active_provider)
+            && config.active_provider != crate::providers::models::ProviderKind::Addons;
         state.active_provider = if provider_was_sanitized {
-            crate::providers::models::ProviderKind::MovieBox
+            state
+                .available_providers()
+                .into_iter()
+                .next()
+                .unwrap_or(crate::providers::models::ProviderKind::MovieBox)
         } else {
             config.active_provider
         };
@@ -107,22 +116,20 @@ impl App {
             "tv" if state.tv_enabled => {
                 state.set_mode(crate::tui::state::AppMode::Tv);
             }
-            "addon" if state.addons_enabled => {
-                state.set_mode(crate::tui::state::AppMode::Addon);
-                state.active_provider = crate::providers::models::ProviderKind::Addons;
-            }
             _ => {
                 if state.streaming_enabled {
                     state.set_mode(crate::tui::state::AppMode::Streaming);
                 } else if state.tv_enabled {
                     state.set_mode(crate::tui::state::AppMode::Tv);
-                } else if state.addons_enabled {
-                    state.set_mode(crate::tui::state::AppMode::Addon);
-                    state.active_provider = crate::providers::models::ProviderKind::Addons;
                 } else {
                     state.set_mode(crate::tui::state::AppMode::Streaming);
                 }
             }
+        }
+        if !state.addons_enabled
+            && state.active_provider == crate::providers::models::ProviderKind::Addons
+        {
+            state.active_provider = crate::providers::models::ProviderKind::MovieBox;
         }
         state.active_theme_kind = config.active_theme;
         state.default_player = config.default_player;
@@ -168,9 +175,8 @@ impl App {
         if app.state.is_tv_mode {
             app.load_tv_playlists_from_config();
             app.reload_tv_playlists();
-        } else if app.state.is_addon_mode {
-            app.load_installed_addons_from_config();
         }
+        app.load_installed_addons_from_config();
         if provider_was_sanitized {
             app.persist_config();
         }
@@ -200,7 +206,6 @@ impl App {
     fn persist_config(&self) {
         let active_mode = match self.state.mode() {
             crate::tui::state::AppMode::Tv => "tv",
-            crate::tui::state::AppMode::Addon => "addon",
             crate::tui::state::AppMode::Streaming => "streaming",
         };
         let config = crate::tui::config::Config {
@@ -209,7 +214,11 @@ impl App {
             active_mode: active_mode.to_string(),
             active_provider: self.state.active_provider,
             active_theme: self.state.active_theme_kind.clone(),
-            bdix_enabled: self.state.bdix_enabled,
+            moviebox_enabled: self.state.moviebox_enabled,
+            fourkhdhub_enabled: self.state.fourkhdhub_enabled,
+            bdix_circleftp_enabled: self.state.bdix_circleftp_enabled,
+            bdix_dhakaflix_enabled: self.state.bdix_dhakaflix_enabled,
+            bdix_probed: self.state.bdix_probed,
             streaming_enabled: self.state.streaming_enabled,
             tv_enabled: self.state.tv_enabled,
             addons_enabled: self.state.addons_enabled,

@@ -478,11 +478,6 @@ pub const CTRL_T_STR: &str = if cfg!(target_os = "macos") {
 } else {
     "Ctrl+T"
 };
-pub const CTRL_A_STR: &str = if cfg!(target_os = "macos") {
-    "^A"
-} else {
-    "Ctrl+A"
-};
 pub const CTRL_P_STR: &str = if cfg!(target_os = "macos") {
     "^P"
 } else {

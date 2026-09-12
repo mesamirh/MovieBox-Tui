@@ -240,8 +240,9 @@ async fn test_mode_switch_stale_response_protection() {
     app.state_mut().active_search_request = 1;
     app.state_mut().search_query.set_content("avatar");
 
-    app.handle_action(Action::ToggleAddonMode).await;
-    assert_eq!(app.state().mode(), AppMode::Addon);
+    app.handle_action(Action::SwitchProvider(ProviderKind::Addons))
+        .await;
+    assert_eq!(app.state().active_provider, ProviderKind::Addons);
     assert_ne!(app.state().provider_generation, streaming_generation);
 
     let moviebox_items = vec![CatalogItem {

@@ -62,14 +62,7 @@ impl SlashCommand {
     pub fn is_available(self, state: &AppState) -> bool {
         match self {
             Self::Settings => true,
-            Self::Browse => {
-                (state.streaming_enabled && !state.is_tv_mode && !state.is_addon_mode)
-                    || (state.addons_enabled && state.is_addon_mode)
-            }
-            Self::History => {
-                (state.streaming_enabled && !state.is_tv_mode && !state.is_addon_mode)
-                    || (state.addons_enabled && state.is_addon_mode)
-            }
+            Self::Browse | Self::History => state.streaming_enabled && !state.is_tv_mode,
             Self::Favorites => state.favorites_available(),
             Self::List => state.tv_enabled && state.is_tv_mode,
             Self::Clear | Self::Help | Self::Exit => true,
