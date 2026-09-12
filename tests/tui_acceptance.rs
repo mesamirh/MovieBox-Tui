@@ -218,6 +218,8 @@ async fn test_mouse_click_search_input_mode() {
     assert_eq!(app.state().input_mode, InputMode::Normal);
 
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let cols = if cols == 0 { 80 } else { cols };
+    let rows = if rows == 0 { 24 } else { rows };
     let area = ratatui::layout::Rect::new(0, 0, cols, rows);
     let (_, landing_rows) = moviebox_tui::tui::screens::home::landing_split(
         area,
@@ -237,6 +239,9 @@ async fn test_mouse_click_search_input_mode() {
 #[tokio::test]
 async fn test_mouse_click_favorites_item_focuses_and_selects() {
     let mut app = App::new();
+    app.state_mut().is_tv_mode = false;
+    app.state_mut()
+        .set_mode(moviebox_tui::tui::state::AppMode::Streaming);
     app.state_mut()
         .favorites
         .items
@@ -251,6 +256,8 @@ async fn test_mouse_click_favorites_item_focuses_and_selects() {
         });
 
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let cols = if cols == 0 { 80 } else { cols };
+    let rows = if rows == 0 { 24 } else { rows };
     let area = ratatui::layout::Rect::new(0, 0, cols, rows);
     let (_, landing_rows) = moviebox_tui::tui::screens::home::landing_split(
         area,
