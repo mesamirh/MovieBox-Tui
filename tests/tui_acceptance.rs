@@ -924,6 +924,9 @@ async fn test_home_deck_tab_switching() {
     app.state_mut().active_screen = Screen::Home;
     app.state_mut().input_mode = InputMode::Normal;
     app.state_mut().streaming_enabled = true;
+    app.state_mut().is_tv_mode = false;
+    app.state_mut()
+        .set_mode(moviebox_tui::tui::state::AppMode::Streaming);
     app.state_mut().history.recent.clear();
     app.state_mut().favorites.items.clear();
 
