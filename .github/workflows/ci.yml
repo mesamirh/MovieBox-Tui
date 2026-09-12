@@ -74,6 +74,10 @@ jobs:
         with:
           prefix-key: "ci-build-test-${{ matrix.os }}"
       - run: cargo build --all-features --locked
-      - run: cargo test --all-features --locked
+      - name: Run test suite with isolated configuration
+        env:
+          MOVIEBOX_CONFIG_DIR: ${{ runner.temp }}/mb_config
+          MOVIEBOX_DATA_DIR: ${{ runner.temp }}/mb_data
+        run: cargo test --all-features --locked
       - name: Smoke-test binary startup
         run: cargo run --all-features --locked -- --version
