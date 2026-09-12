@@ -240,7 +240,12 @@ fn render_search_state(
 
             let is_compact_btn = area.width < 56;
             let sep = if is_compact_btn { "  " } else { "        " };
-            let pills = if state.is_tv_mode {
+            let is_history_or_fav = state.search_query.trim().eq_ignore_ascii_case("/history")
+                || state.search_query.trim().eq_ignore_ascii_case("/favorites")
+                || state.search_query.trim().eq_ignore_ascii_case("/fav");
+            let pills = if is_history_or_fav {
+                vec![]
+            } else if state.is_tv_mode {
                 let (btn1_label, btn2_label) = if is_compact_btn {
                     ("[ Reload (", "[ Clear (")
                 } else {
@@ -292,7 +297,9 @@ fn render_search_state(
                 ]
             };
 
-            lines.push(Line::from(pills));
+            if !pills.is_empty() {
+                lines.push(Line::from(pills));
+            }
         }
         SearchViewState::Error => {
             let symbol = if state.basic_terminal { "!" } else { "×" };

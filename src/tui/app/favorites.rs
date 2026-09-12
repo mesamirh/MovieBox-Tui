@@ -243,6 +243,7 @@ impl App {
     pub(super) fn load_favorites_virtual_list(&mut self) {
         self.state.input_mode = InputMode::Normal;
         self.state.is_loading = false;
+        self.state.has_search_settled = true;
         self.state.is_homepage_mode = false;
         self.state.active_browse_preset = None;
         self.state.browse_metrics.clear();

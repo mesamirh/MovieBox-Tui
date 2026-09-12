@@ -427,6 +427,22 @@ async fn test_history_slash_command_populates_search_results_accurately() {
     assert!(providers.contains(&ProviderKind::MovieBox));
     assert!(providers.contains(&ProviderKind::Addons));
 }
+
+#[tokio::test]
+async fn test_empty_history_slash_command_settles_search_state() {
+    let mut app = App::new();
+    app.state_mut().history.clear();
+    app.state_mut().active_screen = Screen::Home;
+    app.handle_action(Action::Search {
+        query: "/history".to_string(),
+        force_refresh: false,
+    })
+    .await;
+
+    assert!(app.state().search_results.is_empty());
+    assert!(!app.state().is_loading);
+    assert!(app.state().has_search_settled);
+}
 #[test]
 fn test_update_progress_precision_preservation() {
     let mut manager = HistoryManager::default();

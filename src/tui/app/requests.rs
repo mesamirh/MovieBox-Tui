@@ -136,6 +136,7 @@ impl App {
                 {
                     self.state.input_mode = InputMode::Normal;
                     self.state.is_loading = false;
+                    self.state.has_search_settled = true;
                     self.state.is_homepage_mode = false;
                     self.state.active_browse_preset = None;
                     self.state.browse_metrics.clear();

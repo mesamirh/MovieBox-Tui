@@ -48,6 +48,7 @@ impl App {
             })
             .collect();
         self.state.is_loading = false;
+        self.state.has_search_settled = true;
         self.state
             .search_list_state
             .select(if self.state.search_results.is_empty() {
@@ -87,7 +88,7 @@ impl App {
                 self.state.notify(
                     NotificationKind::Warning,
                     "Unknown Command",
-                    format!("Command '{cmd_name}' is not recognized. Type '/' to view available commands."),
+                    format!("Unknown command '{cmd_name}'. Type '/' for list."),
                 );
                 return Some(true);
             }
@@ -147,7 +148,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!("Command /browse is available in Streaming Mode ({ctrl_s})."),
+                        format!("Available in Streaming Mode ({ctrl_s})."),
                     );
                 } else {
                     self.action_sender.send(Action::ShowBrowseMenu).ok();
@@ -159,7 +160,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!("Command /history is available in Streaming Mode ({ctrl_s})."),
+                        format!("Available in Streaming Mode ({ctrl_s})."),
                     );
                     Some(true)
                 } else {
@@ -171,7 +172,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!("Command /favorites is available in Streaming Mode ({ctrl_s})."),
+                        format!("Available in Streaming Mode ({ctrl_s})."),
                     );
                     Some(true)
                 } else {
@@ -185,9 +186,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Info,
                         "TV Mode",
-                        format!(
-                            "Command /list is only available in TV Mode. Switch with {ctrl_t}."
-                        ),
+                        format!("Available in TV Mode ({ctrl_t})."),
                     );
                 }
                 Some(true)

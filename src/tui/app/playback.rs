@@ -222,7 +222,7 @@ impl App {
             self.state.notify(
                 NotificationKind::Error,
                 "Unsupported stream",
-                "Only HTTP and HTTPS stream protocols are supported for playback.",
+                "Only HTTP/HTTPS streams supported.",
             );
             return;
         }
@@ -460,8 +460,8 @@ impl App {
                 if self.state.is_playing {
                     self.state.notify(
                         NotificationKind::Warning,
-                        "Playback already active",
-                        "Stop the current player before starting another.",
+                        "Playback active",
+                        "Player is already running.",
                     );
                     return None;
                 }
@@ -701,8 +701,8 @@ impl App {
                 if self.state.is_playing {
                     self.state.notify(
                         NotificationKind::Warning,
-                        "Playback already active",
-                        "Stop the current player before starting another.",
+                        "Playback active",
+                        "Player is already running.",
                     );
                     return None;
                 }

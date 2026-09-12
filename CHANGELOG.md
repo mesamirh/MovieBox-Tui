@@ -71,6 +71,10 @@
   - Balanced search result card layout across three vertical rows: Row 1 displays title and resolution badge, Row 2 displays rating, release year, and media type, and Row 3 displays provider badge and genres/loading state.
   - Aligned all 3 rows of text with the 3 rows of the poster placeholder (`╭──────╮` on Row 1, `│ No Art │` on Row 2, `╰──────╯` on Row 3), eliminating the hanging bottom border and empty-line visual disconnect.
 ### Fixed
+- **History and Favorites Search Settle State**:
+  - Set `has_search_settled` to `true` when querying `/history`, `/favorites`, and TV `/list`, preventing an empty watch history or favorites list from being permanently trapped in a `Searching for “...”` loading spinner.
+  - Suppressed search action pills entirely on empty `/history` and `/favorites` views, cleanly presenting the empty state message without clutter.
+  - Shortened and streamlined notification copy across commands (`Unknown command '{cmd}'. Type '/' for list.`), mode switches, playback guards, and settings actions to fit cleanly into compact notification cards.
 - **Details Screen Selector Panes Tight Label Highlighting**:
   - Replaced wide full-width block highlight bars across Audio, Seasons, and Episodes selector panes with compact, text-bounded highlight pills, eliminating awkward empty horizontal background strips across the lists.
 - **Stream Table Migration to Native Ratatui Table Architecture**:

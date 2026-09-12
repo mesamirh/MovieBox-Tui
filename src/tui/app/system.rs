@@ -253,14 +253,14 @@ impl App {
                         self.state.notify(
                             NotificationKind::Success,
                             "Cache Cleared",
-                            "Temporary cache cleared. Reloading TV playlists...",
+                            "Cache cleared. Reloading playlists...",
                         );
                         self.reload_tv_playlists();
                     } else {
                         self.state.notify(
                             NotificationKind::Success,
                             "Cache Cleared",
-                            "All temporary cache files cleared completely.",
+                            "Temporary cache files cleared.",
                         );
                     }
                 }
@@ -358,7 +358,7 @@ impl App {
                                 self.state.notify(
                                     NotificationKind::Warning,
                                     "Streaming Mode",
-                                    "Cannot disable: at least one mode must remain active.",
+                                    "At least one mode must remain active.",
                                 );
                             } else {
                                 self.state.streaming_enabled = enable_req;
@@ -382,7 +382,7 @@ impl App {
                                 self.state.notify(
                                     NotificationKind::Warning,
                                     "Live TV Mode",
-                                    "Cannot disable: at least one mode must remain active.",
+                                    "At least one mode must remain active.",
                                 );
                             } else {
                                 self.state.tv_enabled = enable_req;
@@ -487,7 +487,7 @@ impl App {
                                 self.state.notify(
                                     NotificationKind::Warning,
                                     "Streaming Mode",
-                                    "Cannot disable: at least one mode must remain active.",
+                                    "At least one mode must remain active.",
                                 );
                             } else {
                                 self.state.streaming_enabled = enable_req;
@@ -511,7 +511,7 @@ impl App {
                                 self.state.notify(
                                     NotificationKind::Warning,
                                     "Live TV Mode",
-                                    "Cannot disable: at least one mode must remain active.",
+                                    "At least one mode must remain active.",
                                 );
                             } else {
                                 self.state.tv_enabled = enable_req;
@@ -592,7 +592,7 @@ impl App {
                                     self.state.notify(
                                         NotificationKind::Warning,
                                         "Browser Launch Failed",
-                                        format!("Could not open browser: {error}\n{REPO_URL}"),
+                                        format!("Could not open browser: {error}"),
                                     );
                                 }
                             }
