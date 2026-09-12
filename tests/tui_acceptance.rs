@@ -68,7 +68,6 @@ async fn test_download_subtitle_popup_renders_in_app_draw() {
     assert!(content.contains("Subtitles"));
     assert!(content.contains("No subtitles"));
     assert!(content.contains("English"));
-    assert!(content.contains("Download"));
 }
 
 #[tokio::test]
@@ -1095,7 +1094,7 @@ async fn test_landing_deck_header_renders_without_star_or_bracket() {
         .map(|c| c.symbol())
         .collect();
 
-    assert!(text.contains("Continue Watching"));
+    assert!(text.contains("Resume"));
     assert!(text.contains("Favorites"));
     assert!(!text.contains("★"));
     assert!(!text.contains("- *  Favorites"));

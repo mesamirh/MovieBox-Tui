@@ -195,6 +195,8 @@ impl MovieBoxService {
         subject_id: &str,
         resource_id: &str,
         sibling_ids: &[String],
+        season: usize,
+        episode: usize,
     ) -> Result<Vec<crate::providers::models::SubtitleOption>, String> {
         let mut all_captions = Vec::new();
         let mut seen_urls = std::collections::HashSet::new();
@@ -213,8 +215,10 @@ impl MovieBoxService {
                 if !sib.is_empty() && sib != subject_id {
                     let client = &self.client;
                     sibling_futs.push(async move {
-                        if let Ok((items, _)) = client.fetch_resource_page(sib, 0, 1).await {
-                            if let Some(item) = items.first() {
+                        let page = if episode > 0 { (episode - 1) / 20 + 1 } else { 1 };
+                        if let Ok((items, _)) = client.fetch_resource_page(sib, season, episode, 0, page).await {
+                            let matched_item = find_matching_resource_item(&items, season, episode);
+                            if let Some(item) = matched_item {
                                 let item_rid = item
                                     .get("resourceId")
                                     .or_else(|| item.get("id"))
@@ -283,7 +287,6 @@ impl MovieBoxService {
             }
         }
     }
-
     pub async fn fetch_poster_bytes(&self, url: &str) -> Option<Vec<u8>> {
         let response = self
             .http_client
@@ -468,6 +471,26 @@ pub fn resolve_download_dir(custom_dir: Option<&Path>) -> PathBuf {
     ensure_moviebox_subdir(&base_dir)
 }
 
+pub fn find_matching_resource_item(
+    items: &[serde_json::Value],
+    season: usize,
+    episode: usize,
+) -> Option<&serde_json::Value> {
+    items.iter().find(|item| {
+        let parse_num = |k: &str| -> Option<usize> {
+            item.get(k).and_then(|v| {
+                v.as_u64()
+                    .map(|n| n as usize)
+                    .or_else(|| v.as_i64().map(|n| n as usize))
+                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            })
+        };
+        let se = parse_num("se");
+        let ep_num = parse_num("ep");
+        (season == 0 && episode == 0) || (se == Some(season) && ep_num == Some(episode))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +507,63 @@ mod tests {
         assert!(decoded.height() <= 512);
         assert_eq!(decoded.width(), 512);
         assert_eq!(decoded.height(), 384);
+    }
+
+    #[test]
+    fn test_find_matching_resource_item_integer_and_string_values() {
+        let items = vec![
+            serde_json::json!({
+                "id": "1001",
+                "se": 1,
+                "ep": 1
+            }),
+            serde_json::json!({
+                "id": "1002",
+                "se": "2",
+                "ep": "5"
+            }),
+        ];
+
+        let matched = find_matching_resource_item(&items, 2, 5);
+        assert!(matched.is_some());
+        assert_eq!(matched.unwrap().get("id").unwrap().as_str(), Some("1002"));
+    }
+
+    #[test]
+    fn test_find_matching_resource_item_series_does_not_fall_back_to_episode_one() {
+        let items = vec![
+            serde_json::json!({
+                "id": "1001",
+                "se": 1,
+                "ep": 1
+            }),
+            serde_json::json!({
+                "id": "1002",
+                "se": 1,
+                "ep": 2
+            }),
+        ];
+
+        let matched = find_matching_resource_item(&items, 2, 3);
+        assert!(matched.is_none());
+    }
+
+    #[test]
+    fn test_find_matching_resource_item_movie_matches_first() {
+        let items = vec![
+            serde_json::json!({
+                "id": "movie_res_1"
+            }),
+            serde_json::json!({
+                "id": "movie_res_2"
+            }),
+        ];
+
+        let matched = find_matching_resource_item(&items, 0, 0);
+        assert!(matched.is_some());
+        assert_eq!(
+            matched.unwrap().get("id").unwrap().as_str(),
+            Some("movie_res_1")
+        );
     }
 }

@@ -1068,13 +1068,9 @@ impl App {
                 &items,
                 &mut self.state.subtitle_list_state,
                 crate::tui::overlay::PickerSpec {
-                    title: if self.state.is_download_subtitle_popup {
-                        "Download Subtitles"
-                    } else {
-                        "Subtitles"
-                    },
+                    title: "Subtitles",
                     confirm_label,
-                    minimum_width: 32,
+                    minimum_width: 20,
                     show_counter: true,
                 },
                 &self.theme,

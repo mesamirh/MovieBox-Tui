@@ -63,14 +63,39 @@ impl crate::providers::ReleaseProvider for client::MovieBoxClient {
     ) -> Result<Vec<crate::providers::models::Release>, ProviderError> {
         let (play_info_res, resources_res) = tokio::join!(
             self.get_play_info(id, season, episode),
-            self.get_resources(id, season, episode, 1, None, 5)
+            self.get_resources(
+                id,
+                season,
+                episode,
+                if episode > 0 {
+                    (episode - 1) / 20 + 1
+                } else {
+                    1
+                },
+                None,
+                20,
+            )
         );
-
         let upload_resource_id = resources_res.ok().and_then(|val| {
             val.get("list")
                 .or_else(|| val.get("data").and_then(|d| d.get("list")))
                 .and_then(|l| l.as_array())
-                .and_then(|arr| arr.first())
+                .and_then(|arr| {
+                    arr.iter().find(|item| {
+                        let parse_num = |k: &str| -> Option<usize> {
+                            item.get(k).and_then(|v| {
+                                v.as_u64()
+                                    .map(|n| n as usize)
+                                    .or_else(|| v.as_i64().map(|n| n as usize))
+                                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                            })
+                        };
+                        let se = parse_num("se");
+                        let ep_num = parse_num("ep");
+                        (season == 0 && episode == 0)
+                            || (se == Some(season) && ep_num == Some(episode))
+                    })
+                })
                 .and_then(|item| {
                     item.get("resourceId")
                         .or_else(|| item.get("id"))
@@ -99,8 +124,13 @@ impl crate::providers::ReleaseProvider for client::MovieBoxClient {
             return Ok(releases);
         }
 
+        let page = if episode > 0 {
+            (episode - 1) / 20 + 1
+        } else {
+            1
+        };
         let (items, _) = self
-            .fetch_resource_page(id, 0, 1)
+            .fetch_resource_page(id, season, episode, 0, page)
             .await
             .map_err(ProviderError::from)?;
         let mut legacy_releases = Vec::new();
@@ -226,19 +256,12 @@ impl MovieBoxClient {
     pub async fn fetch_resource_page(
         &self,
         subject_id: &str,
+        season: usize,
+        episode: usize,
         resolution: u32,
         page: usize,
     ) -> Result<(Vec<Value>, Value), ScraperError> {
-        let res_param = if resolution == 0 {
-            String::new()
-        } else {
-            format!("&resolution={}", resolution)
-        };
-
-        let path = format!(
-            "/wefeed-mobile-bff/subject-api/resource?subjectId={}&page={}&perPage=20{}",
-            subject_id, page, res_param
-        );
+        let path = resource_page_path(subject_id, season, episode, resolution, page);
 
         let res = self.get(&path).await?;
 
@@ -305,5 +328,63 @@ impl MovieBoxClient {
             subject_id, resource_id
         );
         self.get(&path).await
+    }
+}
+
+pub fn resource_page_path(
+    subject_id: &str,
+    season: usize,
+    episode: usize,
+    resolution: u32,
+    page: usize,
+) -> String {
+    let res_param = if resolution == 0 {
+        String::new()
+    } else {
+        format!("&resolution={}", resolution)
+    };
+
+    if season == 0 && episode == 0 {
+        format!(
+            "/wefeed-mobile-bff/subject-api/resource?subjectId={}&page={}&perPage=20{}",
+            subject_id, page, res_param
+        )
+    } else {
+        format!(
+            "/wefeed-mobile-bff/subject-api/resource?subjectId={}&se={}&ep={}&page={}&perPage=20{}",
+            subject_id, season, episode, page, res_param
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resource_page_path_movie() {
+        let path = resource_page_path("12345", 0, 0, 0, 1);
+        assert_eq!(
+            path,
+            "/wefeed-mobile-bff/subject-api/resource?subjectId=12345&page=1&perPage=20"
+        );
+    }
+
+    #[test]
+    fn test_resource_page_path_series_with_se_and_ep() {
+        let path = resource_page_path("67890", 2, 5, 0, 1);
+        assert_eq!(
+            path,
+            "/wefeed-mobile-bff/subject-api/resource?subjectId=67890&se=2&ep=5&page=1&perPage=20"
+        );
+    }
+
+    #[test]
+    fn test_resource_page_path_with_resolution() {
+        let path = resource_page_path("67890", 1, 10, 1080, 2);
+        assert_eq!(
+            path,
+            "/wefeed-mobile-bff/subject-api/resource?subjectId=67890&se=1&ep=10&page=2&perPage=20&resolution=1080"
+        );
     }
 }

@@ -546,27 +546,45 @@ impl App {
                             self.state.notify(
                                 NotificationKind::Info,
                                 "Clearing Cache",
-                                "Clearing temporary disk cache files...",
+                                "Clearing temporary disk cache...",
                             );
                             self.action_sender.send(Action::ClearCache).ok();
                         }
                         1 => {
+                            self.state.history.clear();
+                            self.state.homepage_cache.clear();
+                            if self
+                                .state
+                                .search_query
+                                .trim()
+                                .eq_ignore_ascii_case("/history")
+                            {
+                                self.state.search_results.clear();
+                                self.state.search_list_state.select(None);
+                            }
+                            self.state.notify(
+                                NotificationKind::Success,
+                                "History",
+                                "Watch history cleared",
+                            );
+                        }
+                        2 => {
                             self.state.manual_update_check = true;
                             self.state.notify(
                                 NotificationKind::Info,
                                 "Checking for updates",
-                                "Querying GitHub for latest releases...",
+                                "Checking GitHub releases...",
                             );
                             self.action_sender.send(Action::CheckForUpdates).ok();
                         }
-                        2 => {
+                        3 => {
                             const REPO_URL: &str = "https://github.com/mesamirh/MovieBox-Tui";
                             match open::that(REPO_URL) {
                                 Ok(()) => {
                                     self.state.notify(
                                         NotificationKind::Info,
                                         "GitHub",
-                                        "Opening repository in default web browser...",
+                                        "Opening repository in browser...",
                                     );
                                 }
                                 Err(error) => {
@@ -579,13 +597,13 @@ impl App {
                                 }
                             }
                         }
-                        3 => {
+                        4 => {
                             self.state.bdix_probed = false;
                             self.action_sender.send(Action::CheckBdixNetwork).ok();
                             self.state.notify(
                                 NotificationKind::Info,
                                 "BDIX Check",
-                                "Probing BDIX mirrors on local network...",
+                                "Probing local network mirrors...",
                             );
                         }
                         _ => {}

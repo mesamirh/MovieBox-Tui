@@ -1556,7 +1556,7 @@ impl App {
                             }
                             match tokio::time::timeout(
                                 std::time::Duration::from_secs(15),
-                                client.fetch_resource_page(&id_clone, 0, page),
+                                client.fetch_resource_page(&id_clone, 0, 0, 0, page),
                             )
                             .await
                             {
@@ -1613,7 +1613,7 @@ impl App {
                                     }
                                     match tokio::time::timeout(
                                         std::time::Duration::from_secs(15),
-                                        c.fetch_resource_page(&id, res, page),
+                                        c.fetch_resource_page(&id, 0, 0, res, page),
                                     )
                                     .await
                                     {
@@ -1842,6 +1842,8 @@ impl App {
                                 ids
                             })
                             .unwrap_or_default();
+                        let season = self.state.selected_season;
+                        let episode = self.state.selected_episode;
                         tokio::spawn(async move {
                             let already_cached = tokio::task::spawn_blocking({
                                 let subject_id = subject_id.clone();
@@ -1856,7 +1858,13 @@ impl App {
 
                             if !already_cached {
                                 if let Ok(res) = service
-                                    .get_ext_captions(&subject_id, &rid, &sibling_ids)
+                                    .get_ext_captions(
+                                        &subject_id,
+                                        &rid,
+                                        &sibling_ids,
+                                        season,
+                                        episode,
+                                    )
                                     .await
                                 {
                                     tokio::task::spawn_blocking(move || {
@@ -1895,10 +1903,18 @@ impl App {
                                     ids
                                 })
                                 .unwrap_or_default();
+                            let season = self.state.selected_season;
+                            let episode = self.state.selected_episode;
 
                             tokio::spawn(async move {
                                 if let Ok(res) = service
-                                    .get_ext_captions(&subject_id, &rid, &sibling_ids)
+                                    .get_ext_captions(
+                                        &subject_id,
+                                        &rid,
+                                        &sibling_ids,
+                                        season,
+                                        episode,
+                                    )
                                     .await
                                 {
                                     if pref.is_none() {

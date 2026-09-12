@@ -597,9 +597,11 @@ impl App {
                             ids
                         })
                         .unwrap_or_default();
+                    let season = self.state.selected_season;
+                    let episode = self.state.selected_episode;
                     tokio::spawn(async move {
                         if let Ok(res) = service
-                            .get_ext_captions(&subject_id, &rid, &sibling_ids)
+                            .get_ext_captions(&subject_id, &rid, &sibling_ids, season, episode)
                             .await
                         {
                             sender.send(Action::ShowDownloadSubtitlePopup(res)).ok();

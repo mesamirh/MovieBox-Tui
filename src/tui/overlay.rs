@@ -35,7 +35,7 @@ pub fn picker_layout(
         .map(|item| crate::tui::text::width(item))
         .max()
         .unwrap_or(0)
-        .saturating_add(2);
+        .saturating_add(6);
     centered(
         area,
         content_width as u16,
@@ -94,6 +94,21 @@ pub fn settings_modal_layout(area: Rect, category: crate::tui::state::SettingsCa
     Rect::new(x, y, width, popup_height)
 }
 
+pub fn help_modal_layout(area: Rect, desired_width: u16, desired_height: u16) -> Rect {
+    let available_width = area.width.saturating_sub(2).max(1);
+    let available_height = area.height.saturating_sub(2).max(1);
+    let width = desired_width.clamp(46, 120).min(available_width);
+    let height = desired_height.min(available_height).max(1);
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let search_y = if area.height >= 24 {
+        area.y + 2 + 6 + 1 + 2
+    } else {
+        area.y + 1 + 2 + 1 + 1
+    };
+    let y = search_y.min(area.bottom().saturating_sub(height));
+    Rect::new(x, y, width, height)
+}
+
 pub fn download_confirm_layout(
     area: Rect,
     summary_lines: usize,
@@ -124,7 +139,13 @@ pub fn picker(
 ) {
     let lines: Vec<Line<'static>> = items
         .iter()
-        .map(|item| Line::from(vec![Span::raw(item.clone())]))
+        .map(|item| {
+            Line::from(vec![
+                Span::raw(" "),
+                Span::raw(item.clone()),
+                Span::raw(" "),
+            ])
+        })
         .collect();
     picker_with_lines(
         frame,
@@ -247,14 +268,13 @@ pub fn confirmation(
         Paragraph::new(summary.to_vec()).alignment(Alignment::Center),
         sections[0],
     );
-    use ratatui::style::Color;
     let confirm_btn_style = if confirm_selected {
         if basic_terminal {
             theme.text.add_modifier(Modifier::REVERSED | Modifier::BOLD)
         } else {
             Style::default()
-                .bg(theme.accent.fg.unwrap_or(Color::Cyan))
-                .fg(theme.crust.fg.unwrap_or(Color::Black))
+                .bg(theme.accent.fg.unwrap_or(theme.base))
+                .fg(theme.crust_color())
                 .add_modifier(Modifier::BOLD)
         }
     } else {
@@ -266,8 +286,8 @@ pub fn confirmation(
             theme.text.add_modifier(Modifier::REVERSED | Modifier::BOLD)
         } else {
             Style::default()
-                .bg(theme.surface1.fg.unwrap_or(Color::DarkGray))
-                .fg(theme.text.fg.unwrap_or(Color::White))
+                .bg(theme.surface1_color())
+                .fg(theme.text.fg.unwrap_or(theme.base))
                 .add_modifier(Modifier::BOLD)
         }
     } else {
@@ -293,12 +313,19 @@ pub fn notifications(
     let bottom_offset = if download_active { 5 } else { 2 };
     let mut y = area.bottom().saturating_sub(bottom_offset);
 
-    for notification in notifications.iter().rev().take(3) {
+    let (max_visible, max_card_w, max_msg_lines) = if area.height < 20 || area.width < 65 {
+        (1, 42.min(area.width.saturating_sub(4) as usize), 1)
+    } else if area.height < 30 {
+        (2, 56.min(area.width.saturating_sub(4) as usize), 2)
+    } else {
+        (3, 64.min(area.width.saturating_sub(4) as usize), 3)
+    };
+
+    for notification in notifications.iter().rev().take(max_visible) {
         let (badge, badge_style) = notification_style(notification.kind, theme, basic_terminal);
         let has_message =
             !notification.message.is_empty() && notification.message != notification.title;
 
-        let max_card_width = (area.width.saturating_sub(4) as usize).min(72);
         let title_w = crate::tui::text::width(&notification.title).saturating_add(6);
         let badge_w = badge.len().saturating_add(6);
         let raw_msg_w = if has_message {
@@ -310,14 +337,14 @@ pub fn notifications(
         let target_card_width = title_w
             .max(badge_w)
             .max(raw_msg_w)
-            .clamp(20, max_card_width.max(20)) as u16;
+            .clamp(20, max_card_w.max(20)) as u16;
 
         let inner_width = (target_card_width.saturating_sub(4) as usize).max(1);
 
         let msg_lines: Vec<String> = if has_message {
             crate::tui::text::wrap_text(&notification.message, inner_width)
                 .into_iter()
-                .take(4)
+                .take(max_msg_lines)
                 .collect()
         } else {
             Vec::new()
@@ -328,7 +355,6 @@ pub fn notifications(
         if target_card_width < 10 || y < area.y.saturating_add(height) {
             break;
         }
-
         y = y.saturating_sub(height);
 
         let toast_area = Rect::new(
@@ -461,7 +487,7 @@ pub(crate) fn selection_style(theme: &Theme, basic_terminal: bool) -> Style {
             .fg(theme.highlight.fg.unwrap_or(theme.base))
             .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
     } else {
-        let bg = theme.surface1.fg.unwrap_or(theme.base);
+        let bg = theme.surface1_color();
         let fg = theme
             .highlight
             .fg
@@ -518,12 +544,19 @@ pub fn notification_rects(
     let mut y = area.bottom().saturating_sub(bottom_offset);
     let theme_placeholder = Theme::default();
 
-    for (rev_idx, notification) in notifications.iter().rev().take(3).enumerate() {
+    let (max_visible, max_card_w, max_msg_lines) = if area.height < 20 || area.width < 65 {
+        (1, 42.min(area.width.saturating_sub(4) as usize), 1)
+    } else if area.height < 30 {
+        (2, 56.min(area.width.saturating_sub(4) as usize), 2)
+    } else {
+        (3, 64.min(area.width.saturating_sub(4) as usize), 3)
+    };
+
+    for (rev_idx, notification) in notifications.iter().rev().take(max_visible).enumerate() {
         let (badge, _) = notification_style(notification.kind, &theme_placeholder, basic_terminal);
         let has_message =
             !notification.message.is_empty() && notification.message != notification.title;
 
-        let max_card_width = (area.width.saturating_sub(4) as usize).min(72);
         let title_w = crate::tui::text::width(&notification.title).saturating_add(6);
         let badge_w = badge.len().saturating_add(6);
         let raw_msg_w = if has_message {
@@ -535,14 +568,14 @@ pub fn notification_rects(
         let target_card_width = title_w
             .max(badge_w)
             .max(raw_msg_w)
-            .clamp(20, max_card_width.max(20)) as u16;
+            .clamp(20, max_card_w.max(20)) as u16;
 
         let inner_width = (target_card_width.saturating_sub(4) as usize).max(1);
 
         let msg_lines: Vec<String> = if has_message {
             crate::tui::text::wrap_text(&notification.message, inner_width)
                 .into_iter()
-                .take(4)
+                .take(max_msg_lines)
                 .collect()
         } else {
             Vec::new()
@@ -855,5 +888,25 @@ mod tests {
 
         let (_, error_style) = notification_style(NotificationKind::Error, &theme, false);
         assert_eq!(error_style.fg, theme.error.fg);
+    }
+
+    #[test]
+    fn test_notification_rects_adaptive_tiering() {
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(Notification::new(NotificationKind::Info, "N1", "M1"));
+        queue.push_back(Notification::new(NotificationKind::Info, "N2", "M2"));
+        queue.push_back(Notification::new(NotificationKind::Info, "N3", "M3"));
+
+        let compact_area = Rect::new(0, 0, 60, 18);
+        let compact_rects = notification_rects(compact_area, &queue, false, false);
+        assert_eq!(compact_rects.len(), 1);
+
+        let standard_area = Rect::new(0, 0, 80, 24);
+        let standard_rects = notification_rects(standard_area, &queue, false, false);
+        assert_eq!(standard_rects.len(), 2);
+
+        let large_area = Rect::new(0, 0, 120, 35);
+        let large_rects = notification_rects(large_area, &queue, false, false);
+        assert_eq!(large_rects.len(), 3);
     }
 }

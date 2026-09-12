@@ -427,7 +427,7 @@ fn render_general_settings(frame: &mut Frame, area: Rect, state: &AppState, them
                     Span::styled(after, theme.text),
                 ]
             } else {
-                let input_bg = theme.surface0.fg.unwrap_or(theme.base);
+                let input_bg = theme.surface0_color();
                 let input_style = Style::default()
                     .fg(theme
                         .text
@@ -606,7 +606,7 @@ fn render_appearance_settings(frame: &mut Frame, area: Rect, state: &AppState, t
 }
 
 fn render_storage_settings(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
-    let row_rects = settings_row_rects_in_area(area, 4);
+    let row_rects = settings_row_rects_in_area(area, 5);
     let has_active_popup = has_active_settings_popup(state);
 
     if let Some(&row_area) = row_rects.first() {
@@ -645,6 +645,40 @@ fn render_storage_settings(frame: &mut Frame, area: Rect, state: &AppState, them
 
     if let Some(&row_area) = row_rects.get(1) {
         let is_selected = state.settings_selected_row == 1;
+        let is_active_selected = is_selected && !has_active_popup;
+        let glyph = if state.basic_terminal { ">" } else { "▸" };
+        let value_spans = vec![Span::styled(
+            format!("Clear {glyph}"),
+            if has_active_popup {
+                theme.muted
+            } else if state.basic_terminal {
+                if is_active_selected {
+                    theme.text.add_modifier(Modifier::BOLD)
+                } else {
+                    theme.text_dim
+                }
+            } else if is_active_selected {
+                theme.error.add_modifier(Modifier::BOLD)
+            } else {
+                theme.error
+            },
+        )];
+        render_row(
+            frame,
+            row_area,
+            SettingRow {
+                is_selected,
+                has_active_popup,
+                label: "Clear Watch History",
+                value_spans,
+            },
+            theme,
+            state.basic_terminal,
+        );
+    }
+
+    if let Some(&row_area) = row_rects.get(2) {
+        let is_selected = state.settings_selected_row == 2;
         let is_active_selected = is_selected && !has_active_popup;
         let value_spans = if state.is_checking_updates {
             vec![Span::styled(
@@ -690,8 +724,8 @@ fn render_storage_settings(frame: &mut Frame, area: Rect, state: &AppState, them
         );
     }
 
-    if let Some(&row_area) = row_rects.get(2) {
-        let is_selected = state.settings_selected_row == 2;
+    if let Some(&row_area) = row_rects.get(3) {
+        let is_selected = state.settings_selected_row == 3;
         let is_active_selected = is_selected && !has_active_popup;
         let glyph = if state.basic_terminal { "->" } else { "↗" };
         let value_spans = vec![Span::styled(
@@ -723,8 +757,8 @@ fn render_storage_settings(frame: &mut Frame, area: Rect, state: &AppState, them
             state.basic_terminal,
         );
     }
-    if let Some(&row_area) = row_rects.get(3) {
-        let is_selected = state.settings_selected_row == 3;
+    if let Some(&row_area) = row_rects.get(4) {
+        let is_selected = state.settings_selected_row == 4;
         let is_active_selected = is_selected && !has_active_popup;
         let glyph = if state.basic_terminal { "->" } else { "▸" };
         let value_spans = vec![Span::styled(

@@ -88,7 +88,6 @@ impl App {
             } => {
                 self.state.is_resolving_playback = false;
                 self.state.pending_playback_source = None;
-                let provider_name = source.provider.label();
                 let chosen_name = chosen.label();
                 let body = if !compatible_alternatives.is_empty() {
                     let alternatives_str = compatible_alternatives
@@ -96,29 +95,16 @@ impl App {
                         .map(|k| k.label())
                         .collect::<Vec<_>>()
                         .join(" or ");
-                    if source.provider == ProviderKind::FourKHdHub {
-                        format!(
-                            "{} cannot play this {} stream due to required authentication headers. Set {} as default in /settings.",
-                            chosen_name, provider_name, alternatives_str
-                        )
-                    } else {
-                        format!(
-                            "{} cannot play this {} stream due to required authentication headers. Set {} as default in /settings, or press Ctrl+P for 4KHDHub.",
-                            chosen_name, provider_name, alternatives_str
-                        )
-                    }
+                    format!(
+                        "{chosen_name} lacks header support. Switch to {alternatives_str} in /settings."
+                    )
                 } else {
-                    if source.provider == ProviderKind::FourKHdHub {
-                        format!(
-                            "{} cannot play this {} stream due to required authentication headers. Install a compatible player (mpv).",
-                            chosen_name, provider_name
-                        )
-                    } else {
-                        format!(
-                            "{} cannot play this {} stream due to required authentication headers. Install a compatible player (mpv) or press Ctrl+P for 4KHDHub.",
-                            chosen_name, provider_name
-                        )
-                    }
+                    let supported_str = crate::player::header_capable_players()
+                        .iter()
+                        .map(|k| k.label())
+                        .collect::<Vec<_>>()
+                        .join(" or ");
+                    format!("{chosen_name} lacks header support. Install {supported_str}.")
                 };
                 self.state.notify(
                     NotificationKind::Warning,
@@ -126,26 +112,18 @@ impl App {
                     body,
                 );
             }
-            PlaybackResolution::NoCompatiblePlayer { available } => {
+            PlaybackResolution::NoCompatiblePlayer { available: _ } => {
                 self.state.is_resolving_playback = false;
                 self.state.pending_playback_source = None;
-                let players_str = available
+                let supported_str = crate::player::header_capable_players()
                     .iter()
                     .map(|k| k.label())
                     .collect::<Vec<_>>()
-                    .join(", ");
-                let provider_name = source.provider.label();
-                let action_hint = if source.provider == ProviderKind::FourKHdHub {
-                    "Install mpv."
-                } else {
-                    "Install mpv or press Ctrl+P for 4KHDHub."
-                };
+                    .join(" or ");
                 self.state.notify(
                     NotificationKind::Error,
                     "Incompatible Media Player",
-                    format!(
-                        "None of your detected players ({players_str}) support authentication headers required by {provider_name} streams. {action_hint}"
-                    ),
+                    format!("Headers unsupported. Install {supported_str}."),
                 );
             }
             PlaybackResolution::NoPlayersInstalled => {
@@ -511,11 +489,7 @@ impl App {
                         self.state.notify(
                             NotificationKind::Info,
                             "Preparing playback",
-                            format!(
-                                "Resolving {} from {}...",
-                                first_mirror.label,
-                                release.provider.label()
-                            ),
+                            format!("Resolving {}...", first_mirror.label),
                         );
                         let direct_source = crate::providers::models::PlaybackSource {
                             provider: release.provider,
@@ -595,12 +569,7 @@ impl App {
                         subtitle: None,
                         source_label: first_mirror.label.clone(),
                     };
-                    let subject_id = self
-                        .state
-                        .selected_details
-                        .as_ref()
-                        .map(|d| d.id.value.clone())
-                        .unwrap_or_default();
+                    let subject_id = self.state.active_subject_id.clone().unwrap_or_default();
                     let resource_id = self.get_selected_resource_id();
 
                     if let Some(rid) = resource_id {
@@ -626,6 +595,8 @@ impl App {
                                 ids
                             })
                             .unwrap_or_default();
+                        let season = self.state.selected_season;
+                        let episode = self.state.selected_episode;
                         tokio::spawn(async move {
                             let cached = tokio::task::spawn_blocking({
                                 let subject_id = subject_id.clone();
@@ -643,7 +614,13 @@ impl App {
                             }
                             let result = tokio::time::timeout(
                                 std::time::Duration::from_secs(15),
-                                service.get_ext_captions(&subject_id, &rid, &sibling_ids),
+                                service.get_ext_captions(
+                                    &subject_id,
+                                    &rid,
+                                    &sibling_ids,
+                                    season,
+                                    episode,
+                                ),
                             )
                             .await;
                             match result {
@@ -781,11 +758,7 @@ impl App {
                     self.state.notify(
                         NotificationKind::Error,
                         format!("{} Incompatible", kind.label()),
-                        format!(
-                            "{} cannot play this {} stream because it requires authentication headers.",
-                            kind.label(),
-                            source.provider.label(),
-                        ),
+                        format!("{} lacks stream header support.", kind.label()),
                     );
                     return None;
                 }
@@ -1010,16 +983,15 @@ mod tests {
         assert!(content.contains("Subtitles"));
         assert!(content.contains("No subtitles"));
         assert!(content.contains("English"));
-        assert!(content.contains("Use"));
-
         let items = vec!["No subtitles".to_string(), "English".to_string()];
         let popup_layout = crate::tui::overlay::picker_layout(
             ratatui::layout::Rect::new(0, 0, 80, 24),
             &items,
             "Use",
-            32,
+            20,
         );
-        assert_eq!(popup_layout.height, 6);
+        assert_eq!(popup_layout.height, 4);
+        assert_eq!(popup_layout.width, 20);
     }
 
     #[tokio::test]
@@ -1078,11 +1050,7 @@ mod tests {
 
         let notification = app.state.notifications.back().expect("notification posted");
         assert_eq!(notification.title, "VLC Incompatible");
-        assert!(
-            notification
-                .message
-                .contains("VLC cannot play this MovieBox stream")
-        );
+        assert!(notification.message.contains("VLC lacks header support"));
         assert!(notification.message.contains("mpv"));
     }
     #[tokio::test]
@@ -1175,5 +1143,61 @@ mod tests {
                 .message
                 .contains("pkg install -y termux-tools termux-am")
         );
+    }
+
+    #[tokio::test]
+    async fn test_playback_captures_active_subject_and_episode() {
+        let mut app = crate::tui::app::App::new();
+        app.state.active_screen = crate::tui::state::Screen::Details;
+        app.state.selected_season = 2;
+        app.state.selected_episode = 5;
+        app.state.active_subject_id = Some("dub_subject_42".to_string());
+        app.state.selected_details = Some(crate::providers::models::MediaDetails {
+            id: crate::providers::models::ProviderMediaId {
+                provider: crate::providers::models::ProviderKind::MovieBox,
+                value: "root_subject_100".to_string(),
+            },
+            title: "Test Series".to_string(),
+            media_type: crate::models::MediaType::Series,
+            year: None,
+            description: None,
+            tagline: None,
+            imdb_rating: None,
+            director: None,
+            stars: None,
+            prints: None,
+            audios: None,
+            poster_url: None,
+            duration: None,
+            genres: Vec::new(),
+            seasons: Vec::new(),
+            dubs: Vec::new(),
+        });
+        let mirror = crate::providers::models::SourceMirror {
+            label: "1080p".to_string(),
+            resolver_url: "https://example.com/video.mp4".to_string(),
+            headers: Vec::new(),
+            direct_file: true,
+        };
+        app.state.selected_resources = vec![crate::providers::models::Release {
+            provider: crate::providers::models::ProviderKind::MovieBox,
+            filename: "Test S02E05 1080p".to_string(),
+            quality: Some("1080p".to_string()),
+            codec: None,
+            language: None,
+            size_bytes: None,
+            season: Some(2),
+            episode: Some(5),
+            mirrors: vec![mirror],
+            resource_id: Some("res_s2e5".to_string()),
+        }];
+        app.state.resource_list_state.select(Some(0));
+        assert_eq!(
+            app.state.active_subject_id.as_deref(),
+            Some("dub_subject_42")
+        );
+        assert_eq!(app.get_selected_resource_id().as_deref(), Some("res_s2e5"));
+        assert_eq!(app.state.selected_season, 2);
+        assert_eq!(app.state.selected_episode, 5);
     }
 }

@@ -71,7 +71,7 @@ impl App {
                 .collect::<Vec<_>>();
             let confirm_label = "Select";
             match click_in_picker(
-                crate::tui::overlay::picker_layout(area, &items, confirm_label, 20),
+                crate::tui::overlay::picker_layout(area, &items, confirm_label, 10),
                 col,
                 row,
                 &self.state.player_picker_state,
@@ -139,7 +139,7 @@ impl App {
                 })
                 .collect();
             match click_in_picker(
-                crate::tui::overlay::picker_layout(area, &items, "Apply", 24),
+                crate::tui::overlay::picker_layout(area, &items, "Apply", 16),
                 col,
                 row,
                 &self.state.theme_list_state,
@@ -294,7 +294,7 @@ impl App {
                             self.state.notify(
                                 NotificationKind::Info,
                                 "Homebrew Upgrade",
-                                "Run 'brew upgrade moviebox-tui' in your terminal to update.",
+                                "Run: brew upgrade moviebox-tui",
                             );
                         } else {
                             self.action_sender.send(Action::StartSelfUpdate).ok();
@@ -325,7 +325,7 @@ impl App {
                 "Use"
             };
             match click_in_picker(
-                crate::tui::overlay::picker_layout(area, &items, confirm_label, 32),
+                crate::tui::overlay::picker_layout(area, &items, confirm_label, 20),
                 col,
                 row,
                 &self.state.subtitle_list_state,
@@ -533,7 +533,7 @@ impl App {
                 if col >= inner_area.left()
                     && col < inner_area.right()
                     && row >= inner_area.top()
-                    && row < inner_area.bottom().saturating_sub(1)
+                    && row < inner_area.bottom()
                 {
                     let clicked_idx = (row - inner_area.top()) as usize;
                     if let Some(&provider) = available.get(clicked_idx) {
@@ -759,23 +759,8 @@ impl App {
             return None;
         }
 
-        let search_bar_area = {
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                    Constraint::Min(0),
-                ])
-                .split(area);
-
-            Rect {
-                x: chunks[0].x + 2,
-                y: chunks[0].y,
-                width: chunks[0].width.saturating_sub(4),
-                height: chunks[0].height,
-            }
-        };
+        let (search_bar_area, results_chunk) =
+            crate::tui::screens::home::search_results_layout(area);
 
         if self.state.input_mode == InputMode::Editing && !self.state.search_suggestions.is_empty()
         {
@@ -834,18 +819,12 @@ impl App {
             return None;
         }
 
-        let results_y = 2;
-        if row >= results_y && row < area.height {
+        if row >= results_chunk.y && row < area.height {
             if self.state.search_results.is_empty() {
                 let next_label = self.state.next_provider().label();
                 let ctrl_p = crate::tui::text::CTRL_P_STR;
                 let (btn1, btn2) = crate::tui::screens::home::no_results_button_hitboxes(
-                    Rect {
-                        x: area.x,
-                        y: results_y,
-                        width: area.width,
-                        height: area.height.saturating_sub(results_y),
-                    },
+                    results_chunk,
                     next_label,
                     ctrl_p,
                     self.state.is_tv_mode,
@@ -872,16 +851,18 @@ impl App {
                 }
                 return None;
             }
+            if col < results_chunk.x || col >= results_chunk.right() {
+                return None;
+            }
             let metrics = self
                 .state
-                .result_metrics(area.height.saturating_sub(results_y + 1), area.width);
+                .result_metrics(results_chunk.height.saturating_sub(1), results_chunk.width);
             let row_height = metrics.row_height;
-            let clicked_relative_row = row.saturating_sub(results_y);
+            let clicked_relative_row = row.saturating_sub(results_chunk.y);
             let visual_row = (clicked_relative_row / row_height) as usize;
             let col_step = (metrics.col_width + 1).max(1);
-            let clicked_column = (((col.saturating_sub(area.x)) / col_step) as usize)
+            let clicked_column = (((col.saturating_sub(results_chunk.x)) / col_step) as usize)
                 .min(metrics.columns.saturating_sub(1) as usize);
-
             let page_start = self.state.result_scroll;
 
             let target_idx = page_start + visual_row * metrics.columns as usize + clicked_column;
@@ -1400,16 +1381,12 @@ mod tests {
         app.state.search_results = vec![];
 
         let area = Rect::new(0, 0, 100, 30);
-        let results_y = 2;
+        let (_search_bar_area, results_chunk) =
+            crate::tui::screens::home::search_results_layout(area);
         let next_label = app.state.next_provider().label();
         let ctrl_p = crate::tui::text::CTRL_P_STR;
         let (btn1, btn2) = crate::tui::screens::home::no_results_button_hitboxes(
-            Rect {
-                x: area.x,
-                y: results_y,
-                width: area.width,
-                height: area.height.saturating_sub(results_y),
-            },
+            results_chunk,
             next_label,
             ctrl_p,
             app.state.is_tv_mode,
@@ -1425,6 +1402,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_home_provider_pill_mouse_click_opens_popup() {
+        let original_config = crate::config::load();
         let mut app = App::new();
         app.state.active_screen = crate::tui::state::Screen::Home;
         app.state.input_mode = crate::tui::state::InputMode::Normal;
@@ -1472,9 +1450,21 @@ mod tests {
 
         app.handle_home_mouse(pill_rect.x + 1, pill_rect.y, area);
         assert!(app.state.show_provider_popup);
+        let last_idx = available.len() - 1;
+        let last_provider = available[last_idx];
+        let last_target_y = inner.y + last_idx as u16;
+        app.handle_home_mouse(inner.x + 1, last_target_y, area);
+        assert!(!app.state.show_provider_popup);
+        assert_eq!(app.state.active_provider, last_provider);
+
+        let pill_rect =
+            crate::tui::screens::home::search_bar_provider_pill_rect(search_card_area, &app.state);
+        app.handle_home_mouse(pill_rect.x + 1, pill_rect.y, area);
+        assert!(app.state.show_provider_popup);
         app.handle_home_mouse(area.x, area.y, area);
         assert!(!app.state.show_provider_popup);
-        assert_eq!(app.state.active_provider, ProviderKind::FourKHdHub);
+        assert_eq!(app.state.active_provider, last_provider);
+        crate::config::save(&original_config);
     }
 
     #[tokio::test]

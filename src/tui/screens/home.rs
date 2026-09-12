@@ -6,7 +6,7 @@ use crate::tui::{
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
@@ -44,10 +44,6 @@ fn search_view_state(state: &AppState) -> SearchViewState {
     } else {
         SearchViewState::Empty
     }
-}
-
-pub(crate) fn slash_command_description(cmd: &str, state: &AppState) -> Option<&'static str> {
-    crate::tui::commands::SlashCommand::description_for(cmd, state)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -502,38 +498,50 @@ pub(crate) fn render_landing_deck(frame: &mut Frame, area: Rect, state: &AppStat
     };
 
     let mut title_spans: Vec<Span> = Vec::new();
-    let (active_style, inactive_style, hint_style, sep_style) = if modal_active {
-        (theme.muted, theme.muted, theme.muted, theme.muted)
-    } else {
-        (
-            if is_focused {
-                theme.title.add_modifier(Modifier::BOLD)
-            } else {
-                theme.text.add_modifier(Modifier::BOLD)
-            },
-            theme.subtext1,
-            theme.text_dim,
-            theme.surface1,
-        )
-    };
+    let (active_style, inactive_style, hint_bracket_style, hint_key_style, sep_style) =
+        if modal_active {
+            (
+                theme.muted,
+                theme.muted,
+                theme.muted,
+                theme.muted,
+                theme.muted,
+            )
+        } else {
+            (
+                if is_focused {
+                    theme.title.add_modifier(Modifier::BOLD)
+                } else {
+                    theme.text.add_modifier(Modifier::BOLD)
+                },
+                theme.subtext1,
+                theme.overlay0,
+                theme.shortcut,
+                theme.surface1,
+            )
+        };
     if has_cw && has_fav {
         let sep = if state.basic_terminal { " | " } else { " │ " };
         match tab {
             crate::tui::state::HomeDeckTab::ContinueWatching => {
-                title_spans.push(Span::styled(" Continue Watching ", active_style));
+                title_spans.push(Span::styled(" Resume ", active_style));
                 title_spans.push(Span::styled(sep, sep_style));
-                title_spans.push(Span::styled("Favorites", inactive_style));
-                title_spans.push(Span::styled(" (Tab) ", hint_style));
+                title_spans.push(Span::styled("Favorites ", inactive_style));
+                title_spans.push(Span::styled("[", hint_bracket_style));
+                title_spans.push(Span::styled("Tab", hint_key_style));
+                title_spans.push(Span::styled("] ", hint_bracket_style));
             }
             crate::tui::state::HomeDeckTab::Favorites => {
-                title_spans.push(Span::styled(" Continue Watching", inactive_style));
-                title_spans.push(Span::styled(" (Tab)", hint_style));
+                title_spans.push(Span::styled(" Resume ", inactive_style));
+                title_spans.push(Span::styled("[", hint_bracket_style));
+                title_spans.push(Span::styled("Tab", hint_key_style));
+                title_spans.push(Span::styled("]", hint_bracket_style));
                 title_spans.push(Span::styled(sep, sep_style));
                 title_spans.push(Span::styled(" Favorites ", active_style));
             }
         }
     } else if has_cw {
-        title_spans.push(Span::styled(" Continue Watching ", active_style));
+        title_spans.push(Span::styled(" Resume ", active_style));
     } else {
         title_spans.push(Span::styled(" Favorites ", active_style));
     }
@@ -583,11 +591,7 @@ pub(crate) fn render_landing_deck(frame: &mut Frame, area: Rect, state: &AppStat
                 };
 
                 let progress_str = if let Some(rem) = item.formatted_remaining() {
-                    if let Some(pct) = item.progress_percentage() {
-                        format!("{:.0}% · {rem}", pct)
-                    } else {
-                        rem
-                    }
+                    rem
                 } else if let Some(pct) = item.progress_percentage() {
                     format!("{:.0}%", pct)
                 } else {
@@ -679,8 +683,8 @@ pub(crate) fn render_landing_deck(frame: &mut Frame, area: Rect, state: &AppStat
         let pill_style = if state.basic_terminal {
             theme.sapphire
         } else {
-            let bg = theme.surface1.fg.unwrap_or(Color::Rgb(69, 71, 90));
-            let fg = theme.sapphire.fg.unwrap_or(Color::Rgb(116, 199, 236));
+            let bg = theme.surface1.fg.unwrap_or(theme.base);
+            let fg = theme.sapphire.fg.unwrap_or(theme.base);
             Style::default().bg(bg).fg(fg)
         };
         let pill_area = Rect {
@@ -898,8 +902,8 @@ fn render_search_bar(
             let style = if state.basic_terminal {
                 theme.sapphire.add_modifier(Modifier::BOLD)
             } else {
-                let bg = theme.surface1.fg.unwrap_or(Color::Rgb(69, 71, 90));
-                let fg = theme.sapphire.fg.unwrap_or(Color::Rgb(116, 199, 236));
+                let bg = theme.surface1_color();
+                let fg = theme.sapphire.fg.unwrap_or(theme.base);
                 Style::default().bg(bg).fg(fg).add_modifier(Modifier::BOLD)
             };
             (text, style)
@@ -947,8 +951,8 @@ fn render_search_bar(
             let style = if state.basic_terminal {
                 theme.lavender
             } else {
-                let bg = theme.surface1.fg.unwrap_or(Color::Rgb(69, 71, 90));
-                let fg = theme.lavender.fg.unwrap_or(Color::Rgb(180, 190, 254));
+                let bg = theme.surface1_color();
+                let fg = theme.lavender.fg.unwrap_or(theme.base);
                 Style::default().bg(bg).fg(fg)
             };
             (text, style)
@@ -957,8 +961,8 @@ fn render_search_bar(
             let style = if state.basic_terminal {
                 theme.teal
             } else {
-                let bg = theme.surface1.fg.unwrap_or(Color::Rgb(69, 71, 90));
-                let fg = theme.teal.fg.unwrap_or(Color::Rgb(148, 226, 213));
+                let bg = theme.surface1_color();
+                let fg = theme.teal.fg.unwrap_or(theme.base);
                 Style::default().bg(bg).fg(fg)
             };
             (text, style)
@@ -973,8 +977,8 @@ fn render_search_bar(
             let style = if state.basic_terminal {
                 theme.sapphire
             } else {
-                let bg = theme.surface1.fg.unwrap_or(Color::Rgb(69, 71, 90));
-                let fg = theme.sapphire.fg.unwrap_or(Color::Rgb(116, 199, 236));
+                let bg = theme.surface1_color();
+                let fg = theme.sapphire.fg.unwrap_or(theme.base);
                 Style::default().bg(bg).fg(fg)
             };
             (text, style)
@@ -1379,7 +1383,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             height: vertical_chunks[rows.search].height,
         };
 
-        if !state.tv_config_popup && !update_active && !state.show_settings_popup {
+        if !state.tv_config_popup
+            && !update_active
+            && !state.show_settings_popup
+            && !state.show_help
+        {
             render_search_bar(frame, search_card_area, state, theme, view, true);
         }
         search_bar_area = search_card_area;
@@ -1413,21 +1421,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
             return;
         }
 
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Min(0),
-            ])
-            .split(area);
-        let results_chunk = chunks[2];
-        search_bar_area = Rect {
-            x: chunks[0].x + 2,
-            width: chunks[0].width.saturating_sub(4),
-            ..chunks[0]
-        };
-        render_search_bar(frame, search_bar_area, state, theme, view, false);
+        let (search_bar_area_calc, results_chunk) = search_results_layout(area);
+        search_bar_area = search_bar_area_calc;
+        if !state.show_help {
+            render_search_bar(frame, search_bar_area, state, theme, view, false);
+        }
         let list_block = Block::default();
         if !state.search_results.is_empty() {
             let initial_metrics = state.result_metrics(results_chunk.height, results_chunk.width);
@@ -1633,6 +1631,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                         theme,
                         state.basic_terminal,
                         modal_active,
+                        is_active_selection,
                     )
                 });
                 let badge_width = badge_spans.as_ref().map_or(0, |spans| {
@@ -1702,14 +1701,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                 if is_history {
                     if !type_tag.is_empty() {
                         row2_spans.push(ratatui::text::Span::styled(&type_tag, theme.text));
-                        row2_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        row2_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
                     }
                     if res.season > 0 {
                         row2_spans.push(ratatui::text::Span::styled(
                             format!("S{:02}E{:02}", res.season, res.episode),
                             theme.text,
                         ));
-                        row2_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                        row2_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
                     }
 
                     if let Some(hist) = state.history.get_item(
@@ -1743,14 +1742,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
 
                             if use_three_rows {
                                 row3_spans.extend(progress_spans);
-                                row3_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                                row3_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
                                 row3_spans.push(ratatui::text::Span::styled(
                                     format!("Watched {}", hist.formatted_relative_time()),
                                     theme.text_dim,
                                 ));
                             } else {
                                 row2_spans.extend(progress_spans);
-                                row2_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                                row2_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
                             }
                         } else if hist.completed {
                             let comp_span = ratatui::text::Span::styled(
@@ -1763,14 +1762,14 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             );
                             if use_three_rows {
                                 row3_spans.push(comp_span);
-                                row3_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                                row3_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
                                 row3_spans.push(ratatui::text::Span::styled(
                                     format!("Watched {}", hist.formatted_relative_time()),
                                     theme.text_dim,
                                 ));
                             } else {
                                 row2_spans.push(comp_span);
-                                row2_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
+                                row2_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
                             }
                         }
                     }
@@ -1791,31 +1790,9 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                                 let star = if state.basic_terminal { "* " } else { "★ " };
                                 row2_spans.push(ratatui::text::Span::styled(star, theme.rating));
                                 row2_spans.push(ratatui::text::Span::styled(r, theme.text));
-                                row2_spans.push(ratatui::text::Span::styled(" • ", theme.text_dim));
-                            }
-
-                            let genre_buf = meta.genres.join(", ");
-                            if !genre_buf.is_empty() {
-                                let g_trunc = crate::tui::text::truncate_width(
-                                    &genre_buf,
-                                    text_area.width.saturating_sub(2) as usize,
-                                )
-                                .into_owned();
-                                row3_spans
-                                    .push(ratatui::text::Span::styled(g_trunc, theme.subtext1));
+                                row2_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
                             }
                         }
-                    } else if is_selected && state.preview_loading {
-                        let dots = match (state.tick_count / 4) % 4 {
-                            0 => "",
-                            1 => ".",
-                            2 => "..",
-                            _ => "...",
-                        };
-                        row3_spans.push(ratatui::text::Span::styled(
-                            format!("Loading{dots}"),
-                            theme.text_dim,
-                        ));
                     }
                     let has_year = res.release_year != "Unknown" && !res.release_year.is_empty();
                     if has_year {
@@ -1828,7 +1805,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                             },
                         ));
                         row2_spans.push(ratatui::text::Span::styled(
-                            " • ",
+                            "  ",
                             if modal_active {
                                 theme.muted
                             } else {
@@ -1846,21 +1823,43 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
                                 theme.text
                             },
                         ));
-                        row2_spans.push(ratatui::text::Span::styled(
-                            " • ",
-                            if modal_active {
-                                theme.muted
-                            } else {
-                                theme.text_dim
-                            },
-                        ));
                     }
-                    row2_spans.push(crate::tui::widgets::badge::provider_badge_span(
+
+                    row3_spans.push(crate::tui::widgets::badge::provider_badge_span(
                         res.provider,
                         theme,
                         state.basic_terminal,
                         modal_active,
                     ));
+
+                    if let Some(meta) = matching_meta {
+                        if is_selected {
+                            let genre_buf = meta.genres.join(", ");
+                            if !genre_buf.is_empty() {
+                                row3_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
+                                let available_w = (text_area.width as usize).saturating_sub(
+                                    crate::tui::text::width(res.provider.label()) + 6,
+                                );
+                                let g_trunc =
+                                    crate::tui::text::truncate_width(&genre_buf, available_w)
+                                        .into_owned();
+                                row3_spans
+                                    .push(ratatui::text::Span::styled(g_trunc, theme.subtext1));
+                            }
+                        }
+                    } else if is_selected && state.preview_loading {
+                        let dots = match (state.tick_count / 4) % 4 {
+                            0 => "",
+                            1 => ".",
+                            2 => "..",
+                            _ => "...",
+                        };
+                        row3_spans.push(ratatui::text::Span::styled("  ", theme.text_dim));
+                        row3_spans.push(ratatui::text::Span::styled(
+                            format!("Loading{dots}"),
+                            theme.text_dim,
+                        ));
+                    }
                 }
 
                 if text_layout[2].height > 0 && row2_spans.len() > 1 {
@@ -1896,7 +1895,7 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) 
         }
     }
 
-    if !state.tv_config_popup && !state.show_settings_popup {
+    if !state.tv_config_popup && !state.show_settings_popup && !state.show_help {
         render_search_suggestions(frame, area, search_bar_area, state, theme, view);
     }
     render_provider_popup(frame, area, search_bar_area, state, theme);
@@ -2332,7 +2331,7 @@ fn render_search_suggestions(
             suggestion.as_str()
         };
 
-        let desc = slash_command_description(suggestion, state);
+        let desc = crate::tui::commands::SlashCommand::description_for(suggestion, state);
         let text_style = if is_selected {
             theme.highlight.add_modifier(Modifier::BOLD)
         } else {
@@ -2543,6 +2542,30 @@ fn render_provider_popup(
         .highlight_symbol("");
     let mut list_state = state.provider_list_state;
     frame.render_stateful_widget(list, inner_area, &mut list_state);
+}
+
+pub fn search_results_layout(area: Rect) -> (Rect, Rect) {
+    let top_pad = if area.height >= 14 { 1 } else { 0 };
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(top_pad),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(area);
+    let search_bar_area = Rect {
+        x: chunks[1].x + 2,
+        width: chunks[1].width.saturating_sub(4),
+        ..chunks[1]
+    };
+    let results_chunk = Rect {
+        x: chunks[3].x + 2,
+        width: chunks[3].width.saturating_sub(4),
+        ..chunks[3]
+    };
+    (search_bar_area, results_chunk)
 }
 
 #[inline(always)]
@@ -3169,12 +3192,12 @@ mod tests {
             rendered.push('\n');
         }
 
-        assert!(rendered.contains("Continue Watching"));
+        assert!(rendered.contains("Resume"));
         assert!(rendered.contains("Favorites"));
-        assert!(rendered.contains("(Tab)"));
+        assert!(rendered.contains("[Tab]"));
         assert!(rendered.contains("Severance"));
         assert!(rendered.contains("S01E03"));
-        assert!(rendered.contains("40%"));
+        assert!(rendered.contains("30m left"));
     }
 
     #[test]
@@ -3572,6 +3595,43 @@ mod tests {
             !far_right_has_reversed,
             "expected title highlight to be a tight pill, not stretching across full slot width"
         );
+    }
+    #[test]
+    fn test_search_results_aligned_with_search_bar() {
+        let backend = TestBackend::new(100, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState {
+            input_mode: InputMode::Normal,
+            search_query: "Matrix".into(),
+            search_results: vec![crate::models::SearchResult {
+                id: "test_1".into(),
+                title: "The Matrix".into(),
+                stype: 1,
+                release_year: "1999".into(),
+                cover_url: None,
+                season: 0,
+                episode: 0,
+                provider: crate::providers::models::ProviderKind::MovieBox,
+            }],
+            has_search_settled: true,
+            basic_terminal: false,
+            ..Default::default()
+        };
+        state.search_list_state.select(Some(0));
+        let theme = Theme::mocha();
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, 100, 30);
+                draw(frame, area, &mut state, &theme);
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer[(0, 1)].symbol(), " ");
+        assert_eq!(buffer[(1, 1)].symbol(), " ");
+        assert_eq!(buffer[(2, 1)].symbol(), "❯");
+        assert_eq!(buffer[(0, 3)].symbol(), " ");
+        assert_eq!(buffer[(1, 3)].symbol(), " ");
     }
     #[test]
     fn test_search_result_selection_indicator_basic_terminal() {

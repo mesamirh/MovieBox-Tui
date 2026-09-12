@@ -24,15 +24,6 @@ impl SlashCommand {
         Self::Exit,
     ];
 
-    pub const PRIMARY: [Self; 6] = [
-        Self::Settings,
-        Self::Browse,
-        Self::History,
-        Self::Favorites,
-        Self::Clear,
-        Self::Help,
-    ];
-
     pub fn name(self) -> &'static str {
         match self {
             Self::Settings => "/settings",
@@ -216,7 +207,6 @@ mod tests {
     fn test_core_commands_and_aliases_parse() {
         let state = AppState::default();
         assert_eq!(SlashCommand::ALL.len(), 8);
-        assert_eq!(SlashCommand::PRIMARY.len(), 6);
         assert_eq!(SlashCommand::parse("/exit"), Some(SlashCommand::Exit));
         assert_eq!(SlashCommand::parse("/quit"), Some(SlashCommand::Exit));
         assert_eq!(SlashCommand::parse("/q"), Some(SlashCommand::Exit));

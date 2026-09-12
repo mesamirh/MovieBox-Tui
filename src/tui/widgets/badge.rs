@@ -1,10 +1,10 @@
 use ratatui::{
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::Span,
 };
 
 use crate::providers::models::ProviderKind;
-use crate::tui::theme::{Theme, theme_color};
+use crate::tui::theme::Theme;
 
 pub fn resolution_label(resolution: i64) -> &'static str {
     match resolution {
@@ -24,6 +24,7 @@ pub fn resolution_badge_spans<'a>(
     theme: &'a Theme,
     basic_terminal: bool,
     modal_active: bool,
+    is_selected: bool,
 ) -> Vec<Span<'a>> {
     if modal_active {
         if basic_terminal {
@@ -53,8 +54,8 @@ pub fn resolution_badge_spans<'a>(
             _ if resolution > 0 => "  HD   ",
             _ => "  SD   ",
         };
-        let badge_bg = theme_color(theme.surface0, theme.base);
-        let contrast_fg = theme_color(theme.muted, Color::DarkGray);
+        let badge_bg = theme.surface0_color();
+        let contrast_fg = theme.overlay1.fg.unwrap_or(theme.base);
         return vec![
             Span::styled(label, Style::default().bg(badge_bg).fg(contrast_fg)),
             Span::raw(" "),
@@ -77,59 +78,75 @@ pub fn resolution_badge_spans<'a>(
 
     let (badge_bg, contrast_fg, label) = match resolution {
         -1 => (
-            theme_color(theme.lavender, Color::Rgb(180, 190, 254)),
-            if theme.is_light {
-                Color::White
+            if is_selected {
+                theme.lavender.fg.unwrap_or(theme.base)
             } else {
-                theme_color(theme.crust, Color::Rgb(17, 17, 27))
+                theme.surface1_color()
+            },
+            if is_selected {
+                theme.crust_color()
+            } else {
+                theme.lavender.fg.unwrap_or(theme.base)
             },
             " Multi ",
         ),
         2160 | 4320 => (
-            theme_color(theme.rating, Color::Rgb(249, 226, 175)),
-            if theme.is_light {
-                Color::White
+            if is_selected {
+                theme.rating.fg.unwrap_or(theme.base)
             } else {
-                theme_color(theme.crust, Color::Rgb(17, 17, 27))
+                theme.surface1_color()
+            },
+            if is_selected {
+                theme.crust_color()
+            } else {
+                theme.rating.fg.unwrap_or(theme.base)
             },
             "  4K   ",
         ),
         1080 => (
-            theme_color(theme.sapphire, Color::Rgb(116, 199, 236)),
-            if theme.is_light {
-                Color::White
+            if is_selected {
+                theme.sapphire.fg.unwrap_or(theme.base)
             } else {
-                theme_color(theme.crust, Color::Rgb(17, 17, 27))
+                theme.surface1_color()
+            },
+            if is_selected {
+                theme.crust_color()
+            } else {
+                theme.sapphire.fg.unwrap_or(theme.base)
             },
             " 1080p ",
         ),
         720 => (
-            theme_color(theme.teal, Color::Rgb(148, 226, 213)),
-            if theme.is_light {
-                Color::White
+            if is_selected {
+                theme.teal.fg.unwrap_or(theme.base)
             } else {
-                theme_color(theme.crust, Color::Rgb(17, 17, 27))
+                theme.surface1_color()
+            },
+            if is_selected {
+                theme.crust_color()
+            } else {
+                theme.teal.fg.unwrap_or(theme.base)
             },
             " 720p  ",
         ),
         480 | 540 | 576 => (
-            theme_color(theme.surface2, Color::Rgb(88, 91, 112)),
-            theme_color(theme.text, Color::White),
+            theme.surface2_color(),
+            theme.text.fg.unwrap_or(theme.base),
             " 480p  ",
         ),
         360 => (
-            theme_color(theme.surface2, Color::Rgb(88, 91, 112)),
-            theme_color(theme.text, Color::White),
+            theme.surface2_color(),
+            theme.text.fg.unwrap_or(theme.base),
             " 360p  ",
         ),
         _ if resolution > 0 => (
-            theme_color(theme.surface2, Color::Rgb(88, 91, 112)),
-            theme_color(theme.text, Color::White),
+            theme.surface2_color(),
+            theme.text.fg.unwrap_or(theme.base),
             "  HD   ",
         ),
         _ => (
-            theme_color(theme.surface2, Color::Rgb(88, 91, 112)),
-            theme_color(theme.text_dim, Color::Gray),
+            theme.surface2_color(),
+            theme.text_dim.fg.unwrap_or(theme.base),
             "  SD   ",
         ),
     };
@@ -387,30 +404,54 @@ mod tests {
     #[test]
     fn test_resolution_badge_spans() {
         let theme = Theme::default();
-        let spans_4k = resolution_badge_spans(2160, &theme, false, false);
+        let spans_4k = resolution_badge_spans(2160, &theme, false, false, false);
         assert_eq!(spans_4k[0].content, "  4K   ");
 
-        let spans_1080 = resolution_badge_spans(1080, &theme, false, false);
+        let spans_1080 = resolution_badge_spans(1080, &theme, false, false, false);
         assert_eq!(spans_1080[0].content, " 1080p ");
 
-        let spans_720 = resolution_badge_spans(720, &theme, false, false);
+        let spans_720 = resolution_badge_spans(720, &theme, false, false, false);
         assert_eq!(spans_720[0].content, " 720p  ");
 
-        let spans_sd = resolution_badge_spans(480, &theme, false, false);
+        let spans_sd = resolution_badge_spans(480, &theme, false, false, false);
         assert_eq!(spans_sd[0].content, " 480p  ");
 
-        let spans_multi = resolution_badge_spans(-1, &theme, false, false);
+        let spans_multi = resolution_badge_spans(-1, &theme, false, false, false);
         assert_eq!(spans_multi[0].content, " Multi ");
 
-        let basic_4k = resolution_badge_spans(2160, &theme, true, false);
+        let basic_4k = resolution_badge_spans(2160, &theme, true, false, false);
         assert_eq!(basic_4k[0].content.trim(), "[4K]");
-        let basic_multi = resolution_badge_spans(-1, &theme, true, false);
+        let basic_multi = resolution_badge_spans(-1, &theme, true, false, false);
         assert_eq!(basic_multi[0].content.trim(), "[Multi]");
 
-        let muted_multi = resolution_badge_spans(-1, &theme, false, true);
-        assert_eq!(muted_multi[0].style.fg, theme.muted.fg);
-        let muted_basic = resolution_badge_spans(-1, &theme, true, true);
+        let muted_multi = resolution_badge_spans(-1, &theme, false, true, false);
+        assert_eq!(muted_multi[0].style.fg, theme.overlay1.fg);
+        let muted_basic = resolution_badge_spans(-1, &theme, true, true, false);
         assert_eq!(muted_basic[0].style.fg, theme.muted.fg);
+    }
+
+    #[test]
+    fn test_all_themes_badge_readability() {
+        for theme_name in crate::tui::theme::AVAILABLE_THEMES {
+            let kind = crate::tui::theme::ThemeKind::parse(theme_name);
+            let theme = crate::tui::theme::Theme::from_kind(kind);
+            for res in [-1, 2160, 1080, 720, 480] {
+                let unselected = resolution_badge_spans(res, &theme, false, false, false);
+                let selected = resolution_badge_spans(res, &theme, false, false, true);
+                assert!(unselected[0].style.bg.is_some());
+                assert!(unselected[0].style.fg.is_some());
+                assert!(selected[0].style.bg.is_some());
+                assert!(selected[0].style.fg.is_some());
+                assert_ne!(
+                    unselected[0].style.bg, unselected[0].style.fg,
+                    "Theme {theme_name} res {res} has identical fg and bg!"
+                );
+                assert_ne!(
+                    selected[0].style.bg, selected[0].style.fg,
+                    "Theme {theme_name} selected res {res} has identical fg and bg!"
+                );
+            }
+        }
     }
 
     #[test]

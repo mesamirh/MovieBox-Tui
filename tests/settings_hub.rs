@@ -412,10 +412,48 @@ async fn test_settings_hub_browser_open_row_activation() {
         SettingsCategory::StorageInfo,
     ))
     .await;
-    app.state_mut().settings_selected_row = 2;
+    app.state_mut().settings_selected_row = 3;
     app.handle_action(Action::SettingsActivateRow).await;
     let notification = app.state().notifications.back();
     assert!(notification.is_some());
     let title = &notification.unwrap().title;
     assert!(title == "GitHub" || title == "Browser Launch Failed");
+}
+
+#[tokio::test]
+async fn test_settings_hub_clear_watch_history_activation() {
+    let mut app = App::new();
+    let item = moviebox_tui::history::WatchHistoryItem {
+        provider: "moviebox".to_string(),
+        subject_id: "test-subj-1".to_string(),
+        title: "Test Movie".to_string(),
+        cover_url: None,
+        stype: 1,
+        release_year: "2024".to_string(),
+        season: 0,
+        episode: 0,
+        progress_seconds: 120,
+        duration_seconds: Some(600),
+        completed: false,
+        timestamp: 1000,
+    };
+    app.state_mut().history.record_start(&item, 120);
+    assert!(!app.state().history.recent.is_empty());
+
+    app.handle_action(Action::ShowSettingsPopup).await;
+    app.handle_action(Action::SelectSettingsCategory(
+        SettingsCategory::StorageInfo,
+    ))
+    .await;
+    app.state_mut().settings_selected_row = 1;
+    app.handle_action(Action::SettingsActivateRow).await;
+
+    assert!(app.state().history.recent.is_empty());
+    let notification = app
+        .state()
+        .notifications
+        .back()
+        .expect("notification emitted");
+    assert_eq!(notification.title, "History");
+    assert_eq!(notification.message, "Watch history cleared");
 }

@@ -90,6 +90,68 @@ async fn test_live_series_resolutions_and_streams() {
 
 #[tokio::test]
 #[ignore = "live network test; run with cargo test --test live_stream_verification -- --ignored"]
+async fn test_live_multiple_seasons_and_episodes_return_distinct_streams() {
+    let client = MovieBoxClient::new();
+    client.init().await.expect("client init successful");
+
+    for (subject_id, series_title, test_cases) in [
+        (
+            "6207982430134357800",
+            "Breaking Bad",
+            vec![(1, 1), (1, 2), (2, 1), (2, 2)],
+        ),
+        (
+            "4585605580068379856",
+            "One Piece S1-S2",
+            vec![(1, 1), (1, 2), (2, 1), (2, 2)],
+        ),
+    ] {
+        println!("\n=== Verifying {} ({}) ===", series_title, subject_id);
+        let mut urls = Vec::new();
+
+        for (season, episode) in test_cases {
+            let releases = client
+                .episode_streams(subject_id, season, episode)
+                .await
+                .expect("fetch streams");
+            assert!(
+                !releases.is_empty(),
+                "expected streams for {} S{:02}E{:02}",
+                series_title,
+                season,
+                episode
+            );
+            let url = releases[0]
+                .direct_url()
+                .expect("must have direct url")
+                .to_string();
+            println!(
+                "{} S{:02}E{:02} -> filename: {}, url: {}",
+                series_title, season, episode, releases[0].filename, url
+            );
+            assert!(
+                releases[0]
+                    .filename
+                    .contains(&format!("S{:02}E{:02}", season, episode)),
+                "filename must match season and episode"
+            );
+            urls.push(((season, episode), url));
+        }
+
+        for i in 0..urls.len() {
+            for j in (i + 1)..urls.len() {
+                assert_ne!(
+                    urls[i].1, urls[j].1,
+                    "Streams for {} S{:02}E{:02} and S{:02}E{:02} must not be the same! Got identical URL: {}",
+                    series_title, urls[i].0.0, urls[i].0.1, urls[j].0.0, urls[j].0.1, urls[i].1
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "live network test; run with cargo test --test live_stream_verification -- --ignored"]
 async fn test_inspect_live_mpd_manifest() {
     let client = MovieBoxClient::new();
     client.init().await.expect("client init successful");
@@ -467,7 +529,7 @@ async fn test_live_moviebox_captions_end_to_end() {
 
     let sibling_ids = vec!["3264772588333157424".to_string()];
     let captions = service
-        .get_ext_captions("4179386086617137184", resource_id, &sibling_ids)
+        .get_ext_captions("4179386086617137184", resource_id, &sibling_ids, 0, 0)
         .await
         .expect("fetch captions");
     assert!(
@@ -519,7 +581,7 @@ async fn test_live_moviebox_breaking_bad_series_captions_latency() {
 
     let t0 = std::time::Instant::now();
     let captions = service
-        .get_ext_captions(subject_id, resource_id, &sibling_ids)
+        .get_ext_captions(subject_id, resource_id, &sibling_ids, 1, 1)
         .await
         .expect("fetch captions");
     let elapsed = t0.elapsed();

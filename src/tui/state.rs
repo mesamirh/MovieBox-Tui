@@ -78,7 +78,7 @@ impl SettingsCategory {
             Self::General => 3,
             Self::ContentModes => 3,
             Self::Appearance => 1,
-            Self::StorageInfo => 4,
+            Self::StorageInfo => 5,
         }
     }
     pub fn next(self) -> Self {
@@ -251,7 +251,7 @@ pub struct AppState {
     pub stream_error: Option<String>,
     pub details_error: Option<String>,
     pub preview_cache: lru::LruCache<String, MediaDetails>,
-    pub resource_list_state: ListState,
+    pub resource_list_state: TableState,
 
     pub details_pane: DetailsPane,
     pub selected_season: usize,
@@ -421,7 +421,7 @@ impl Default for AppState {
             auto_play_on_ready: false,
             stream_error: None,
             details_error: None,
-            resource_list_state: ListState::default(),
+            resource_list_state: TableState::default(),
             preview_cache: lru::LruCache::new(cache_capacity(64)),
             details_pane: DetailsPane::default(),
             selected_season: 1,
@@ -662,6 +662,58 @@ impl AppState {
         title: impl Into<String>,
         message: impl Into<String>,
     ) {
+        let title = title.into();
+        let message = message.into();
+
+        let same_category = |a: &str, b: &str| -> bool {
+            if a.eq_ignore_ascii_case(b) {
+                return true;
+            }
+            let is_playback = |s: &str| {
+                s.eq_ignore_ascii_case("Playback")
+                    || s.eq_ignore_ascii_case("Preparing playback")
+                    || s.eq_ignore_ascii_case("Opening Player")
+                    || s.eq_ignore_ascii_case("Playback Cancelled")
+                    || s.eq_ignore_ascii_case("Playback unavailable")
+                    || s.to_lowercase().contains("player")
+            };
+            let is_download = |s: &str| {
+                s.eq_ignore_ascii_case("Download")
+                    || s.eq_ignore_ascii_case("Preparing download")
+                    || s.eq_ignore_ascii_case("Download Started")
+                    || s.eq_ignore_ascii_case("Download complete")
+                    || s.eq_ignore_ascii_case("Cancelling download")
+                    || s.eq_ignore_ascii_case("Download failed")
+                    || s.to_lowercase().contains("download")
+            };
+            let is_update = |s: &str| {
+                s.eq_ignore_ascii_case("Updates")
+                    || s.eq_ignore_ascii_case("Checking for updates")
+                    || s.eq_ignore_ascii_case("Up to date")
+                    || s.eq_ignore_ascii_case("Update check failed")
+                    || s.eq_ignore_ascii_case("Homebrew Upgrade")
+            };
+            let is_cache = |s: &str| {
+                s.eq_ignore_ascii_case("Cache")
+                    || s.eq_ignore_ascii_case("Clearing Cache")
+                    || s.eq_ignore_ascii_case("Cache Cleared")
+                    || s.eq_ignore_ascii_case("Cache Clear Failed")
+            };
+            (is_playback(a) && is_playback(b))
+                || (is_download(a) && is_download(b))
+                || (is_update(a) && is_update(b))
+                || (is_cache(a) && is_cache(b))
+        };
+
+        if let Some(existing) = self
+            .notifications
+            .iter_mut()
+            .find(|n| same_category(&n.title, &title))
+        {
+            *existing = crate::tui::overlay::Notification::new(kind, title, message);
+            return;
+        }
+
         if self.notifications.len() >= 3 {
             let removable = self
                 .notifications
@@ -1470,6 +1522,52 @@ mod tests {
         state.search_suggestions = vec!["suggestion".to_string()];
         state.input_mode = InputMode::Normal;
         assert!(state.favorites_landing_visible());
+    }
+
+    #[test]
+    fn test_notify_replaces_same_category_in_place() {
+        let mut state = AppState::default();
+        state.notify(
+            crate::tui::overlay::NotificationKind::Info,
+            "Preparing playback",
+            "Resolving stream...",
+        );
+        assert_eq!(state.notifications.len(), 1);
+        assert_eq!(state.notifications[0].title, "Preparing playback");
+        assert_eq!(state.notifications[0].message, "Resolving stream...");
+
+        state.notify(
+            crate::tui::overlay::NotificationKind::Info,
+            "Playback Cancelled",
+            "Stream launch cancelled.",
+        );
+        assert_eq!(state.notifications.len(), 1);
+        assert_eq!(state.notifications[0].title, "Playback Cancelled");
+        assert_eq!(state.notifications[0].message, "Stream launch cancelled.");
+
+        state.notify(
+            crate::tui::overlay::NotificationKind::Info,
+            "Opening Player",
+            "Launching mpv.",
+        );
+        assert_eq!(state.notifications.len(), 1);
+        assert_eq!(state.notifications[0].title, "Opening Player");
+
+        state.notify(
+            crate::tui::overlay::NotificationKind::Info,
+            "Preparing download",
+            "Waiting for details...",
+        );
+        assert_eq!(state.notifications.len(), 2);
+        assert_eq!(state.notifications[1].title, "Preparing download");
+
+        state.notify(
+            crate::tui::overlay::NotificationKind::Info,
+            "Download Started",
+            "Started: Movie.mkv",
+        );
+        assert_eq!(state.notifications.len(), 2);
+        assert_eq!(state.notifications[1].title, "Download Started");
     }
 
     #[test]

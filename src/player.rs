@@ -82,6 +82,17 @@ pub fn supports_headers(kind: PlayerKind, headers: &[(String, String)]) -> bool 
     }
 }
 
+pub fn header_capable_players() -> &'static [PlayerKind] {
+    #[cfg(target_os = "macos")]
+    {
+        &[PlayerKind::Mpv, PlayerKind::Iina]
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        &[PlayerKind::Mpv]
+    }
+}
+
 pub fn command(
     kind: PlayerKind,
     url: &str,

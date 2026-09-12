@@ -15,11 +15,82 @@
 - **Automatic BDIX Network Availability Probing**:
   - Added non-blocking HTTP network probes (`probe_url`) on first application startup with a 3-second timeout against CircleFTP and DhakaFlix endpoints, automatically enabling accessible optical mirrors on local networks while disabling unreachable ones.
   - Added a dedicated "Re-check BDIX Network" action in Settings → Maintenance allowing users to manually re-probe and refresh BDIX provider availability at any time.
+- **Watch History Clearing and Item Management**:
+  - Added a dedicated "Clear Watch History" action row in Settings → Maintenance, allowing users to wipe all watch history records and saved playback positions in one action.
+  - Added individual item deletion via `d` and `Delete` keybindings when browsing `/history` results or the Home screen Resume deck, updating disk storage and notifying immediately.
 - **Unified Streaming and Stremio Addons Engine**:
   - Merged separate Addon Mode into standard Streaming Mode; Stremio Addons (`ProviderKind::Addons`) is now a first-class streaming provider selectable directly via `Ctrl+P`.
   - Simplified application state model by removing `AppMode::Addon` and `AppState.is_addon_mode`, making navigation two-mode (`Streaming` and `Live TV`).
   - Routed Addon Manager dialog access through `/config` when the active provider is `Addons`.
 
+- **Theme Color and Contrast Hardening**:
+  - Added typed background and surface color helper methods on `Theme` (`surface0_color`, `surface1_color`, `surface2_color`, `crust_color`, `mantle_color`) extracting underlying foreground colors with graceful `base` fallback.
+  - Replaced hardcoded Catppuccin Mocha RGB values across badge, home screen pill, confirmation modal, and settings input backgrounds with dynamic theme color helpers, ensuring correct contrast across all dark and light themes.
+  - Fixed resolution badge text on active rows to dynamically derive contrast foreground from `theme.crust_color()` rather than hardcoded Mocha crust RGB (`17, 17, 27`).
+  - Fixed inactive modal badge text style from `theme.muted` to `theme.overlay1`, eliminating low-contrast illegibility on `surface1` backgrounds.
+  - Hardened Catppuccin Latte light theme tokens (`sapphire`, `lavender`, `highlight`, `success`, `shortcut`, `rating`, `teal`), achieving WCAG AA contrast (≥4.5:1 on base, ≥3.0:1 on surface1) without sacrificing hue recognition.
+
+- **Terminal Color Quantization and Standard Detection Fixes**:
+  - Fixed `rgb_to_xterm256` color quantization to compute squared Euclidean distance to both the nearest 6×6×6 cube entry and the nearest 24-step grayscale ramp, preventing dark and low-saturation palette backgrounds (such as Mocha base, Nord base, and Dracula base) from crushing to pure black or wrong-hue cube cells on 256-color terminals.
+  - Aligned `NO_COLOR` environment variable checks with the no-color.org specification by checking non-empty values (`is_ok_and(|v| !v.is_empty())`), ensuring empty strings do not disable color support.
+  - Constrained `VTE_VERSION` truecolor capability detection to VTE versions ≥ 3600, correctly identifying older VTE terminals as 256-color rather than truecolor.
+  - Replaced hardcoded fallback colors (`Color::Rgb(69, 71, 90)` and `Color::Rgb(116, 199, 236)` on landing overflow pill, and `Color::White` on details metadata) with dynamic theme palette colors (`theme.base`).
+- **Notification System Overhaul and Adaptive Layout Polish**:
+  - Added instant `Esc` key dismissal for active notification toasts across home and details screens when no popup modals or text input fields are active.
+  - Replaced fixed 3-card stack with terminal dimension-adaptive budgets: compact/Termux displays ($H < 20$ or $W < 65$) show at most 1 toast capped at 42 columns and 1 line of message; standard displays ($H < 30$) show up to 2 toasts capped at 2 lines; large displays show up to 3 toasts.
+  - Added in-place category lifecycle replacement and de-duplication in `state.notify()`: notifications in the same category (e.g. `Playback`, `Download`, `Updates`, `Cache`) or matching title supersede prior in-flight stages and reset the countdown timer rather than spawning redundant stacked cards.
+  - Compressed notification copy into terse, high-density phrasing, ensuring status transitions (e.g. playback prep, favorite toggle, cache clear, updates) fit cleanly into single-line messages without multi-row wrapping.
+- **OS-Aware Header-Capable Player Feedback**:
+  - Replaced hardcoded multi-line player incompatibility warning paragraphs with concise single-line notifications dynamically listing supported header-capable players for the user's OS (`mpv` and `IINA` on macOS; `mpv` on Linux and Windows).
+  - Eliminated speculative hardcoded provider hints in playback rejection notifications.
+- **Help Modal Alignment and Shortcut Declutter**:
+  - Added `help_modal_layout` in `overlay.rs` snapping the Help modal directly to the search bar vertical position (`search_y`), eliminating vertical misalignments where the search bar previously peaked through above or behind the dialog.
+  - Added render suppression in `home.rs` ensuring the search bar, landing deck, and suggestions are completely hidden while Help is active.
+  - Migrated Help dialog rendering to `ModalFrame` with standard backdrop clearing and `theme.lavender` borders, removing redundant manual block construction.
+  - Lowered two-column layout threshold from 102 to 78 columns, enabling clean dual-column layouts on standard 80×24 terminals without scrolling.
+  - Streamlined shortcut descriptions: removed non-existent `[s]` subtitles hotkey, corrected `Ctrl+W` label, eliminated duplicate `/list` command in TV mode, and stripped noisy brackets.
+  - Pruned dead `Theme.bg` field and obsolete `SlashCommand::PRIMARY` array.
+- **Landing Deck Minimalist Declutter (Resume & Favorites)**:
+  - Replaced wordy "Continue Watching" label with concise "Resume" (reducing header width from 34 to 24 characters) and restyled tab navigation with discrete keyhint syntax (`[Tab]`).
+  - Streamlined in-progress watch metadata from redundant triplets (`S01E01 · 5% · 42m left`) to clean time-to-finish tags (`S01E01 · 42m left`), falling back to percentage only when stream duration is absent.
+- **Details Screen UX Polish and Layout Space Reclamation**:
+  - Dynamically capped `selector_height` to the item count of visible selector panes, eliminating excessive empty vertical rows when selector panes have few items.
+  - Dynamically capped `streams_area` height to the exact settled stream count (`streams_count + 3`), eliminating the massive blank dead space below the stream table on titles with few streams.
+  - Formatted Season list items as full descriptive `Season N` labels and Episode list items as `Episode 01 · Title` (or `Episode 01` fallback), ensuring clear context.
+  - Left-aligned data cells in the `SIZE` column to start at index 0, aligning the size value (`1.4GB`) directly beneath the `SIZE` column header.
+  - Added symmetric 1-character horizontal padding (`Padding::horizontal(1)`) to the streams panel container block, preventing text and resolution badges from touching the outer border lines.
+  - Replaced heavy filled `●` focus markers in pane titles with a minimal `›` (single chevron) glyph.
+  - Removed noisy pane position counters (`1/4`) from focused pane titles in favor of clean item count badges (`› Audio (4)`).
+  - Deduplicated `Audio:` metadata badge from the top header line when dedicated dub/audio selector panes are visible below.
+  - Replaced legacy middot (`·`) separators in the header metadata line with clean two-space spacing.
+  - Suppressed missing/N/A release years in the metadata badge row.
+  - Dropped redundant no-op `highlight_style`/`highlight_symbol` calls from selector `List` widgets.
+- **Search Results Layout Top Margin and Metadata Alignment**:
+  - Added dedicated top breathing margin (`search_results_layout`) above the search bar on non-compact viewports (`area.height >= 14`), moving the search bar down from row 0 to row 1 to prevent it hugging the top window border.
+  - Synchronized mouse click geometry in `handle_home_mouse` with `search_results_layout`, keeping search bar and results list hitboxes aligned.
+  - Balanced search result card layout across three vertical rows: Row 1 displays title and resolution badge, Row 2 displays rating, release year, and media type, and Row 3 displays provider badge and genres/loading state.
+  - Aligned all 3 rows of text with the 3 rows of the poster placeholder (`╭──────╮` on Row 1, `│ No Art │` on Row 2, `╰──────╯` on Row 3), eliminating the hanging bottom border and empty-line visual disconnect.
+### Fixed
+- **Details Screen Selector Panes Tight Label Highlighting**:
+  - Replaced wide full-width block highlight bars across Audio, Seasons, and Episodes selector panes with compact, text-bounded highlight pills, eliminating awkward empty horizontal background strips across the lists.
+- **Stream Table Migration to Native Ratatui Table Architecture**:
+  - Replaced legacy dual-widget hack (`Paragraph` header + `List` items) with native `ratatui::widgets::Table` and `Row`/`Cell` primitives, guaranteeing 100% mathematical column synchronization between table headers (`RES`, `SIZE`, `MEDIA TAGS`, `SOURCE`, `RELEASE`) and data cells across every terminal dimension tier.
+  - Replaced wide string space hacks with declarative `Constraint` column widths (`Length(8)`, `Length(9)`, `Length(18)`, `Length(16)`, `Min(24)`), eliminating column drift and text overlap.
+  - Added active-selection awareness to `resolution_badge_spans`: badges render with subtle dark surfaces and theme accent text when unselected, cleanly switching to bold high-contrast foreground badges when the stream row is highlighted. Added automated cross-theme test verifying contrast and legibility across all 9 built-in themes.
+  - Filtered out redundant codec and resolution labels in the `SOURCE` column (e.g. `Multi-Res hevc` or `1080p`), falling back to clean provider origin names (`MovieBox CDN`) when no distinct third-party upload source exists.
+- **Subtitle Episode Mismatch on MovieBox Series**:
+  - `fetch_resource_page` now accepts `season` and `episode` parameters and appends `se=`/`ep=` to the API URL.
+  - Added robust string and integer parsing for `se` and `ep` payload values and matched resource items in `episode_streams` and `service.rs` sibling fallback explicitly by `item.se == season && item.ep == episode` rather than unconditionally taking `.first()`, preventing episode 1 resource IDs from being assigned to later episodes.
+  - Fixed `playback.rs` using `selected_details.id.value` (root series ID) instead of `state.active_subject_id` (dub-aware active ID) as the subject key for caption requests; for dubbed variants the two diverge, causing a cache miss and wrong-subject subtitle fetch.
+  - Updated all call sites (`download.rs`, `requests.rs` prefetch and season-queue spawns, `playback.rs`) to capture and forward the current `selected_season`/`selected_episode` before spawning async subtitle tasks.
+  - Users with pre-existing stale subtitle cache entries can purge old entries via Settings → Maintenance → Purge Cache.
+- **Search Results Horizontal Margin Alignment**:
+  - Aligned search results grid horizontally with `search_bar_area` (`x: chunks[2].x + 2, width: chunks[2].width - 4`), eliminating the awkward 2-character left overhang where result cards previously started flush against the terminal's 0-column border while the search input prompt was indented.
+  - Synchronized mouse hitboxes and column detection in `handle_home_mouse` to match the padded results bounds and ignore out-of-bounds clicks in the margin.
+- **Subtitle Selection Picker Padding and Geometry Optimization**:
+  - Added symmetric 1-character horizontal padding (`Span::raw(" ")`) around raw picker list item spans in `crate::tui::overlay::picker`, ensuring text and active selection pills no longer hug the outer modal borders.
+  - Reduced subtitle picker `minimum_width` from `26` to `20` and unified modal titles to `Subtitles`, eliminating the excessive 10-column dead space gap on the right-hand side while cleanly fitting the `"Subtitles · 1/12"` title without truncation.
+  - Synchronized `minimum_width` constraints across rendering and mouse hitboxes in `mouse.rs` for player (`10`), theme (`16`), and subtitle (`20`) pickers.
 - **Provider Selection Popup UX and Layout Unification**:
   - Replaced manual paragraph iteration in `render_provider_popup` with `ratatui::widgets::List` and canonical `selection_style`, eliminating competing dual-indicator visuals (left bar and background highlight) into a single cohesive selection cue.
   - Added persistent `✓` active provider prefix glyph in `theme.success`, ensuring the currently active source remains visually distinguishable while navigating through options.

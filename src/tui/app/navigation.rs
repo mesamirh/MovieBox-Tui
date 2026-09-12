@@ -372,6 +372,10 @@ impl App {
                     self.state.provider_list_state.select(None);
                     return None;
                 }
+                if !self.state.notifications.is_empty() {
+                    self.state.notifications.clear();
+                    return None;
+                }
                 if self.state.favorites_focus {
                     self.state.favorites_focus = false;
                     self.state.favorites_landing_state.select(None);
@@ -968,5 +972,16 @@ mod tests {
             .expect("notification emitted");
         assert_eq!(notif.kind, NotificationKind::Info);
         assert_eq!(notif.title, "Playback Cancelled");
+    }
+
+    #[tokio::test]
+    async fn test_escape_dismisses_active_notifications() {
+        let mut app = App::new();
+        app.state
+            .notify(NotificationKind::Info, "Test Notification", "Some message");
+        assert_eq!(app.state.notifications.len(), 1);
+
+        app.handle_action(Action::GoBack).await;
+        assert!(app.state.notifications.is_empty());
     }
 }

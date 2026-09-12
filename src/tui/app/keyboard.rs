@@ -98,7 +98,7 @@ impl App {
                         self.state.notify(
                             crate::tui::overlay::NotificationKind::Info,
                             "Homebrew Upgrade",
-                            "Run 'brew upgrade moviebox-tui' in your terminal to update.",
+                            "Run: brew upgrade moviebox-tui",
                         );
                         self.state.update_available = None;
                         return None;
@@ -662,206 +662,213 @@ impl App {
                     _ => {}
                 }
             }
-            InputMode::Normal => match self.state.active_screen {
-                Screen::Home => {
-                    if self.state.addon_manager_popup {
-                        if self.state.addon_input_active {
+            InputMode::Normal => {
+                match self.state.active_screen {
+                    Screen::Home => {
+                        if self.state.addon_manager_popup {
+                            if self.state.addon_input_active {
+                                match key.code {
+                                    KeyCode::Esc => {
+                                        self.state.addon_input_active = false;
+                                        self.state.addon_input_buffer.clear();
+                                    }
+                                    KeyCode::Enter => {
+                                        let buffer = self
+                                            .state
+                                            .addon_input_buffer
+                                            .as_str()
+                                            .trim()
+                                            .to_string();
+                                        self.state.addon_input_active = false;
+                                        self.state.addon_input_buffer.clear();
+                                        if !buffer.is_empty() {
+                                            self.action_sender
+                                                .send(Action::AddonAddManifest(buffer))
+                                                .ok();
+                                        }
+                                    }
+                                    KeyCode::Left => {
+                                        self.state.addon_input_buffer.move_left();
+                                    }
+                                    KeyCode::Right => {
+                                        self.state.addon_input_buffer.move_right();
+                                    }
+                                    KeyCode::Home => {
+                                        self.state.addon_input_buffer.move_home();
+                                    }
+                                    KeyCode::End => {
+                                        self.state.addon_input_buffer.move_end();
+                                    }
+                                    KeyCode::Backspace => {
+                                        self.state.addon_input_buffer.delete_backwards();
+                                    }
+                                    KeyCode::Delete => {
+                                        self.state.addon_input_buffer.delete_forwards();
+                                    }
+                                    KeyCode::Char('u') | KeyCode::Char('U')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                    {
+                                        self.state.addon_input_buffer.clear();
+                                    }
+                                    KeyCode::Char('w') | KeyCode::Char('W')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                    {
+                                        self.state.addon_input_buffer.delete_word_backwards();
+                                    }
+                                    KeyCode::Char(c) if !c.is_control() => {
+                                        self.state.addon_input_buffer.insert(c);
+                                    }
+                                    _ => {}
+                                }
+                                return None;
+                            }
                             match key.code {
                                 KeyCode::Esc => {
-                                    self.state.addon_input_active = false;
-                                    self.state.addon_input_buffer.clear();
+                                    self.reset_transient_overlays();
+                                    self.state.addon_manager_popup = false;
                                 }
-                                KeyCode::Enter => {
-                                    let buffer =
-                                        self.state.addon_input_buffer.as_str().trim().to_string();
-                                    self.state.addon_input_active = false;
-                                    self.state.addon_input_buffer.clear();
-                                    if !buffer.is_empty() {
+                                KeyCode::Up => {
+                                    self.state.step_addon_manager_selected(-1);
+                                }
+                                KeyCode::Down => {
+                                    self.state.step_addon_manager_selected(1);
+                                }
+                                KeyCode::Home => {
+                                    self.state.first_addon_manager_selected();
+                                }
+                                KeyCode::End => {
+                                    self.state.last_addon_manager_selected();
+                                }
+                                KeyCode::PageUp => {
+                                    self.state.step_addon_manager_selected(-5);
+                                }
+                                KeyCode::PageDown => {
+                                    self.state.step_addon_manager_selected(5);
+                                }
+                                KeyCode::Char('d') | KeyCode::Delete => {
+                                    use crate::tui::state::AddonManagerRow;
+                                    if let Some(AddonManagerRow::Addon(index)) = self
+                                        .state
+                                        .addon_manager_rows()
+                                        .get(self.state.addon_manager_selected)
+                                        .copied()
+                                    {
+                                        self.action_sender.send(Action::AddonRemove(index)).ok();
+                                    }
+                                }
+                                KeyCode::Enter | KeyCode::Char(' ') => {
+                                    self.addon_manager_activate();
+                                }
+                                _ => {}
+                            }
+                            return None;
+                        }
+
+                        if self.state.tv_config_popup {
+                            if self.state.tv_input_active {
+                                match key.code {
+                                    KeyCode::Esc => {
+                                        self.state.tv_input_active = false;
+                                        self.state.tv_input_buffer.clear();
+                                    }
+                                    KeyCode::Enter => {
+                                        let buffer =
+                                            self.state.tv_input_buffer.as_str().trim().to_string();
+                                        self.state.tv_input_active = false;
+                                        self.state.tv_input_buffer.clear();
+                                        if !buffer.is_empty() {
+                                            self.action_sender
+                                                .send(Action::TvPlaylistAdd(buffer))
+                                                .ok();
+                                        }
+                                    }
+                                    KeyCode::Left => {
+                                        self.state.tv_input_buffer.move_left();
+                                    }
+                                    KeyCode::Right => {
+                                        self.state.tv_input_buffer.move_right();
+                                    }
+                                    KeyCode::Home => {
+                                        self.state.tv_input_buffer.move_home();
+                                    }
+                                    KeyCode::End => {
+                                        self.state.tv_input_buffer.move_end();
+                                    }
+                                    KeyCode::Backspace => {
+                                        self.state.tv_input_buffer.delete_backwards();
+                                    }
+                                    KeyCode::Delete => {
+                                        self.state.tv_input_buffer.delete_forwards();
+                                    }
+                                    KeyCode::Char('u') | KeyCode::Char('U')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                    {
+                                        self.state.tv_input_buffer.clear();
+                                    }
+                                    KeyCode::Char('w') | KeyCode::Char('W')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                    {
+                                        self.state.tv_input_buffer.delete_word_backwards();
+                                    }
+                                    KeyCode::Char(c) if !c.is_control() => {
+                                        self.state.tv_input_buffer.insert(c);
+                                    }
+                                    _ => {}
+                                }
+                                return None;
+                            }
+                            match key.code {
+                                KeyCode::Esc => {
+                                    self.reset_transient_overlays();
+                                    self.state.tv_config_popup = false;
+                                }
+                                KeyCode::Up => {
+                                    self.state.step_tv_manager_selected(-1);
+                                }
+                                KeyCode::Down => {
+                                    self.state.step_tv_manager_selected(1);
+                                }
+                                KeyCode::Home => {
+                                    self.state.first_tv_manager_selected();
+                                }
+                                KeyCode::End => {
+                                    self.state.last_tv_manager_selected();
+                                }
+                                KeyCode::PageUp => {
+                                    self.state.step_tv_manager_selected(-5);
+                                }
+                                KeyCode::PageDown => {
+                                    self.state.step_tv_manager_selected(5);
+                                }
+                                KeyCode::Char('d') | KeyCode::Delete => {
+                                    use crate::tui::state::TvManagerRow;
+                                    if let Some(TvManagerRow::Playlist(index)) = self
+                                        .state
+                                        .tv_manager_rows()
+                                        .get(self.state.tv_manager_selected)
+                                        .copied()
+                                    {
                                         self.action_sender
-                                            .send(Action::AddonAddManifest(buffer))
+                                            .send(Action::TvPlaylistRemove(index))
                                             .ok();
                                     }
                                 }
-                                KeyCode::Left => {
-                                    self.state.addon_input_buffer.move_left();
-                                }
-                                KeyCode::Right => {
-                                    self.state.addon_input_buffer.move_right();
-                                }
-                                KeyCode::Home => {
-                                    self.state.addon_input_buffer.move_home();
-                                }
-                                KeyCode::End => {
-                                    self.state.addon_input_buffer.move_end();
-                                }
-                                KeyCode::Backspace => {
-                                    self.state.addon_input_buffer.delete_backwards();
-                                }
-                                KeyCode::Delete => {
-                                    self.state.addon_input_buffer.delete_forwards();
-                                }
-                                KeyCode::Char('u') | KeyCode::Char('U')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    self.state.addon_input_buffer.clear();
-                                }
-                                KeyCode::Char('w') | KeyCode::Char('W')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    self.state.addon_input_buffer.delete_word_backwards();
-                                }
-                                KeyCode::Char(c) if !c.is_control() => {
-                                    self.state.addon_input_buffer.insert(c);
+                                KeyCode::Enter | KeyCode::Char(' ') => {
+                                    self.tv_manager_activate();
                                 }
                                 _ => {}
                             }
                             return None;
                         }
                         match key.code {
-                            KeyCode::Esc => {
-                                self.reset_transient_overlays();
-                                self.state.addon_manager_popup = false;
-                            }
-                            KeyCode::Up => {
-                                self.state.step_addon_manager_selected(-1);
-                            }
-                            KeyCode::Down => {
-                                self.state.step_addon_manager_selected(1);
-                            }
-                            KeyCode::Home => {
-                                self.state.first_addon_manager_selected();
-                            }
-                            KeyCode::End => {
-                                self.state.last_addon_manager_selected();
-                            }
-                            KeyCode::PageUp => {
-                                self.state.step_addon_manager_selected(-5);
-                            }
-                            KeyCode::PageDown => {
-                                self.state.step_addon_manager_selected(5);
-                            }
-                            KeyCode::Char('d') | KeyCode::Delete => {
-                                use crate::tui::state::AddonManagerRow;
-                                if let Some(AddonManagerRow::Addon(index)) = self
-                                    .state
-                                    .addon_manager_rows()
-                                    .get(self.state.addon_manager_selected)
-                                    .copied()
-                                {
-                                    self.action_sender.send(Action::AddonRemove(index)).ok();
-                                }
-                            }
-                            KeyCode::Enter | KeyCode::Char(' ') => {
-                                self.addon_manager_activate();
-                            }
-                            _ => {}
-                        }
-                        return None;
-                    }
-
-                    if self.state.tv_config_popup {
-                        if self.state.tv_input_active {
-                            match key.code {
-                                KeyCode::Esc => {
-                                    self.state.tv_input_active = false;
-                                    self.state.tv_input_buffer.clear();
-                                }
-                                KeyCode::Enter => {
-                                    let buffer =
-                                        self.state.tv_input_buffer.as_str().trim().to_string();
-                                    self.state.tv_input_active = false;
-                                    self.state.tv_input_buffer.clear();
-                                    if !buffer.is_empty() {
-                                        self.action_sender.send(Action::TvPlaylistAdd(buffer)).ok();
-                                    }
-                                }
-                                KeyCode::Left => {
-                                    self.state.tv_input_buffer.move_left();
-                                }
-                                KeyCode::Right => {
-                                    self.state.tv_input_buffer.move_right();
-                                }
-                                KeyCode::Home => {
-                                    self.state.tv_input_buffer.move_home();
-                                }
-                                KeyCode::End => {
-                                    self.state.tv_input_buffer.move_end();
-                                }
-                                KeyCode::Backspace => {
-                                    self.state.tv_input_buffer.delete_backwards();
-                                }
-                                KeyCode::Delete => {
-                                    self.state.tv_input_buffer.delete_forwards();
-                                }
-                                KeyCode::Char('u') | KeyCode::Char('U')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    self.state.tv_input_buffer.clear();
-                                }
-                                KeyCode::Char('w') | KeyCode::Char('W')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    self.state.tv_input_buffer.delete_word_backwards();
-                                }
-                                KeyCode::Char(c) if !c.is_control() => {
-                                    self.state.tv_input_buffer.insert(c);
-                                }
-                                _ => {}
-                            }
-                            return None;
-                        }
-                        match key.code {
-                            KeyCode::Esc => {
-                                self.reset_transient_overlays();
-                                self.state.tv_config_popup = false;
-                            }
-                            KeyCode::Up => {
-                                self.state.step_tv_manager_selected(-1);
-                            }
-                            KeyCode::Down => {
-                                self.state.step_tv_manager_selected(1);
-                            }
-                            KeyCode::Home => {
-                                self.state.first_tv_manager_selected();
-                            }
-                            KeyCode::End => {
-                                self.state.last_tv_manager_selected();
-                            }
-                            KeyCode::PageUp => {
-                                self.state.step_tv_manager_selected(-5);
-                            }
-                            KeyCode::PageDown => {
-                                self.state.step_tv_manager_selected(5);
-                            }
-                            KeyCode::Char('d') | KeyCode::Delete => {
-                                use crate::tui::state::TvManagerRow;
-                                if let Some(TvManagerRow::Playlist(index)) = self
-                                    .state
-                                    .tv_manager_rows()
-                                    .get(self.state.tv_manager_selected)
-                                    .copied()
-                                {
-                                    self.action_sender
-                                        .send(Action::TvPlaylistRemove(index))
-                                        .ok();
-                                }
-                            }
-                            KeyCode::Enter | KeyCode::Char(' ') => {
-                                self.tv_manager_activate();
-                            }
-                            _ => {}
-                        }
-                        return None;
-                    }
-                    match key.code {
                         KeyCode::Esc => {
                             self.action_sender.send(Action::GoBack).ok();
                         }
@@ -1016,6 +1023,75 @@ impl App {
                         {
                             self.action_sender.send(Action::ToggleFavorite).ok();
                         }
+                        KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Delete
+                            if (self
+                                .state
+                                .search_query
+                                .trim()
+                                .eq_ignore_ascii_case("/history")
+                                && !self.state.search_results.is_empty())
+                                || (self.state.favorites_focus
+                                    && self.state.effective_home_deck_tab()
+                                        == crate::tui::state::HomeDeckTab::ContinueWatching) =>
+                        {
+                            if self.state.favorites_focus {
+                                if let Some(idx) = self.state.favorites_landing_state.selected() {
+                                    let target = self
+                                        .state
+                                        .continue_watching_items()
+                                        .get(idx)
+                                        .map(|item| {
+                                            (
+                                                item.title.clone(),
+                                                item.provider.clone(),
+                                                item.subject_id.clone(),
+                                                item.season,
+                                                item.episode,
+                                            )
+                                        });
+                                    if let Some((title, provider, subject_id, season, episode)) = target {
+                                        self.state.history.remove(&provider, &subject_id, season, episode);
+                                        self.state.homepage_cache.clear();
+                                        let total = self.state.landing_deck_items_count();
+                                        if total == 0 {
+                                            self.state.favorites_focus = false;
+                                            self.state.favorites_landing_state.select(None);
+                                        } else if idx >= total {
+                                            self.state.favorites_landing_state.select(Some(total.saturating_sub(1)));
+                                        }
+                                        self.state.notify(
+                                            crate::tui::overlay::NotificationKind::Info,
+                                            "History",
+                                            format!("Removed: {title}"),
+                                        );
+                                    }
+                                }
+                            } else if let Some(idx) = self.state.search_list_state.selected() {
+                                if idx < self.state.search_results.len() {
+                                    let res = self.state.search_results.remove(idx);
+                                    let provider_key = res.provider.cache_key();
+                                    self.state.history.remove(provider_key, &res.id, res.season, res.episode);
+                                    self.state.history.recent.retain(|i| {
+                                        !(i.subject_id == res.id
+                                            && (crate::providers::models::ProviderKind::parse(&i.provider) == Some(res.provider)
+                                                || i.provider.eq_ignore_ascii_case(provider_key)))
+                                    });
+                                    self.state.history.save();
+                                    self.state.homepage_cache.clear();
+                                    let total = self.state.search_results.len();
+                                    if total == 0 {
+                                        self.state.search_list_state.select(None);
+                                    } else if idx >= total {
+                                        self.state.search_list_state.select(Some(total.saturating_sub(1)));
+                                    }
+                                    self.state.notify(
+                                        crate::tui::overlay::NotificationKind::Info,
+                                        "History",
+                                        format!("Removed: {}", res.title),
+                                    );
+                                }
+                            }
+                        }
                         KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Char('P')
                             if (self
                                 .state
@@ -1056,180 +1132,186 @@ impl App {
                         }
                         _ => {}
                     }
-                }
-                Screen::Details => match key.code {
-                    KeyCode::Tab => {
-                        if self.state.show_season_download_confirm {
-                            self.state.season_download_confirm_yes_selected =
-                                !self.state.season_download_confirm_yes_selected;
-                        } else if self.state.show_episode_download_confirm {
-                            self.state.episode_download_confirm_yes_selected =
-                                !self.state.episode_download_confirm_yes_selected;
-                        } else if !self.state.subtitle_popup && !self.state.player_picker_popup {
-                            self.action_sender.send(Action::TabPane).ok();
-                        }
                     }
-                    KeyCode::BackTab => {
-                        if self.state.show_season_download_confirm {
-                            self.state.season_download_confirm_yes_selected =
-                                !self.state.season_download_confirm_yes_selected;
-                        } else if self.state.show_episode_download_confirm {
-                            self.state.episode_download_confirm_yes_selected =
-                                !self.state.episode_download_confirm_yes_selected;
-                        } else if !self.state.subtitle_popup && !self.state.player_picker_popup {
-                            self.action_sender.send(Action::BackTabPane).ok();
-                        }
-                    }
-                    KeyCode::Char('y') | KeyCode::Char('Y') => {
-                        if self.state.show_season_download_confirm {
-                            self.action_sender.send(Action::ConfirmDownloadSeason).ok();
-                        } else if self.state.show_episode_download_confirm {
-                            self.action_sender.send(Action::ConfirmDownloadEpisode).ok();
-                        }
-                    }
-                    KeyCode::Char('n') | KeyCode::Char('N') => {
-                        if self.state.show_season_download_confirm {
-                            self.state.show_season_download_confirm = false;
-                        } else if self.state.show_episode_download_confirm {
-                            self.state.show_episode_download_confirm = false;
-                        }
-                    }
-                    KeyCode::Esc => {
-                        if self.state.show_season_download_confirm {
-                            self.state.show_season_download_confirm = false;
-                        } else if self.state.show_episode_download_confirm {
-                            self.state.show_episode_download_confirm = false;
-                        } else {
-                            self.action_sender.send(Action::GoBack).ok();
-                        }
-                    }
-                    KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Char('P') => {
-                        if !self.state.subtitle_popup
-                            && !self.state.player_picker_popup
-                            && !self.state.show_season_download_confirm
-                            && !self.state.show_episode_download_confirm
-                        {
-                            match self.state.details_pane {
-                                crate::tui::state::DetailsPane::Streams => {
-                                    self.action_sender.send(Action::PlayStream).ok();
-                                }
-                                crate::tui::state::DetailsPane::Seasons => {
-                                    self.trigger_episode_fetch();
-                                }
-                                crate::tui::state::DetailsPane::Episodes => {
-                                    self.trigger_episode_fetch();
-                                }
-                                crate::tui::state::DetailsPane::Languages => {
-                                    let idx =
-                                        self.state.language_list_state.selected().unwrap_or(0);
-                                    self.action_sender.send(Action::SelectLanguage(idx)).ok();
-                                }
-                            }
-                        }
-                    }
-                    KeyCode::Char('q') | KeyCode::Char('Q') => {
-                        self.action_sender.send(Action::Quit).ok();
-                    }
-                    KeyCode::Char('d') | KeyCode::Char('D') => {
-                        if !self.state.subtitle_popup && !self.state.player_picker_popup {
-                            if let crate::tui::state::DetailsPane::Seasons = self.state.details_pane
+                    Screen::Details => match key.code {
+                        KeyCode::Tab => {
+                            if self.state.show_season_download_confirm {
+                                self.state.season_download_confirm_yes_selected =
+                                    !self.state.season_download_confirm_yes_selected;
+                            } else if self.state.show_episode_download_confirm {
+                                self.state.episode_download_confirm_yes_selected =
+                                    !self.state.episode_download_confirm_yes_selected;
+                            } else if !self.state.subtitle_popup && !self.state.player_picker_popup
                             {
-                                if !self.state.available_seasons.is_empty() {
-                                    self.action_sender.send(Action::PromptDownloadSeason).ok();
-                                }
-                            } else {
-                                self.action_sender.send(Action::PromptDownloadEpisode).ok();
+                                self.action_sender.send(Action::TabPane).ok();
                             }
                         }
-                    }
-                    KeyCode::Char('r') => {
-                        if !self.state.subtitle_popup
-                            && !self.state.player_picker_popup
-                            && !self.state.show_season_download_confirm
-                            && !self.state.show_episode_download_confirm
-                        {
-                            self.action_sender.send(Action::Refresh).ok();
+                        KeyCode::BackTab => {
+                            if self.state.show_season_download_confirm {
+                                self.state.season_download_confirm_yes_selected =
+                                    !self.state.season_download_confirm_yes_selected;
+                            } else if self.state.show_episode_download_confirm {
+                                self.state.episode_download_confirm_yes_selected =
+                                    !self.state.episode_download_confirm_yes_selected;
+                            } else if !self.state.subtitle_popup && !self.state.player_picker_popup
+                            {
+                                self.action_sender.send(Action::BackTabPane).ok();
+                            }
                         }
-                    }
-                    KeyCode::Char('?') => {
-                        self.action_sender.send(Action::ToggleHelp).ok();
-                    }
-                    KeyCode::Char('f') | KeyCode::Char('F') => {
-                        if !self.state.subtitle_popup
-                            && !self.state.player_picker_popup
-                            && !self.state.show_season_download_confirm
-                            && !self.state.show_episode_download_confirm
-                            && self.state.favorites_available()
-                        {
-                            self.action_sender.send(Action::ToggleFavorite).ok();
-                        }
-                    }
-
-                    KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('K') => {
-                        self.action_sender.send(Action::MoveUp).ok();
-                    }
-                    KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('J') => {
-                        self.action_sender.send(Action::MoveDown).ok();
-                    }
-                    KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('H') => {
-                        if self.state.show_season_download_confirm {
-                            self.state.season_download_confirm_yes_selected = true;
-                        } else if self.state.show_episode_download_confirm {
-                            self.state.episode_download_confirm_yes_selected = true;
-                        } else if !self.state.subtitle_popup && !self.state.player_picker_popup {
-                            self.action_sender.send(Action::BackTabPane).ok();
-                        }
-                    }
-                    KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') => {
-                        if self.state.show_season_download_confirm {
-                            self.state.season_download_confirm_yes_selected = false;
-                        } else if self.state.show_episode_download_confirm {
-                            self.state.episode_download_confirm_yes_selected = false;
-                        } else if !self.state.subtitle_popup && !self.state.player_picker_popup {
-                            self.action_sender.send(Action::TabPane).ok();
-                        }
-                    }
-                    KeyCode::Enter => {
-                        if self.state.show_season_download_confirm {
-                            if self.state.season_download_confirm_yes_selected {
+                        KeyCode::Char('y') | KeyCode::Char('Y') => {
+                            if self.state.show_season_download_confirm {
                                 self.action_sender.send(Action::ConfirmDownloadSeason).ok();
-                            } else {
-                                self.state.show_season_download_confirm = false;
-                            }
-                        } else if self.state.show_episode_download_confirm {
-                            if self.state.episode_download_confirm_yes_selected {
+                            } else if self.state.show_episode_download_confirm {
                                 self.action_sender.send(Action::ConfirmDownloadEpisode).ok();
-                            } else {
+                            }
+                        }
+                        KeyCode::Char('n') | KeyCode::Char('N') => {
+                            if self.state.show_season_download_confirm {
+                                self.state.show_season_download_confirm = false;
+                            } else if self.state.show_episode_download_confirm {
                                 self.state.show_episode_download_confirm = false;
                             }
-                        } else if self.state.subtitle_popup
-                            || self.state.player_picker_popup
-                            || self.state.is_download_subtitle_popup
-                        {
-                            self.action_sender.send(Action::Submit).ok();
-                        } else {
-                            match self.state.details_pane {
-                                crate::tui::state::DetailsPane::Streams => {
-                                    self.action_sender.send(Action::PlayStream).ok();
-                                }
-                                crate::tui::state::DetailsPane::Seasons => {
-                                    self.trigger_episode_fetch();
-                                }
-                                crate::tui::state::DetailsPane::Episodes => {
-                                    self.trigger_episode_fetch();
-                                }
-                                crate::tui::state::DetailsPane::Languages => {
-                                    let idx =
-                                        self.state.language_list_state.selected().unwrap_or(0);
-
-                                    self.action_sender.send(Action::SelectLanguage(idx)).ok();
+                        }
+                        KeyCode::Esc => {
+                            if self.state.show_season_download_confirm {
+                                self.state.show_season_download_confirm = false;
+                            } else if self.state.show_episode_download_confirm {
+                                self.state.show_episode_download_confirm = false;
+                            } else {
+                                self.action_sender.send(Action::GoBack).ok();
+                            }
+                        }
+                        KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Char('P') => {
+                            if !self.state.subtitle_popup
+                                && !self.state.player_picker_popup
+                                && !self.state.show_season_download_confirm
+                                && !self.state.show_episode_download_confirm
+                            {
+                                match self.state.details_pane {
+                                    crate::tui::state::DetailsPane::Streams => {
+                                        self.action_sender.send(Action::PlayStream).ok();
+                                    }
+                                    crate::tui::state::DetailsPane::Seasons => {
+                                        self.trigger_episode_fetch();
+                                    }
+                                    crate::tui::state::DetailsPane::Episodes => {
+                                        self.trigger_episode_fetch();
+                                    }
+                                    crate::tui::state::DetailsPane::Languages => {
+                                        let idx =
+                                            self.state.language_list_state.selected().unwrap_or(0);
+                                        self.action_sender.send(Action::SelectLanguage(idx)).ok();
+                                    }
                                 }
                             }
                         }
-                    }
-                    _ => {}
-                },
-            },
+                        KeyCode::Char('q') | KeyCode::Char('Q') => {
+                            self.action_sender.send(Action::Quit).ok();
+                        }
+                        KeyCode::Char('d') | KeyCode::Char('D') => {
+                            if !self.state.subtitle_popup && !self.state.player_picker_popup {
+                                if let crate::tui::state::DetailsPane::Seasons =
+                                    self.state.details_pane
+                                {
+                                    if !self.state.available_seasons.is_empty() {
+                                        self.action_sender.send(Action::PromptDownloadSeason).ok();
+                                    }
+                                } else {
+                                    self.action_sender.send(Action::PromptDownloadEpisode).ok();
+                                }
+                            }
+                        }
+                        KeyCode::Char('r') => {
+                            if !self.state.subtitle_popup
+                                && !self.state.player_picker_popup
+                                && !self.state.show_season_download_confirm
+                                && !self.state.show_episode_download_confirm
+                            {
+                                self.action_sender.send(Action::Refresh).ok();
+                            }
+                        }
+                        KeyCode::Char('?') => {
+                            self.action_sender.send(Action::ToggleHelp).ok();
+                        }
+                        KeyCode::Char('f') | KeyCode::Char('F') => {
+                            if !self.state.subtitle_popup
+                                && !self.state.player_picker_popup
+                                && !self.state.show_season_download_confirm
+                                && !self.state.show_episode_download_confirm
+                                && self.state.favorites_available()
+                            {
+                                self.action_sender.send(Action::ToggleFavorite).ok();
+                            }
+                        }
+
+                        KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('K') => {
+                            self.action_sender.send(Action::MoveUp).ok();
+                        }
+                        KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('J') => {
+                            self.action_sender.send(Action::MoveDown).ok();
+                        }
+                        KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('H') => {
+                            if self.state.show_season_download_confirm {
+                                self.state.season_download_confirm_yes_selected = true;
+                            } else if self.state.show_episode_download_confirm {
+                                self.state.episode_download_confirm_yes_selected = true;
+                            } else if !self.state.subtitle_popup && !self.state.player_picker_popup
+                            {
+                                self.action_sender.send(Action::BackTabPane).ok();
+                            }
+                        }
+                        KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') => {
+                            if self.state.show_season_download_confirm {
+                                self.state.season_download_confirm_yes_selected = false;
+                            } else if self.state.show_episode_download_confirm {
+                                self.state.episode_download_confirm_yes_selected = false;
+                            } else if !self.state.subtitle_popup && !self.state.player_picker_popup
+                            {
+                                self.action_sender.send(Action::TabPane).ok();
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if self.state.show_season_download_confirm {
+                                if self.state.season_download_confirm_yes_selected {
+                                    self.action_sender.send(Action::ConfirmDownloadSeason).ok();
+                                } else {
+                                    self.state.show_season_download_confirm = false;
+                                }
+                            } else if self.state.show_episode_download_confirm {
+                                if self.state.episode_download_confirm_yes_selected {
+                                    self.action_sender.send(Action::ConfirmDownloadEpisode).ok();
+                                } else {
+                                    self.state.show_episode_download_confirm = false;
+                                }
+                            } else if self.state.subtitle_popup
+                                || self.state.player_picker_popup
+                                || self.state.is_download_subtitle_popup
+                            {
+                                self.action_sender.send(Action::Submit).ok();
+                            } else {
+                                match self.state.details_pane {
+                                    crate::tui::state::DetailsPane::Streams => {
+                                        self.action_sender.send(Action::PlayStream).ok();
+                                    }
+                                    crate::tui::state::DetailsPane::Seasons => {
+                                        self.trigger_episode_fetch();
+                                    }
+                                    crate::tui::state::DetailsPane::Episodes => {
+                                        self.trigger_episode_fetch();
+                                    }
+                                    crate::tui::state::DetailsPane::Languages => {
+                                        let idx =
+                                            self.state.language_list_state.selected().unwrap_or(0);
+
+                                        self.action_sender.send(Action::SelectLanguage(idx)).ok();
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                }
+            }
         }
         None
     }
@@ -1293,6 +1375,47 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::empty()))
             .await;
         assert_eq!(app.state.search_list_state.selected(), Some(0));
+    }
+
+    #[tokio::test]
+    async fn test_delete_history_item_with_key() {
+        let mut app = App::new();
+        app.state.active_screen = crate::tui::state::Screen::Home;
+        app.state.input_mode = InputMode::Normal;
+        app.state.search_query.set_content("/history");
+
+        let item = crate::history::WatchHistoryItem {
+            provider: "moviebox".to_string(),
+            subject_id: "hist-1".to_string(),
+            title: "History Movie".to_string(),
+            cover_url: None,
+            stype: 1,
+            release_year: "2024".to_string(),
+            season: 0,
+            episode: 0,
+            progress_seconds: 50,
+            duration_seconds: Some(500),
+            completed: false,
+            timestamp: 1000,
+        };
+        app.state.history.record_start(&item, 50);
+        app.state.search_results.push(item.to_search_result());
+        app.state.search_list_state.select(Some(0));
+        assert_eq!(app.state.search_results.len(), 1);
+        assert_eq!(app.state.history.recent.len(), 1);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::empty()))
+            .await;
+
+        assert!(app.state.search_results.is_empty());
+        assert!(app.state.history.recent.is_empty());
+        let notif = app
+            .state
+            .notifications
+            .back()
+            .expect("notification emitted");
+        assert_eq!(notif.title, "History");
+        assert_eq!(notif.message, "Removed: History Movie");
     }
 
     #[tokio::test]
