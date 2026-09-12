@@ -33,7 +33,7 @@ impl ApiError {
     }
 
     fn upstream(err: ScraperError) -> Self {
-        let status = match err {
+        let status = match &err {
             ScraperError::ApiStatus(404) => StatusCode::NOT_FOUND,
             ScraperError::ApiStatus(429) => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::BAD_GATEWAY,
