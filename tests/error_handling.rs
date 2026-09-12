@@ -102,8 +102,7 @@ async fn test_active_player_session_blocks_duplicate_playback_and_recovers_on_ex
     assert!(!app.state().notifications.is_empty());
     let notif = app.state().notifications.back().unwrap();
     assert_eq!(notif.kind, NotificationKind::Warning);
-    assert_eq!(notif.title, "Playback already active");
-
+    assert_eq!(notif.title, "Playback active");
     app.handle_action(Action::PlayerExited).await;
     assert!(!app.state().is_playing);
     assert!(!app.state().is_resolving_playback);

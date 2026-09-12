@@ -1123,8 +1123,8 @@ impl App {
                         if self.state.is_playing {
                             self.state.notify(
                                 NotificationKind::Warning,
-                                "Playback already active",
-                                "Stop the current player before starting another.",
+                                "Playback active",
+                                "Player is already running.",
                             );
                         } else if !self.state.is_resolving_playback
                             && self.state.last_playback_launch.elapsed().as_millis() >= 500
