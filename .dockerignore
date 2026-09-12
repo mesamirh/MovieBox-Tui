@@ -1,0 +1,9 @@
+.git
+.github
+.cargo
+target
+docs
+book
+Formula
+*.log
+.DS_Store
