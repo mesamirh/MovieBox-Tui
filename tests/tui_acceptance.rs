@@ -377,10 +377,10 @@ async fn test_full_user_journey_mode_switching_and_theme_selection() {
 
     app.handle_action(Action::SwitchToStreamingMode).await;
     assert!(!app.state().is_tv_mode);
-
     app.handle_action(Action::SelectTheme("TokyoNight".to_string()))
         .await;
     assert_eq!(app.state().active_theme_kind, "TokyoNight");
+    app.handle_action(Action::SwitchToStreamingMode).await;
 }
 
 #[tokio::test]

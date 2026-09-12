@@ -3088,6 +3088,7 @@ mod tests {
             }],
             details_pane: crate::tui::state::DetailsPane::Streams,
             show_episode_download_confirm: true,
+            basic_terminal: false,
             ..Default::default()
         };
         state.language_list_state.select(Some(0));
@@ -3121,8 +3122,8 @@ mod tests {
                 {
                     assert_eq!(
                         cell.style().fg,
-                        theme.muted.fg,
-                        "Multi badge foreground should be muted"
+                        theme.overlay1.fg,
+                        "Multi badge foreground should be overlay1"
                     );
                 }
                 if cell.symbol() == "H" && x + 4 < 120 && buffer[(x + 1, y)].symbol() == "i" {
