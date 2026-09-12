@@ -9,24 +9,28 @@ macOS `~/Library/Application Support/moviebox-tui`, Linux `~/.config/moviebox-tu
 | :--- | :--- | :--- |
 | `auto_update`       | bool           | Check for updates on startup (max once/hour).                                                               |
 | `last_update_check` | u64            | Epoch seconds of the last update check.                                                                     |
-| `active_mode`       | string         | Last active mode (`streaming`, `tv`, `addon`) restored on startup.                                         |
-| `active_provider`   | string         | Last provider (`moviebox`, `fourkhdhub`, …).                                                                |
-| `active_theme`      | string         | Theme name.                                                                                                 |
-| `bdix_enabled`      | bool           | Show BDIX providers (Bangladesh-only).                                                                      |
-| `streaming_enabled` | bool           | Enable Streaming Mode navigation in bottom dock (`/settings` → Content Modes).              |
-| `tv_enabled`        | bool           | Enable TV Mode navigation in bottom dock (`/settings` → Content Modes).                     |
-| `addons_enabled`    | bool           | Enable Stremio Addons provider availability (`/settings` → Content Modes).                  |
-| `default_player`    | string or null | Preferred player: `mpv`, `iina`, `vlc`, `android`; absent/null until you choose one from the in-app picker. |
-| `download_dir`      | string or null | Custom directory for video and subtitle downloads (null uses OS default).                                   |
+| `active_mode`            | string         | Last active mode (`streaming`, `tv`) restored on startup.                                                  |
+| `active_provider`        | string         | Last provider (`moviebox`, `fourkhdhub`, `bdix_circleftp`, `bdix_dhakaflix`, `addons`).                    |
+| `active_theme`           | string         | Theme name (`Mocha`, `TokyoNight`, `Nord`, `Dracula`, `Gruvbox`, `RosePine`).                              |
+| `moviebox_enabled`       | bool           | Enable MovieBox streaming provider (`/settings` → Content Modes → Streaming Sources).                       |
+| `fourkhdhub_enabled`     | bool           | Enable 4KHDHub streaming provider (`/settings` → Content Modes → Streaming Sources).                       |
+| `bdix_circleftp_enabled` | bool           | Enable CircleFTP mirror (`/settings` → Content Modes → Streaming Sources).                                  |
+| `bdix_dhakaflix_enabled` | bool           | Enable DhakaFlix mirror (`/settings` → Content Modes → Streaming Sources).                                  |
+| `bdix_probed`            | bool           | Tracks if initial startup BDIX probe has executed.                                                         |
+| `streaming_enabled`      | bool           | Enable Streaming Mode navigation in bottom dock (`/settings` → Content Modes).                               |
+| `tv_enabled`             | bool           | Enable TV Mode navigation in bottom dock (`/settings` → Content Modes).                                      |
+| `addons_enabled`         | bool           | Enable Stremio Addons provider availability.                                                               |
+| `default_player`         | string or null | Preferred player: `mpv`, `iina`, `vlc`, `android`; absent/null until you choose one from the in-app picker. |
+| `download_dir`           | string or null | Custom directory for video and subtitle downloads (null uses OS default).                                  |
 
 ## Interactive Settings Hub (`/settings`)
 
 All settings in `config.json` can be configured interactively inside the application by typing `/settings` into the search bar.
 
 - **General**: Toggle automatic update checks, choose default media player (`mpv`, `VLC`, `IINA`, `Android`), and edit download folder path.
-- **Content Modes**: Enable or disable Streaming Mode, BDIX FTP sources, and Live TV (IPTV) with safety guards (preventing 0 active modes).
-- **Appearance**: Cycle color themes live with real-time palette swatches and launch the visual theme swatch picker.
-- **Maintenance**: Purge disk cache, query GitHub for release updates, and view repository information.
+- **Content Modes**: Toggle Streaming Mode, open the Streaming Sources selector (to enable/disable MovieBox, 4KHDHub, CircleFTP, DhakaFlix), and toggle Live TV.
+- **Appearance**: Open the visual theme swatch picker to select among 6 built-in color themes.
+- **Maintenance**: Purge disk cache, query GitHub for release updates, open GitHub repository, and trigger a manual local network BDIX re-probe.
 ## Other persisted files
 
 - `addons_config.json` — list of installed HTTP addons in the config directory (see [addons-mode.md](addons-mode.md)).
