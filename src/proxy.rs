@@ -345,6 +345,11 @@ async fn handle_connection(
 
     for (header_name, header_val) in upstream_res.headers() {
         let name_str = header_name.as_str();
+        if target_url.ends_with(".srt") || target_url.ends_with(".vtt") {
+            if name_str.eq_ignore_ascii_case("content-type") {
+                continue;
+            }
+        }
         if name_str.eq_ignore_ascii_case("content-type")
             || name_str.eq_ignore_ascii_case("content-length")
             || name_str.eq_ignore_ascii_case("content-range")
@@ -356,16 +361,16 @@ async fn handle_connection(
                     .await?;
             }
         }
+    }
+    writer
+        .write_all(b"Access-Control-Allow-Origin: *\r\n")
+        .await?;
+    if target_url.ends_with(".srt") {
         writer
-            .write_all(b"Access-Control-Allow-Origin: *\r\n")
+            .write_all(b"Content-Type: application/x-subrip\r\n")
             .await?;
-        if target_url.ends_with(".srt") {
-            writer
-                .write_all(b"Content-Type: application/x-subrip\r\n")
-                .await?;
-        } else if target_url.ends_with(".vtt") {
-            writer.write_all(b"Content-Type: text/vtt\r\n").await?;
-        }
+    } else if target_url.ends_with(".vtt") {
+        writer.write_all(b"Content-Type: text/vtt\r\n").await?;
     }
     writer.write_all(b"Connection: close\r\n\r\n").await?;
 
