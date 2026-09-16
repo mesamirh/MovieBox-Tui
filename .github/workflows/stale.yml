@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Close stale needs-info issues
-        uses: actions/stale@v9
+        uses: actions/stale@v11
         with:
           only-labels: "needs-info"
           days-before-issue-stale: 7
