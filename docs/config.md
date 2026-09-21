@@ -20,14 +20,14 @@ macOS `~/Library/Application Support/moviebox-tui`, Linux `~/.config/moviebox-tu
 | `streaming_enabled`      | bool           | Enable Streaming Mode navigation in bottom dock (`/settings` → Content Modes).                               |
 | `tv_enabled`             | bool           | Enable TV Mode navigation in bottom dock (`/settings` → Content Modes).                                      |
 | `addons_enabled`         | bool           | Enable Stremio Addons provider availability.                                                               |
-| `default_player`         | string or null | Preferred player: `mpv`, `iina`, `vlc`, `android`; absent/null until you choose one from the in-app picker. |
+| `default_player`         | string or null | Preferred player: `mpv`, `iina`, `vlc`, `mpc`, `android`; absent/null until you choose one from the in-app picker. |
 | `download_dir`           | string or null | Custom directory for video and subtitle downloads (null uses OS default).                                  |
 
 ## Interactive Settings Hub (`/settings`)
 
 All settings in `config.json` can be configured interactively inside the application by typing `/settings` into the search bar.
 
-- **General**: Toggle automatic update checks, choose default media player (`mpv`, `VLC`, `IINA`, `Android`), and edit download folder path.
+- **General**: Toggle automatic update checks, choose default media player (`mpv`, `VLC`, `MPC-HC`, `IINA`, `Android`), and edit download folder path.
 - **Content Modes**: Toggle Streaming Mode, open the Streaming Sources selector (to enable/disable MovieBox, 4KHDHub, CircleFTP, DhakaFlix), and toggle Live TV.
 - **Appearance**: Open the visual theme swatch picker to select among 6 built-in color themes.
 - **Maintenance**: Purge disk cache, clear watch history, query GitHub for release updates, open GitHub repository, and trigger a manual local network BDIX re-probe.
@@ -49,6 +49,7 @@ All settings in `config.json` can be configured interactively inside the applica
 | `MOVIEBOX_PLAYER`         | Preferred player (overrides `default_player`).                                    |
 | `MOVIEBOX_MPV_PATH`       | Custom mpv executable.                                                            |
 | `MOVIEBOX_VLC_PATH`       | Custom VLC executable.                                                            |
+| `MOVIEBOX_MPC_PATH`       | Custom MPC-HC executable (`mpc-hc64.exe`). Windows only.                          |
 | `MOVIEBOX_IINA_PATH`      | Custom IINA/iina-cli executable.                                                  |
 | `MOVIEBOX_FOURKHDHUB_URL` | Override the 4KHDHub base URL.                                                    |
 | `MOVIEBOX_THEME`          | Force a theme (e.g. `Mocha`, `Latte`, `Macchiato`, `Frappe`, `Nord`, `TokyoNight`, `Dracula`, `Gruvbox`, `RosePine`). When unset and no saved theme exists, the app auto-detects: `NO_COLOR` wins, truecolor terminals get full palettes, 256-color terminals get quantized palettes, and the OSC 11 background query picks light/dark variants with WCAG AA contrast. |
