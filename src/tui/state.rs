@@ -113,6 +113,7 @@ pub fn settings_player_label(choice: Option<&str>) -> &'static str {
         None | Some("auto") => "None",
         Some("mpv") => "mpv",
         Some("vlc") => "VLC",
+        Some("mpc") => "MPC-HC",
         Some("iina") => "IINA",
         Some("android") => "Android Player",
         Some(_) => "Custom",

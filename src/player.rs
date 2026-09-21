@@ -21,6 +21,7 @@ pub enum PlayerKind {
     Iina,
     Vlc,
     AndroidIntent,
+    Mpc,
 }
 
 impl PlayerKind {
@@ -30,6 +31,7 @@ impl PlayerKind {
             PlayerKind::Iina => "IINA",
             PlayerKind::Vlc => "VLC",
             PlayerKind::AndroidIntent => "Android Player",
+            PlayerKind::Mpc => "MPC-HC",
         }
     }
 
@@ -39,6 +41,7 @@ impl PlayerKind {
             PlayerKind::Iina => "iina",
             PlayerKind::Vlc => "vlc",
             PlayerKind::AndroidIntent => "android",
+            PlayerKind::Mpc => "mpc",
         }
     }
 
@@ -48,6 +51,7 @@ impl PlayerKind {
             "iina" => Some(PlayerKind::Iina),
             "vlc" => Some(PlayerKind::Vlc),
             "android" | "androidintent" | "android-intent" => Some(PlayerKind::AndroidIntent),
+            "mpc" | "mpc-hc" | "mpchc" => Some(PlayerKind::Mpc),
             _ => None,
         }
     }
@@ -64,6 +68,11 @@ pub fn detect() -> Vec<PlayerKind> {
     #[cfg(target_os = "macos")]
     if iina_available() {
         players.push(PlayerKind::Iina);
+    }
+
+    #[cfg(target_os = "windows")]
+    if mpc_executable().is_some() {
+        players.push(PlayerKind::Mpc);
     }
 
     if mpv_executable().is_some() {
@@ -94,6 +103,9 @@ pub fn supports_headers(kind: PlayerKind, headers: &[(String, String)]) -> bool 
         PlayerKind::Iina => true,
         PlayerKind::Vlc => true,
         PlayerKind::AndroidIntent => true,
+        // MPC-HC plays through the localhost sidecar proxy, which injects
+        // headers upstream, so any source works.
+        PlayerKind::Mpc => true,
     }
 }
 
@@ -105,11 +117,17 @@ pub fn header_capable_players() -> &'static [PlayerKind] {
             PlayerKind::Iina,
             PlayerKind::Vlc,
             PlayerKind::AndroidIntent,
+            PlayerKind::Mpc,
         ]
     }
     #[cfg(not(target_os = "macos"))]
     {
-        &[PlayerKind::Mpv, PlayerKind::Vlc, PlayerKind::AndroidIntent]
+        &[
+            PlayerKind::Mpv,
+            PlayerKind::Vlc,
+            PlayerKind::AndroidIntent,
+            PlayerKind::Mpc,
+        ]
     }
 }
 
@@ -135,7 +153,87 @@ pub fn command(
         PlayerKind::Iina => iina_command(url, subtitle, headers, window, resume_seconds, tracker),
         PlayerKind::Vlc => vlc_command(url, subtitle, headers, window, resume_seconds),
         PlayerKind::AndroidIntent => android_intent_command(url, subtitle, headers),
+        PlayerKind::Mpc => mpc_command(url, subtitle),
     }
+}
+
+/// Candidate paths for MPC-HC on Windows.
+const MPC_WINDOWS: &[&str] = &[
+    r"C:\Program Files\MPC-HC\mpc-hc64.exe",
+    r"C:\Program Files (x86)\MPC-HC\mpc-hc.exe",
+    r"C:\Program Files\K-Lite Codec Pack\MPC-HC64\mpc-hc64.exe",
+    r"C:\Program Files (x86)\K-Lite Codec Pack\MPC-HC\mpc-hc.exe",
+];
+
+fn probe_mpc() -> Option<String> {
+    let mut candidates = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        let localappdata = std::env::var("LOCALAPPDATA").ok();
+        let appdata = std::env::var("APPDATA").ok();
+        let home = dirs::home_dir();
+        candidates.extend(windows_mpc_candidate_paths(
+            localappdata.as_deref(),
+            appdata.as_deref(),
+            home.as_deref(),
+        ));
+    }
+
+    let bin_names: &[&str] = if cfg!(target_os = "windows") {
+        &["mpc-hc64.exe", "mpc-hc64", "mpc-hc.exe", "mpc-hc", "mpchc"][..]
+    } else {
+        &["mpc-hc"][..]
+    };
+
+    probe_player_executable("MOVIEBOX_MPC_PATH", &candidates, bin_names, None)
+}
+
+fn mpc_executable() -> Option<String> {
+    static CACHED: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+    if let Ok(guard) = CACHED.read() {
+        if let Some(path) = &*guard {
+            if Path::new(path).is_file() {
+                return Some(path.clone());
+            }
+        }
+    }
+
+    let detected = probe_mpc();
+    if let Some(path) = &detected {
+        if let Ok(mut guard) = CACHED.write() {
+            *guard = Some(path.clone());
+        }
+    }
+    detected
+}
+
+#[cfg(target_os = "windows")]
+fn mpc_command(url: &str, subtitle: Option<&str>) -> Command {
+    let executable = mpc_executable().unwrap_or_else(|| "mpc-hc64.exe".into());
+    let mut command = build_player_process_command(&executable);
+    // Empty subtitle (user picked "None" caption, carried as empty URL) must
+    // not become `/sub ""` — MPC-HC reads that as a help request and opens
+    // its "Command line help" window instead of playing.
+    if let Some(subtitle) = subtitle.filter(|s| !s.is_empty()) {
+        command.arg("/sub").arg(normalize_player_path(subtitle));
+    }
+    // No /ref or /ua: some builds (K-Lite/clsid fork) don't recognize those
+    // switches and open help instead of playing. Headers ride the loopback
+    // sidecar proxy (see playback.rs), which injects them upstream.
+    command.arg(url);
+    command
+}
+
+#[cfg(not(target_os = "windows"))]
+fn mpc_command(url: &str, subtitle: Option<&str>) -> Command {
+    let mut command = Command::new("mpc-hc");
+    if let Some(subtitle) = subtitle.filter(|s| !s.is_empty()) {
+        command.arg("/sub").arg(subtitle);
+    }
+    command.arg(url);
+    command
 }
 
 fn build_player_process_command(executable: &str) -> Command {
@@ -1055,6 +1153,133 @@ pub fn windows_vlc_candidate_paths(
     candidates
 }
 
+pub fn windows_mpc_candidate_paths(
+    localappdata: Option<&str>,
+    appdata: Option<&str>,
+    userprofile: Option<&Path>,
+) -> Vec<String> {
+    let mut candidates = Vec::new();
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            for name in &["mpc-hc64.exe", "mpc-hc.exe", r"mpc-hc\mpc-hc64.exe"] {
+                candidates.push(parent.join(name).to_string_lossy().into_owned());
+            }
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        for name in &["mpc-hc64.exe", "mpc-hc.exe", r"mpc-hc\mpc-hc64.exe"] {
+            candidates.push(cwd.join(name).to_string_lossy().into_owned());
+        }
+    }
+
+    if let Some(local) = localappdata {
+        candidates.push(format!(r"{local}\Microsoft\WinGet\Links\mpc-hc64.exe"));
+        candidates.push(format!(r"{local}\Microsoft\WinGet\Links\mpc-hc.exe"));
+        candidates.push(format!(r"{local}\Programs\MPC-HC\mpc-hc64.exe"));
+        candidates.push(format!(r"{local}\Programs\MPC-HC\mpc-hc.exe"));
+
+        let packages_dir = std::path::PathBuf::from(format!(r"{local}\Microsoft\WinGet\Packages"));
+        if packages_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&packages_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let name = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+                    if (name.contains("mpc") || name.contains("mpc-hc")) && path.is_dir() {
+                        candidates.push(path.join("mpc-hc64.exe").to_string_lossy().into_owned());
+                        candidates.push(path.join("mpc-hc.exe").to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(appdata_dir) = appdata {
+        candidates.push(format!(r"{appdata_dir}\MPC-HC\mpc-hc64.exe"));
+        candidates.push(format!(r"{appdata_dir}\MPC-HC\mpc-hc.exe"));
+    }
+
+    if let Some(home) = userprofile {
+        for sub in &["Downloads", "Desktop"] {
+            let folder = home.join(sub);
+            candidates.push(folder.join("mpc-hc64.exe").to_string_lossy().into_owned());
+            candidates.push(folder.join("mpc-hc.exe").to_string_lossy().into_owned());
+            if folder.is_dir() {
+                if let Ok(entries) = std::fs::read_dir(&folder) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        let folder_name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        if (folder_name.contains("mpc") || folder_name.contains("mpc-hc"))
+                            && path.is_dir()
+                        {
+                            candidates
+                                .push(path.join("mpc-hc64.exe").to_string_lossy().into_owned());
+                            candidates.push(path.join("mpc-hc.exe").to_string_lossy().into_owned());
+                        }
+                    }
+                }
+            }
+        }
+
+        candidates.push(
+            home.join(r"scoop\shims\mpc-hc64.exe")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        candidates.push(
+            home.join(r"scoop\shims\mpc-hc.exe")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        candidates.push(
+            home.join(r"scoop\apps\mpc-hc\current\mpc-hc64.exe")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        candidates.push(
+            home.join(r"mpc-hc\mpc-hc64.exe")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        candidates.push(
+            home.join(r"bin\mpc-hc64.exe")
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+
+    candidates.extend(MPC_WINDOWS.iter().map(|s| s.to_string()));
+    candidates.push(r"C:\mpc-hc\mpc-hc64.exe".to_string());
+    candidates.push(r"D:\mpc-hc\mpc-hc64.exe".to_string());
+    candidates.push(r"C:\tools\mpc-hc\mpc-hc64.exe".to_string());
+    candidates.push(r"C:\ProgramData\chocolatey\bin\mpc-hc64.exe".to_string());
+    candidates.push(r"C:\ProgramData\scoop\shims\mpc-hc64.exe".to_string());
+
+    #[cfg(target_os = "windows")]
+    {
+        for key in &[
+            r"HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\mpc-hc64.exe",
+            r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\mpc-hc64.exe",
+            r"HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\mpc-hc.exe",
+            r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\mpc-hc.exe",
+        ] {
+            if let Some(reg_path) = query_windows_registry_value(key, None) {
+                candidates.push(reg_path);
+            }
+        }
+    }
+
+    candidates
+}
+
 fn probe_mpv() -> Option<String> {
     let mut candidates = Vec::new();
 
@@ -1771,5 +1996,32 @@ mod tests {
     #[test]
     fn test_create_no_window_constant() {
         assert_eq!(CREATE_NO_WINDOW, 0x0800_0000);
+    }
+
+    #[test]
+    fn mpc_parse_and_headers() {
+        assert_eq!(PlayerKind::parse("mpc"), Some(PlayerKind::Mpc));
+        assert_eq!(PlayerKind::parse("mpc-hc"), Some(PlayerKind::Mpc));
+        assert_eq!(PlayerKind::Mpc.label(), "MPC-HC");
+        assert_eq!(PlayerKind::Mpc.config_key(), "mpc");
+        assert!(supports_headers(
+            PlayerKind::Mpc,
+            &[("Cookie".into(), "session=secret".into())]
+        ));
+    }
+
+    #[test]
+    fn mpc_command_skips_empty_subtitle_and_ref_switches() {
+        let cmd = mpc_command("https://example.test/video.mp4", Some(""));
+        let args = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(!args.iter().any(|a| a == "/sub" || a.is_empty()));
+        assert!(!args.iter().any(|a| a == "/ref" || a == "/ua"));
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("https://example.test/video.mp4")
+        );
     }
 }

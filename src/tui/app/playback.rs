@@ -132,7 +132,7 @@ impl App {
                 let message = if crate::updater::artifact::is_termux_environment() {
                     "Run 'pkg install termux-tools' and install an Android video player."
                 } else {
-                    "Install mpv, IINA, or VLC to enable video playback."
+                    "Install mpv, IINA, VLC, or MPC-HC to enable video playback."
                 };
                 self.state
                     .notify(NotificationKind::Error, "No Media Player Found", message);
@@ -351,10 +351,14 @@ impl App {
 
             let needs_proxy = matches!(
                 kind,
-                crate::tui::state::PlayerKind::Vlc | crate::tui::state::PlayerKind::AndroidIntent
-            ) && headers.iter().any(|(name, _)| {
-                !name.eq_ignore_ascii_case("referer") && !name.eq_ignore_ascii_case("user-agent")
-            });
+                crate::tui::state::PlayerKind::Vlc
+                    | crate::tui::state::PlayerKind::AndroidIntent
+                    | crate::tui::state::PlayerKind::Mpc
+            ) && (kind == crate::tui::state::PlayerKind::Mpc
+                || headers.iter().any(|(name, _)| {
+                    !name.eq_ignore_ascii_case("referer")
+                        && !name.eq_ignore_ascii_case("user-agent")
+                }));
 
             let (effective_link, effective_subtitle) = if needs_proxy {
                 match crate::proxy::spawn_sidecar(&link, &headers, subtitle.as_deref()) {
