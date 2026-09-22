@@ -72,7 +72,10 @@ impl Resolve for FallbackResolver {
     }
 }
 
-pub fn http_client_builder() -> reqwest::ClientBuilder {
+/// Shared client config without a total request deadline. Use this for
+/// streaming bodies (downloads): `timeout` covers the whole response including
+/// the body, so any transfer longer than the deadline is aborted mid-file.
+pub fn streaming_client_builder() -> reqwest::ClientBuilder {
     reqwest::Client::builder()
         .dns_resolver(Arc::new(FallbackResolver::new()))
         .tcp_nodelay(true)
@@ -80,7 +83,10 @@ pub fn http_client_builder() -> reqwest::ClientBuilder {
         .pool_idle_timeout(Some(std::time::Duration::from_secs(90)))
         .pool_max_idle_per_host(8)
         .connect_timeout(std::time::Duration::from_secs(15))
-        .timeout(std::time::Duration::from_secs(60))
+}
+
+pub fn http_client_builder() -> reqwest::ClientBuilder {
+    streaming_client_builder().timeout(std::time::Duration::from_secs(60))
 }
 
 pub async fn probe_url(url: &str, timeout: std::time::Duration) -> bool {

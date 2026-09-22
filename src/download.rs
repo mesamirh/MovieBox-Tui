@@ -150,11 +150,14 @@ where
         if !segmented_disabled
             && offset == 0
             && response.status() == StatusCode::OK
+            // Many CDNs honour Range without advertising Accept-Ranges, so try
+            // segmenting unless the server explicitly refuses; a worker that
+            // gets a plain 200 falls back to the single-stream path below.
             && response
                 .headers()
                 .get(ACCEPT_RANGES)
                 .and_then(|value| value.to_str().ok())
-                .is_some_and(|value| value.eq_ignore_ascii_case("bytes"))
+                .is_none_or(|value| !value.eq_ignore_ascii_case("none"))
             && response
                 .content_length()
                 .is_some_and(|total| total >= SEGMENT_THRESHOLD)
@@ -235,11 +238,12 @@ where
         metadata.segments = None;
         write_metadata(&metadata_path, &metadata).await?;
 
-        let mut file = tokio::fs::OpenOptions::new()
+        let raw_file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&partial)
             .await?;
+        let mut file = tokio::io::BufWriter::with_capacity(256 * 1024, raw_file);
         let mut response = response;
         let mut downloaded = offset;
         let transfer_started = Instant::now();
@@ -272,7 +276,7 @@ where
                 }
                 Ok(Ok(None)) => {
                     file.flush().await?;
-                    file.sync_data().await?;
+                    file.get_mut().sync_data().await?;
                     if let Some(expected) = metadata.total
                         && downloaded != expected
                     {
@@ -526,10 +530,15 @@ async fn download_segment(
             }
         };
         if response.status() != StatusCode::PARTIAL_CONTENT {
-            last_error = Some(DownloadError::InvalidRange(format!(
+            let error = DownloadError::InvalidRange(format!(
                 "worker expected HTTP 206, received {}",
                 response.status()
-            )));
+            ));
+            if response.status() == StatusCode::OK {
+                // Range header ignored outright: retrying cannot help.
+                return Err(error);
+            }
+            last_error = Some(error);
             retry_delay(attempt).await;
             continue;
         }
@@ -625,9 +634,9 @@ async fn download_segment(
 }
 
 fn segment_count(total: u64) -> usize {
+    // ponytail: fixed tiers, make it a setting if servers start throttling
+    // per-connection counts.
     if total < 256 * 1024 * 1024 {
-        2
-    } else if total < 2 * 1024 * 1024 * 1024 {
         4
     } else {
         MAX_SEGMENTS
@@ -785,6 +794,14 @@ mod tests {
     fn test_parse_content_range_invalid() {
         assert!(parse_content_range("invalid range").is_err());
         assert!(parse_content_range("bytes invalid").is_err());
+    }
+
+    #[test]
+    fn test_segment_count_tiers() {
+        assert_eq!(segment_count(SEGMENT_THRESHOLD), 4);
+        assert_eq!(segment_count(255 * 1024 * 1024), 4);
+        assert_eq!(segment_count(256 * 1024 * 1024), MAX_SEGMENTS);
+        assert_eq!(segment_count(8 * 1024 * 1024 * 1024), MAX_SEGMENTS);
     }
 
     #[test]

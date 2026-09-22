@@ -137,7 +137,9 @@ impl App {
         let sender = self.action_sender.clone();
         let user_agent = self.service.client.user_agent().to_string();
 
-        let mut client_builder = crate::net::http_client_builder()
+        // No total request timeout here: downloads stream for minutes and the
+        // read loop already fails a connection that stalls for 30s.
+        let mut client_builder = crate::net::streaming_client_builder()
             .connect_timeout(std::time::Duration::from_secs(15))
             .tcp_keepalive(std::time::Duration::from_secs(30));
 
