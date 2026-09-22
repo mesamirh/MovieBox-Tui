@@ -19,6 +19,7 @@
 - **Native Video Playback**: Plays directly in your favorite player (`mpv`, `IINA`, `VLC`, or Android video players) with smooth hardware acceleration.
 - **Automatic Subtitles**: Automatically searches and loads subtitles in your preferred language into your player.
 - **Fast Downloads**: Save single episodes or entire seasons to your computer with pause and resume support.
+- **Quality Control**: Pick a preferred resolution once and every stream and download uses it, so you can cap bandwidth on a slow connection.
 - **Visual Posters**: Displays cover art and movie posters directly inside your terminal window.
 - **Library and History**: Bookmark your favorite titles and pick up watching right where you left off.
 - **Custom Themes**: Built in color themes and settings to match your personal terminal look and feel.

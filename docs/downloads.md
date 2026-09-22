@@ -15,6 +15,7 @@ and optional segmentation. Orchestration lives in `app/download.rs`.
 - **Retries**: a failed attempt is retried a limited number of times; 30s idle
 - **Cancel**: an `AtomicBool` cancel flag pauses/resumes cleanly, preserving the
   partial file for a later resume.
+- **Quality**: the download uses the stream selected in the list, which is pre-selected from `/settings` → General → Preferred Quality. See [config.md](config.md#preferred-quality).
 - **User-Agent**: the download HTTP client inherits the active provider's mobile `User-Agent`
   to prevent CDN stream rejections when downloading media segments.
 - **Stream Engines**:

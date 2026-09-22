@@ -19,6 +19,7 @@
 - **Reproducción fluida**: Abre el video directamente en tu reproductor favorito (`mpv`, `IINA`, `VLC` o reproductores en Android) sin navegadores pesados y con aceleración por hardware.
 - **Subtítulos automáticos**: Encuentra y carga subtítulos en tu idioma automáticamente dentro del reproductor.
 - **Descargas fáciles**: Guarda episodios o temporadas completas en tu equipo con soporte para pausar y reanudar.
+- **Control de calidad**: Elige una resolución preferida una sola vez y se aplicará a cada reproducción y descarga, ideal para ahorrar datos en conexiones lentas.
 - **Pósters y carátulas**: Muestra carátulas y pósters a color directamente en tu ventana de terminal.
 - **Historial y favoritos**: Guarda lo que te gusta en marcadores y retoma la reproducción exactamente donde la dejaste.
 - **Temas integrados**: 6 temas de color incluidos para combinar con el estilo de tu terminal.
