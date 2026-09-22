@@ -339,7 +339,7 @@ fn render_row(
 }
 
 fn render_general_settings(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
-    let row_rects = settings_row_rects_in_area(area, 3);
+    let row_rects = settings_row_rects_in_area(area, 4);
     let has_active_popup = has_active_settings_popup(state);
 
     if let Some(&row_area) = row_rects.first() {
@@ -459,6 +459,32 @@ fn render_general_settings(frame: &mut Frame, area: Rect, state: &AppState, them
                 is_selected,
                 has_active_popup,
                 label: "Download Folder",
+                value_spans,
+            },
+            theme,
+            state.basic_terminal,
+        );
+    }
+
+    if let Some(&row_area) = row_rects.get(3) {
+        let is_selected = state.settings_selected_row == 3;
+        let value_spans = vec![Span::styled(
+            crate::tui::state::settings_quality_label(state.preferred_quality),
+            if has_active_popup {
+                theme.muted
+            } else if state.basic_terminal {
+                theme.text.add_modifier(Modifier::BOLD)
+            } else {
+                theme.accent.add_modifier(Modifier::BOLD)
+            },
+        )];
+        render_row(
+            frame,
+            row_area,
+            SettingRow {
+                is_selected,
+                has_active_popup,
+                label: "Preferred Quality",
                 value_spans,
             },
             theme,
@@ -955,7 +981,10 @@ mod tests {
         assert_eq!(cat_modes, Some(SettingsCategory::ContentModes));
 
         let row_rects = settings_row_rects(popup, SettingsCategory::General);
-        assert_eq!(row_rects.len(), 3);
+        assert_eq!(row_rects.len(), 4);
+
+        let clicked_quality = settings_row_at(popup, SettingsCategory::General, 40, row_rects[3].y);
+        assert_eq!(clicked_quality, Some(3));
 
         let clicked_row = settings_row_at(popup, SettingsCategory::General, 40, row_rects[0].y);
         assert_eq!(clicked_row, Some(0));

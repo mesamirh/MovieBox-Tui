@@ -157,6 +157,7 @@ impl App {
         }
         state.active_theme_kind = config.active_theme;
         state.default_player = config.default_player;
+        state.preferred_quality = config.preferred_quality;
         state.download_dir = config.download_dir.map(std::path::PathBuf::from);
         state.installed_addons = crate::config::load_addons();
 
@@ -227,6 +228,13 @@ impl App {
             && context.generation == self.state.provider_generation
     }
 
+    /// Launch the queued instant play, honouring the preferred-quality setting.
+    fn start_auto_play(&mut self) {
+        self.state.auto_play_on_ready = false;
+        self.state.select_preferred_resource();
+        self.action_sender.send(Action::PlayStream).ok();
+    }
+
     fn persist_config(&self) {
         let active_mode = match self.state.mode() {
             crate::tui::state::AppMode::Tv => "tv",
@@ -253,6 +261,7 @@ impl App {
                 .download_dir
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string()),
+            preferred_quality: self.state.preferred_quality,
         };
         crate::tui::config::save(&config);
     }
