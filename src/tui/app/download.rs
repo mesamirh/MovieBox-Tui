@@ -381,6 +381,7 @@ impl App {
                 let status = child.wait().await;
                 match status {
                     Ok(s) if s.success() => {
+                        ensure_quicktime_hevc_tag(&destination).await;
                         sender
                             .send(Action::DownloadCompleted(
                                 destination.to_string_lossy().into_owned(),
@@ -982,6 +983,75 @@ fn is_media_already_downloaded(target_dir: &std::path::Path, base_name: &str) ->
     }
     false
 }
+/// True when ffprobe reports an HEVC video track tagged `hev1`.
+fn needs_hvc1_retag(probe_output: &str) -> bool {
+    let first = probe_output.lines().next().unwrap_or_default().trim();
+    let mut fields = first.split(',').map(str::trim);
+    matches!((fields.next(), fields.next()), (Some("hevc"), Some("hev1")))
+}
+
+/// QuickTime and Finder play HEVC in mp4 only when the track is tagged `hvc1`,
+/// while yt-dlp's merge writes `hev1`. Retag with a stream copy, which rewrites
+/// the container without touching the video. Skipped when the file is not
+/// affected, and never fails the download.
+async fn ensure_quicktime_hevc_tag(destination: &std::path::Path) {
+    let is_mp4 = destination
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("mp4"));
+    if !is_mp4 {
+        return;
+    }
+
+    let probe = tokio::process::Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,codec_tag_string",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(destination)
+        .output()
+        .await;
+    let Ok(probe) = probe else {
+        return;
+    };
+    if !needs_hvc1_retag(&String::from_utf8_lossy(&probe.stdout)) {
+        return;
+    }
+
+    let retagged = destination.with_extension("hvc1.mp4");
+    let status = tokio::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-y", "-i"])
+        .arg(destination)
+        .args(["-c", "copy", "-tag:v", "hvc1"])
+        .arg(&retagged)
+        .status()
+        .await;
+    match status {
+        Ok(status) if status.success() => {
+            if let Err(error) = tokio::fs::rename(&retagged, destination).await {
+                log::warn!(
+                    "failed to replace {} with the retagged copy: {error}",
+                    crate::logging::sanitize_path(destination)
+                );
+                let _ = tokio::fs::remove_file(&retagged).await;
+            }
+        }
+        other => {
+            log::warn!(
+                "hvc1 retag skipped for {}: {other:?}",
+                crate::logging::sanitize_path(destination)
+            );
+            let _ = tokio::fs::remove_file(&retagged).await;
+        }
+    }
+}
+
 pub(crate) fn yt_dlp_missing_guidance() -> String {
     if crate::updater::artifact::is_termux_environment() {
         "MovieBox DASH streams require yt-dlp. Please install yt-dlp and ffmpeg on your device (e.g. 'pkg install yt-dlp ffmpeg') to download these streams.".to_string()
@@ -1079,6 +1149,7 @@ pub(crate) fn parse_ytdlp_progress(line: &str) -> Option<(f64, String)> {
 
 #[cfg(test)]
 mod tests {
+    use super::needs_hvc1_retag;
     use crate::providers::models::{ProviderKind, Release, SourceMirror};
     use crate::tui::action::Action;
     use crate::tui::app::App;
@@ -1176,6 +1247,16 @@ mod tests {
 
         let line_dest = "[download] Destination: /tmp/test.mp4";
         assert!(super::parse_ytdlp_progress(line_dest).is_none());
+    }
+
+    #[test]
+    fn test_needs_hvc1_retag_only_for_hev1_tagged_hevc() {
+        assert!(needs_hvc1_retag("hevc,hev1\n"));
+        assert!(needs_hvc1_retag("hevc, hev1"));
+        // Already QuickTime friendly, or a codec the tag would corrupt.
+        assert!(!needs_hvc1_retag("hevc,hvc1\n"));
+        assert!(!needs_hvc1_retag("h264,avc1\n"));
+        assert!(!needs_hvc1_retag(""));
     }
 
     #[test]
