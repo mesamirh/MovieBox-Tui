@@ -478,7 +478,13 @@ impl App {
                             .ok();
                     }
                     Err(error) => {
-                        sender.send(Action::DownloadFailed(error.to_string())).ok();
+                        log::error!(
+                            "download of {} failed: {error}",
+                            crate::logging::sanitize_url(&link)
+                        );
+                        sender
+                            .send(Action::DownloadFailed(error.user_message()))
+                            .ok();
                     }
                 }
             }

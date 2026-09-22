@@ -85,6 +85,51 @@ pub enum DownloadError {
     Paused,
 }
 
+impl DownloadError {
+    /// Short, actionable text for the failure notification. The `Display`
+    /// output carries the request URL and library internals, which belong in
+    /// the log rather than on screen.
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::Http(status) => match *status {
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                    format!("Server refused the download ({}).", status.as_u16())
+                }
+                StatusCode::NOT_FOUND | StatusCode::GONE => {
+                    "File is no longer available on the server.".to_string()
+                }
+                StatusCode::TOO_MANY_REQUESTS => {
+                    "Server is rate limiting downloads. Try again later.".to_string()
+                }
+                other if other.is_server_error() => {
+                    format!("Server error ({}). Try again later.", other.as_u16())
+                }
+                other => format!("Server returned HTTP {}.", other.as_u16()),
+            },
+            Self::Network(error) => {
+                if error.is_timeout() {
+                    "Connection timed out.".to_string()
+                } else if error.is_connect() {
+                    "Cannot reach the server.".to_string()
+                } else {
+                    "Connection to the server was lost.".to_string()
+                }
+            }
+            Self::File(error) => format!("Cannot write the file: {}.", error.kind()),
+            Self::InvalidRange(_) => "Server sent an invalid partial response.".to_string(),
+            Self::Incomplete {
+                downloaded,
+                expected,
+            } => format!(
+                "Download stopped at {:.1} of {:.1} MB.",
+                *downloaded as f64 / 1_048_576.0,
+                *expected as f64 / 1_048_576.0
+            ),
+            Self::Paused => "Download paused.".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct ResumeMetadata {
     etag: Option<String>,
@@ -794,6 +839,54 @@ mod tests {
     fn test_parse_content_range_invalid() {
         assert!(parse_content_range("invalid range").is_err());
         assert!(parse_content_range("bytes invalid").is_err());
+    }
+
+    #[test]
+    fn test_user_message_is_concise_and_hides_internals() {
+        assert_eq!(
+            DownloadError::Http(StatusCode::FORBIDDEN).user_message(),
+            "Server refused the download (403)."
+        );
+        assert_eq!(
+            DownloadError::Http(StatusCode::NOT_FOUND).user_message(),
+            "File is no longer available on the server."
+        );
+        assert_eq!(
+            DownloadError::Http(StatusCode::BAD_GATEWAY).user_message(),
+            "Server error (502). Try again later."
+        );
+        assert_eq!(
+            DownloadError::Incomplete {
+                downloaded: 52 * 1024 * 1024,
+                expected: 104 * 1024 * 1024,
+            }
+            .user_message(),
+            "Download stopped at 52.0 of 104.0 MB."
+        );
+
+        // Internal detail stays in the log, not on screen.
+        let invalid = DownloadError::InvalidRange(
+            "worker requested 0-1023/4096, received bytes 0-99/4096".into(),
+        );
+        assert_eq!(
+            invalid.user_message(),
+            "Server sent an invalid partial response."
+        );
+        assert!(!invalid.user_message().contains("worker"));
+    }
+
+    #[tokio::test]
+    async fn test_user_message_omits_url_for_network_errors() {
+        // Port 1 is never listening, so this fails without leaving the host.
+        let error = reqwest::Client::new()
+            .get("http://127.0.0.1:1/secret-token-in-url")
+            .send()
+            .await
+            .expect_err("connection refused");
+        let message = DownloadError::Network(error).user_message();
+        assert_eq!(message, "Cannot reach the server.");
+        assert!(!message.contains("127.0.0.1"));
+        assert!(!message.contains("secret-token-in-url"));
     }
 
     #[test]
