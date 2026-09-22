@@ -81,11 +81,7 @@ impl App {
                                 let count = cached.len();
                                 self.state.selected_resources = cached.clone();
                                 self.state.is_loading = false;
-                                self.state.resource_list_state.select(if count > 0 {
-                                    Some(0)
-                                } else {
-                                    None
-                                });
+                                self.state.select_preferred_resource();
                                 self.state.set_status_default(format!(
                                     "Resolved {} direct stream sources (cached).",
                                     count
@@ -327,6 +323,10 @@ impl App {
                             self.state.cycle_settings_player(forward);
                             self.persist_config();
                         }
+                        3 => {
+                            self.state.cycle_settings_quality(forward);
+                            self.persist_config();
+                        }
                         _ => {}
                     }
                 }
@@ -455,6 +455,10 @@ impl App {
                                 self.state.settings_download_dir_input =
                                     Some(crate::tui::text::TextInputBuffer::from_str(&current));
                             }
+                        }
+                        3 => {
+                            self.state.cycle_settings_quality(true);
+                            self.persist_config();
                         }
                         _ => {}
                     }

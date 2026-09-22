@@ -1298,8 +1298,7 @@ impl App {
                     self.state.is_loading = false;
                     self.state.is_fetching_streams = false;
                     if self.state.auto_play_on_ready {
-                        self.state.auto_play_on_ready = false;
-                        self.action_sender.send(Action::PlayStream).ok();
+                        self.start_auto_play();
                     }
                     return None;
                 }
@@ -1735,9 +1734,7 @@ impl App {
                 self.state.is_fetching_streams = false;
                 self.state.has_streams_settled = true;
                 self.state.stream_error = None;
-                self.state
-                    .resource_list_state
-                    .select(if count > 0 { Some(0) } else { None });
+                self.state.select_preferred_resource();
                 self.state
                     .set_status_default(format!("{} streams available.", count));
 
@@ -1860,8 +1857,7 @@ impl App {
                     self.action_sender.send(Action::DownloadStream(None)).ok();
                 }
                 if self.state.auto_play_on_ready {
-                    self.state.auto_play_on_ready = false;
-                    self.action_sender.send(Action::PlayStream).ok();
+                    self.start_auto_play();
                 }
             }
 

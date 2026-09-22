@@ -22,15 +22,25 @@ macOS `~/Library/Application Support/moviebox-tui`, Linux `~/.config/moviebox-tu
 | `addons_enabled`         | bool           | Enable Stremio Addons provider availability.                                                               |
 | `default_player`         | string or null | Preferred player: `mpv`, `iina`, `vlc`, `android`; absent/null until you choose one from the in-app picker. |
 | `download_dir`           | string or null | Custom directory for video and subtitle downloads (null uses OS default).                                  |
+| `preferred_quality`      | number or null | Resolution cap applied when a stream list is populated: `2160`, `1080`, `720`, `480`; null picks the highest available. |
 
 ## Interactive Settings Hub (`/settings`)
 
 All settings in `config.json` can be configured interactively inside the application by typing `/settings` into the search bar.
 
-- **General**: Toggle automatic update checks, choose default media player (`mpv`, `VLC`, `IINA`, `Android`), and edit download folder path.
+- **General**: Toggle automatic update checks, choose default media player (`mpv`, `VLC`, `IINA`, `Android`), edit download folder path, and set the preferred quality.
 - **Content Modes**: Toggle Streaming Mode, open the Streaming Sources selector (to enable/disable MovieBox, 4KHDHub, CircleFTP, DhakaFlix), and toggle Live TV.
 - **Appearance**: Open the visual theme swatch picker to select among 6 built-in color themes.
 - **Maintenance**: Purge disk cache, clear watch history, query GitHub for release updates, open GitHub repository, and trigger a manual local network BDIX re-probe.
+
+### Preferred Quality
+
+`/settings` → General → Preferred Quality cycles through `Best available`, `2160p`, `1080p`, `720p` and `480p` with `←`/`→` or `Enter`, and saves immediately.
+
+Stream lists arrive sorted highest resolution first. The setting pre-selects the best stream at or below your choice, falling back to the lowest available when every stream is above it, so a title that only offers 1080p still plays at 1080p when you asked for 480p. `Best available` keeps the highest, which is the default.
+
+Because playback and downloads both resolve the selected stream, the preference applies to instant play from Continue Watching and Favorites, the manual stream list, and downloads including whole seasons. Moving the selection by hand in the stream list still overrides it for that title.
+
 ## Other persisted files
 
 - `addons_config.json` — list of installed HTTP addons in the config directory (see [addons-mode.md](addons-mode.md)).

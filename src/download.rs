@@ -85,6 +85,51 @@ pub enum DownloadError {
     Paused,
 }
 
+impl DownloadError {
+    /// Short, actionable text for the failure notification. The `Display`
+    /// output carries the request URL and library internals, which belong in
+    /// the log rather than on screen.
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::Http(status) => match *status {
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                    format!("Server refused the download ({}).", status.as_u16())
+                }
+                StatusCode::NOT_FOUND | StatusCode::GONE => {
+                    "File is no longer available on the server.".to_string()
+                }
+                StatusCode::TOO_MANY_REQUESTS => {
+                    "Server is rate limiting downloads. Try again later.".to_string()
+                }
+                other if other.is_server_error() => {
+                    format!("Server error ({}). Try again later.", other.as_u16())
+                }
+                other => format!("Server returned HTTP {}.", other.as_u16()),
+            },
+            Self::Network(error) => {
+                if error.is_timeout() {
+                    "Connection timed out.".to_string()
+                } else if error.is_connect() {
+                    "Cannot reach the server.".to_string()
+                } else {
+                    "Connection to the server was lost.".to_string()
+                }
+            }
+            Self::File(error) => format!("Cannot write the file: {}.", error.kind()),
+            Self::InvalidRange(_) => "Server sent an invalid partial response.".to_string(),
+            Self::Incomplete {
+                downloaded,
+                expected,
+            } => format!(
+                "Download stopped at {:.1} of {:.1} MB.",
+                *downloaded as f64 / 1_048_576.0,
+                *expected as f64 / 1_048_576.0
+            ),
+            Self::Paused => "Download paused.".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct ResumeMetadata {
     etag: Option<String>,
@@ -150,11 +195,14 @@ where
         if !segmented_disabled
             && offset == 0
             && response.status() == StatusCode::OK
+            // Many CDNs honour Range without advertising Accept-Ranges, so try
+            // segmenting unless the server explicitly refuses; a worker that
+            // gets a plain 200 falls back to the single-stream path below.
             && response
                 .headers()
                 .get(ACCEPT_RANGES)
                 .and_then(|value| value.to_str().ok())
-                .is_some_and(|value| value.eq_ignore_ascii_case("bytes"))
+                .is_none_or(|value| !value.eq_ignore_ascii_case("none"))
             && response
                 .content_length()
                 .is_some_and(|total| total >= SEGMENT_THRESHOLD)
@@ -235,11 +283,12 @@ where
         metadata.segments = None;
         write_metadata(&metadata_path, &metadata).await?;
 
-        let mut file = tokio::fs::OpenOptions::new()
+        let raw_file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&partial)
             .await?;
+        let mut file = tokio::io::BufWriter::with_capacity(256 * 1024, raw_file);
         let mut response = response;
         let mut downloaded = offset;
         let transfer_started = Instant::now();
@@ -272,7 +321,7 @@ where
                 }
                 Ok(Ok(None)) => {
                     file.flush().await?;
-                    file.sync_data().await?;
+                    file.get_mut().sync_data().await?;
                     if let Some(expected) = metadata.total
                         && downloaded != expected
                     {
@@ -526,10 +575,15 @@ async fn download_segment(
             }
         };
         if response.status() != StatusCode::PARTIAL_CONTENT {
-            last_error = Some(DownloadError::InvalidRange(format!(
+            let error = DownloadError::InvalidRange(format!(
                 "worker expected HTTP 206, received {}",
                 response.status()
-            )));
+            ));
+            if response.status() == StatusCode::OK {
+                // Range header ignored outright: retrying cannot help.
+                return Err(error);
+            }
+            last_error = Some(error);
             retry_delay(attempt).await;
             continue;
         }
@@ -625,9 +679,9 @@ async fn download_segment(
 }
 
 fn segment_count(total: u64) -> usize {
+    // ponytail: fixed tiers, make it a setting if servers start throttling
+    // per-connection counts.
     if total < 256 * 1024 * 1024 {
-        2
-    } else if total < 2 * 1024 * 1024 * 1024 {
         4
     } else {
         MAX_SEGMENTS
@@ -785,6 +839,62 @@ mod tests {
     fn test_parse_content_range_invalid() {
         assert!(parse_content_range("invalid range").is_err());
         assert!(parse_content_range("bytes invalid").is_err());
+    }
+
+    #[test]
+    fn test_user_message_is_concise_and_hides_internals() {
+        assert_eq!(
+            DownloadError::Http(StatusCode::FORBIDDEN).user_message(),
+            "Server refused the download (403)."
+        );
+        assert_eq!(
+            DownloadError::Http(StatusCode::NOT_FOUND).user_message(),
+            "File is no longer available on the server."
+        );
+        assert_eq!(
+            DownloadError::Http(StatusCode::BAD_GATEWAY).user_message(),
+            "Server error (502). Try again later."
+        );
+        assert_eq!(
+            DownloadError::Incomplete {
+                downloaded: 52 * 1024 * 1024,
+                expected: 104 * 1024 * 1024,
+            }
+            .user_message(),
+            "Download stopped at 52.0 of 104.0 MB."
+        );
+
+        // Internal detail stays in the log, not on screen.
+        let invalid = DownloadError::InvalidRange(
+            "worker requested 0-1023/4096, received bytes 0-99/4096".into(),
+        );
+        assert_eq!(
+            invalid.user_message(),
+            "Server sent an invalid partial response."
+        );
+        assert!(!invalid.user_message().contains("worker"));
+    }
+
+    #[tokio::test]
+    async fn test_user_message_omits_url_for_network_errors() {
+        // Port 1 is never listening, so this fails without leaving the host.
+        let error = reqwest::Client::new()
+            .get("http://127.0.0.1:1/secret-token-in-url")
+            .send()
+            .await
+            .expect_err("connection refused");
+        let message = DownloadError::Network(error).user_message();
+        assert_eq!(message, "Cannot reach the server.");
+        assert!(!message.contains("127.0.0.1"));
+        assert!(!message.contains("secret-token-in-url"));
+    }
+
+    #[test]
+    fn test_segment_count_tiers() {
+        assert_eq!(segment_count(SEGMENT_THRESHOLD), 4);
+        assert_eq!(segment_count(255 * 1024 * 1024), 4);
+        assert_eq!(segment_count(256 * 1024 * 1024), MAX_SEGMENTS);
+        assert_eq!(segment_count(8 * 1024 * 1024 * 1024), MAX_SEGMENTS);
     }
 
     #[test]

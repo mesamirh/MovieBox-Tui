@@ -113,6 +113,7 @@ pub fn header_capable_players() -> &'static [PlayerKind] {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn command(
     kind: PlayerKind,
     url: &str,
@@ -121,6 +122,7 @@ pub fn command(
     window: Option<(u32, u32)>,
     resume_seconds: Option<u64>,
     tracker: Option<(&str, &str, usize, usize)>,
+    max_height: Option<u64>,
 ) -> Command {
     match kind {
         PlayerKind::Mpv => mpv_command(
@@ -131,8 +133,17 @@ pub fn command(
             window,
             resume_seconds,
             tracker,
+            max_height,
         ),
-        PlayerKind::Iina => iina_command(url, subtitle, headers, window, resume_seconds, tracker),
+        PlayerKind::Iina => iina_command(
+            url,
+            subtitle,
+            headers,
+            window,
+            resume_seconds,
+            tracker,
+            max_height,
+        ),
         PlayerKind::Vlc => vlc_command(url, subtitle, headers, window, resume_seconds),
         PlayerKind::AndroidIntent => android_intent_command(url, subtitle, headers),
     }
@@ -384,6 +395,20 @@ fn android_intent_command(
         })
 }
 
+/// yt-dlp format selector honouring a height cap. DASH and HLS manifests carry
+/// every rendition, so this is the only place the quality preference can be
+/// applied for them. The trailing fallback keeps a title playable when nothing
+/// is at or below the cap.
+pub fn ytdl_format_selector(max_height: Option<u64>) -> String {
+    match max_height {
+        Some(height) => format!(
+            "bestvideo[height<={height}]+bestaudio/best[height<={height}]/bestvideo+bestaudio/best"
+        ),
+        None => "bestvideo+bestaudio/best".to_string(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn mpv_command(
     url: &str,
     subtitle: Option<&str>,
@@ -392,6 +417,7 @@ fn mpv_command(
     window: Option<(u32, u32)>,
     resume_seconds: Option<u64>,
     tracker: Option<(&str, &str, usize, usize)>,
+    max_height: Option<u64>,
 ) -> Command {
     let fallback = if cfg!(target_os = "windows") {
         "mpv.exe"
@@ -410,7 +436,10 @@ fn mpv_command(
     if !iina {
         command.arg("--idle=no").arg("--keep-open=no");
     }
-    command.arg(format!("{prefix}ytdl-format=bestvideo+bestaudio/best"));
+    command.arg(format!(
+        "{prefix}ytdl-format={}",
+        ytdl_format_selector(max_height)
+    ));
     command.arg(format!("{prefix}hls-bitrate=max"));
     if let Some(start) = resume_seconds {
         if start > 0 {
@@ -540,6 +569,7 @@ fn iina_resolution() -> Option<IinaResolution> {
 }
 
 #[cfg(target_os = "macos")]
+#[allow(clippy::too_many_arguments)]
 fn iina_command(
     url: &str,
     subtitle: Option<&str>,
@@ -547,6 +577,7 @@ fn iina_command(
     window: Option<(u32, u32)>,
     resume_seconds: Option<u64>,
     tracker: Option<(&str, &str, usize, usize)>,
+    max_height: Option<u64>,
 ) -> Command {
     let resolution = iina_resolution();
     let mut command = match resolution {
@@ -571,6 +602,7 @@ fn iina_command(
         window,
         resume_seconds,
         tracker,
+        max_height,
     );
     for arg in mpv.get_args() {
         command.arg(arg);
@@ -589,6 +621,7 @@ pub fn iina_is_app_fallback() -> bool {
 }
 
 #[cfg(not(target_os = "macos"))]
+#[allow(clippy::too_many_arguments)]
 fn iina_command(
     url: &str,
     subtitle: Option<&str>,
@@ -596,6 +629,7 @@ fn iina_command(
     window: Option<(u32, u32)>,
     resume_seconds: Option<u64>,
     tracker: Option<(&str, &str, usize, usize)>,
+    max_height: Option<u64>,
 ) -> Command {
     mpv_command(
         url,
@@ -605,6 +639,7 @@ fn iina_command(
         window,
         resume_seconds,
         tracker,
+        max_height,
     )
 }
 
@@ -1546,6 +1581,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         let args = cmd
@@ -1615,6 +1651,43 @@ mod tests {
         assert!(args.contains(&"https://example.test/video.mp4".to_string()));
     }
     #[test]
+    fn test_ytdl_format_selector_caps_height_with_fallback() {
+        assert_eq!(
+            ytdl_format_selector(None),
+            "bestvideo+bestaudio/best",
+            "no preference keeps the previous selector"
+        );
+        assert_eq!(
+            ytdl_format_selector(Some(720)),
+            "bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best"
+        );
+    }
+
+    #[test]
+    fn test_mpv_command_passes_capped_ytdl_format() {
+        let headers: Vec<(String, String)> = Vec::new();
+        let cmd = mpv_command(
+            "https://example.com/index.mpd",
+            None,
+            &headers,
+            false,
+            None,
+            None,
+            None,
+            Some(720),
+        );
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.iter().any(|a| a
+                == "--ytdl-format=bestvideo[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best"),
+            "dash playback must carry the height cap, got {args:?}"
+        );
+    }
+
+    #[test]
     fn test_mpv_command_headers_no_broken_ytdl_raw_options() {
         let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
         let headers = vec![
@@ -1627,6 +1700,7 @@ mod tests {
             None,
             &headers,
             false,
+            None,
             None,
             None,
             None,

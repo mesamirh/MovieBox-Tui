@@ -83,7 +83,7 @@ impl SettingsCategory {
 
     pub fn row_count(self) -> usize {
         match self {
-            Self::General => 3,
+            Self::General => 4,
             Self::ContentModes => 3,
             Self::Appearance => 1,
             Self::StorageInfo => 5,
@@ -105,6 +105,20 @@ impl SettingsCategory {
             Self::Appearance => Self::ContentModes,
             Self::StorageInfo => Self::Appearance,
         }
+    }
+}
+
+/// Resolutions offered as the playback preference, best first. `None` means
+/// "highest available".
+pub const QUALITY_CHOICES: [Option<u64>; 5] = [None, Some(2160), Some(1080), Some(720), Some(480)];
+
+pub fn settings_quality_label(choice: Option<u64>) -> &'static str {
+    match choice {
+        None => "Best available",
+        Some(2160) => "2160p",
+        Some(1080) => "1080p",
+        Some(720) => "720p",
+        _ => "480p",
     }
 }
 
@@ -256,6 +270,7 @@ pub struct AppState {
     pub settings_player_picker: bool,
     pub available_players: Vec<PlayerKind>,
     pub default_player: Option<String>,
+    pub preferred_quality: Option<u64>,
     pub is_loading: bool,
     pub is_resolving_playback: bool,
     pub has_streams_settled: bool,
@@ -427,6 +442,7 @@ impl Default for AppState {
             settings_player_picker: false,
             available_players: Vec::new(),
             default_player: None,
+            preferred_quality: None,
             dirty: true,
             is_loading: false,
             is_resolving_playback: false,
@@ -1035,6 +1051,45 @@ impl AppState {
         };
 
         self.default_player = Some(choices[next_idx].to_string());
+    }
+
+    pub fn cycle_settings_quality(&mut self, forward: bool) {
+        let total = QUALITY_CHOICES.len();
+        let current = QUALITY_CHOICES
+            .iter()
+            .position(|&opt| opt == self.preferred_quality)
+            .unwrap_or(0);
+        let next = if forward {
+            (current + 1) % total
+        } else {
+            (current + total - 1) % total
+        };
+        self.preferred_quality = QUALITY_CHOICES[next];
+    }
+
+    /// Pre-select the stream matching the preferred quality for the freshly
+    /// populated `selected_resources`.
+    pub fn select_preferred_resource(&mut self) {
+        let idx = self.preferred_quality_index();
+        self.resource_list_state.select(idx);
+    }
+
+    /// Index into `selected_resources` (sorted best first) for the preferred
+    /// quality: the best stream not above it, or the lowest one if every
+    /// stream is above it.
+    pub fn preferred_quality_index(&self) -> Option<usize> {
+        if self.selected_resources.is_empty() {
+            return None;
+        }
+        let Some(target) = self.preferred_quality else {
+            return Some(0);
+        };
+        Some(
+            self.selected_resources
+                .iter()
+                .position(|r| r.resolution_u64() <= target)
+                .unwrap_or(self.selected_resources.len() - 1),
+        )
     }
 
     pub fn cycle_settings_theme(&mut self, forward: bool) -> String {
@@ -1648,6 +1703,51 @@ mod tests {
         );
         assert_eq!(state.notifications.len(), 2);
         assert_eq!(state.notifications[1].title, "Download Started");
+    }
+
+    #[test]
+    fn test_preferred_quality_index() {
+        fn release(quality: &str) -> crate::providers::models::Release {
+            crate::providers::models::Release {
+                provider: crate::providers::models::ProviderKind::MovieBox,
+                filename: format!("Movie.{quality}.mkv"),
+                quality: Some(quality.to_string()),
+                codec: None,
+                language: None,
+                size_bytes: None,
+                season: None,
+                episode: None,
+                mirrors: vec![],
+                resource_id: None,
+            }
+        }
+
+        let mut state = AppState::default();
+        assert_eq!(state.preferred_quality_index(), None);
+
+        state.selected_resources = vec![release("2160p"), release("1080p"), release("480p")];
+        assert_eq!(state.preferred_quality_index(), Some(0));
+
+        state.preferred_quality = Some(1080);
+        assert_eq!(state.preferred_quality_index(), Some(1));
+
+        state.preferred_quality = Some(720);
+        assert_eq!(state.preferred_quality_index(), Some(2));
+
+        // Every stream is above the preference: fall back to the lowest one.
+        state.selected_resources = vec![release("2160p"), release("1080p")];
+        assert_eq!(state.preferred_quality_index(), Some(1));
+    }
+
+    #[test]
+    fn test_cycle_settings_quality_wraps() {
+        let mut state = AppState::default();
+        state.cycle_settings_quality(true);
+        assert_eq!(state.preferred_quality, Some(2160));
+        state.cycle_settings_quality(false);
+        assert_eq!(state.preferred_quality, None);
+        state.cycle_settings_quality(false);
+        assert_eq!(state.preferred_quality, Some(480));
     }
 
     #[test]

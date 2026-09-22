@@ -23,6 +23,7 @@ pub struct Config {
     pub addons_enabled: bool,
     pub default_player: Option<String>,
     pub download_dir: Option<String>,
+    pub preferred_quality: Option<u64>,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -43,6 +44,7 @@ impl Default for Config {
             addons_enabled: false,
             default_player: None,
             download_dir: None,
+            preferred_quality: None,
         }
     }
 }

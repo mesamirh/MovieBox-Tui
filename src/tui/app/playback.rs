@@ -311,6 +311,8 @@ impl App {
             }
         });
 
+        let preferred_quality = self.state.preferred_quality;
+
         tokio::spawn(async move {
             let mut local_subtitle = subtitle.clone();
             let mut temporary_subtitle = None;
@@ -427,6 +429,7 @@ impl App {
                 window,
                 resume_seconds,
                 tracker_ref,
+                preferred_quality,
             );
             if kind == crate::tui::state::PlayerKind::Iina
                 && crate::player::iina_is_app_fallback()
