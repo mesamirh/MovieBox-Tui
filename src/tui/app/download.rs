@@ -136,6 +136,8 @@ impl App {
         let cancel = self.state.cancel_download.clone();
         let sender = self.action_sender.clone();
         let user_agent = self.service.client.user_agent().to_string();
+        // DASH manifests carry every rendition, so yt-dlp needs the cap too.
+        let ytdl_format = crate::player::ytdl_format_selector(self.state.preferred_quality);
 
         // No total request timeout here: downloads stream for minutes and the
         // read loop already fails a connection that stalls for 30s.
@@ -271,7 +273,7 @@ impl App {
                     }
                 }
                 cmd.arg("-f")
-                    .arg("bestvideo+bestaudio/best")
+                    .arg(&ytdl_format)
                     .arg("--newline")
                     .arg("--part")
                     .arg("-o")
