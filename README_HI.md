@@ -2,86 +2,102 @@
 
 # MovieBox-TUI
 
-**अपने पसंदीदा मीडिया प्लेयर से फिल्में, वेब सीरीज और लाइव टीवी सर्च करने, डाउनलोड और स्ट्रीम करने का आसान टर्मिनल ऐप।**
+**स्थानीय मीडिया प्लेयर से फिल्में, टीवी शो और लाइव टीवी सर्च करने, डाउनलोड और स्ट्रीम करने का टर्मिनल इंटरफेस।**
 
 [ English ](README.md) • [ বাংলা ](README_BN.md) • [ हिन्दी ](README_HI.md) • [ Español ](README_ES.md)
 
-[![Telegram](https://telegram-badge.vercel.app/api/telegram-badge?channelId=@getfromme&style=flat&logo=true)](https://t.me/getfromme)
-[![Donate](https://img.shields.io/badge/Donate-Crypto-F7931A?style=flat&logo=bitcoin&logoColor=white)](#optional-support)
+[![CI](https://img.shields.io/github/actions/workflow/status/mesamirh/MovieBox-Tui/ci.yml?branch=main&label=CI&logo=github&style=flat)](https://github.com/mesamirh/MovieBox-Tui/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/moviebox-tui.svg?logo=rust&style=flat)](https://crates.io/crates/moviebox-tui)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg?style=flat)](#license)
+[![Telegram](https://img.shields.io/badge/Telegram-Channel-2CA5E0?style=flat&logo=telegram&logoColor=white)](https://t.me/getfromme)
+[![Support](https://img.shields.io/badge/Support-Crypto-F7931A?style=flat&logo=bitcoin&logoColor=white)](#optional-support)
 </div>
 
 [moviebox-tui-walkthrough.webm](https://github.com/user-attachments/assets/7554a7e5-6ff5-49ec-9d87-f821ea99950e)
 
 ## खास फीचर्स
 
-- **मूवी और वेब सीरीज स्ट्रीमिंग**: MovieBox, 4KHDHub, BDIX सर्वर और Stremio ऐड-ऑन्स से सीधे फिल्में, सीरीज और एनीमे देखें।
-- **लाइव टीवी (IPTV)**: कोई भी M3U प्लेलिस्ट लिंक जोड़कर आसानी से टीवी चैनल्स सर्च करें और लाइव देखें।
-- **स्मूथ वीडियो प्लेबैक**: बिना किसी भारी ब्राउज़र के सीधे आपके पसंदीदा प्लेयर (`mpv`, `IINA`, `VLC` या एंड्रॉइड प्लेयर) में बिना लैग के चलेगा।
-- **ऑटो सबटाइटल**: आपकी पसंदीदा भाषा में सबटाइटल खुद ढूंढकर सीधे प्लेयर में लोड कर देता है।
-- **फास्ट डाउनलोड**: पूरा सीजन या कोई एक एपिसोड एक क्लिक में डाउनलोड करें, पॉज़ और रीज्यूम के पूरे सपोर्ट के साथ।
-- **कवर आर्ट और पोस्टर**: टर्मिनल विंडो के अंदर ही फिल्मों और सीरीज के रंगीन पोस्टर्स देख सकते हैं।
-- **हिस्ट्री और बुकमार्क**: पसंदीदा शो को बुकमार्क करें और जहां देखना छोड़ा था, वहीं से दोबारा शुरू करें।
-- **शानदार थीम्स**: आपके टर्मिनल लुक से मैच करने के लिए 6 इन-बिल्ट कलर थीम्स।
-- **हर डिवाइस पर काम करे**: Mac, Linux, Windows और Android (Termux) सभी पर एकदम परफेक्ट काम करता है।
+- **ऑन-डिमांड स्ट्रीमिंग**: कई नेटिव प्रोवाइडर्स और कम्युनिटी Stremio ऐड-ऑन्स से फिल्में, टीवी सीरीज, एनीमे और एशियन ड्रामा स्ट्रीम करें।
+- **लाइव टीवी और IPTV**: चैनल्स सर्च करने, कैटेगरी ब्राउज करने और लाइव टेलीविजन स्ट्रीम करने के लिए कस्टम M3U प्लेलिस्ट URL इम्पोर्ट करें।
+- **क्वालिटी और रेजोल्यूशन चयन**: डिटेल्स स्क्रीन से सीधे अपनी पसंदीदा स्ट्रीम रेजोल्यूशन (`1080p`, `720p`, `480p`) चुनें।
+- **हार्डवेयर त्वरित प्लेबैक**: ऑटोमैटिक ऑथेंटिकेशन और कुकी फॉरवर्डिंग के साथ सीधे अपने पसंदीदा स्थानीय मीडिया प्लेयर में चलाएं।
+- **मल्टी-सेगमेंट डाउनलोडर**: HTTP रेंज पॉज और रिज्यूम सपोर्ट के साथ व्यक्तिगत एपिसोड या पूरे सीजन एक साथ डाउनलोड करें।
+- **ऑटोमैटिक सबटाइटल**: आपकी पसंदीदा भाषा में सबटाइटल अपने आप खोजकर सिंक्रोनाइज़ करता है।
+- **इंटरैक्टिव टर्मिनल UI**: vim नेविगेशन और कमांड ऑटो-सजेशन के साथ फुल कीबोर्ड और माउस सपोर्ट।
+- **विज़ुअल पोस्टर और थीम्स**: 9 इन-बिल्ट थीम्स और ऑटोमैटिक लाइट/डार्क डिटेक्शन के साथ सीधे टर्मिनल में कवर आर्ट रेंडर करता है।
+- **लाइब्रेरी और प्रोग्रेस ट्रैकिंग**: पसंदीदा स्टार करें, वॉच हिस्ट्री ट्रैक करें और वहीं से शुरू करें जहां आपने छोड़ा था।
+- **क्रॉस-प्लेटफॉर्म और प्राइवेट**: बिना किसी टेलीमेट्री या डेटा कलेक्शन के macOS, Linux, Windows और Android (Termux) पर नेटिव रूप से चलता है।
 
-## क्या-क्या चाहिए
+## पूर्व-आवश्यकताएं
 
-वीडियो देखने के लिए बस कोई एक प्लेयर होना चाहिए:
+### समर्थित मीडिया प्लेयर
 
-- **mpv** (Mac, Linux और Windows के लिए बेस्ट)
-- **IINA** (Mac के लिए)
-- **VLC** (सभी प्लेटफॉर्म्स के लिए)
-- **फोन पर कोई भी वीडियो प्लेयर** Termux के जरिए (VLC, Just Player, MX Player)
+आपके सिस्टम पर कम से कम एक समर्थित मीडिया प्लेयर इंस्टॉल होना आवश्यक है:
 
-*पोस्टर देखने के लिए:* टर्मिनल में पोस्टर्स देखने के लिए मॉडर्न टर्मिनल (Ghostty, Kitty, WezTerm या iTerm2) चाहिए। नॉर्मल टर्मिनल में टेक्स्ट लेआउट दिखेगा।
+- **डेस्कटॉप (macOS, Linux, Windows):** [mpv](https://mpv.io/), [VLC](https://www.videolan.org/), या [IINA](https://iina.io/) *(macOS)*।
+- **एंड्रॉइड (Termux):** कोई भी बाहरी वीडियो प्लेयर ([VLC](https://play.google.com/store/apps/details?id=org.videolan.vlc), Just Player, या MX Player)।
 
-*MovieBox से डाउनलोड के लिए:* सिर्फ MovieBox से डाउनलोड करने के लिए `yt-dlp` और `ffmpeg` की जरूरत होती है। बाकी सभी प्रोवाइडर्स से ऐप खुद सीधे डाउनलोड कर लेता है।
+### टर्मिनल ग्राफिक्स (पोस्टर)
 
-## इंस्टॉल करने का तरीका
+पोस्टर रेंडरिंग आपके टर्मिनल वातावरण के अनुसार अपने आप अनुकूलित हो जाती है:
 
-### Mac और Linux
+- **ग्राफिक्स-सक्षम टर्मिनल:** हाई-रेजोल्यूशन मूवी और सीरीज पोस्टर नेटिव रूप से दिखाता है।
+- **सामान्य टर्मिनल:** साफ और स्ट्रक्चर्ड टेक्स्ट प्लेसहोल्डर अपने आप दिखाता है।
 
-ऑटोमैटिक इंस्टॉलेशन:
+### वैकल्पिक निर्भरताएं
+
+- **`yt-dlp` और `ffmpeg`:** केवल MovieBox प्रोवाइडर से DASH स्ट्रीम्स डाउनलोड करने के लिए आवश्यक। बाकी सभी प्रोवाइडर्स सीधे इन-बिल्ट HTTP इंजन से डाउनलोड होते हैं।
+
+## इंस्टॉलेशन
+
+### macOS और Linux
+
+टर्मिनल खोलें और चलाएं:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/install.sh | bash
 ```
 
-Homebrew (Mac):
+या Homebrew से (macOS):
 ```bash
 brew tap mesamirh/moviebox-tui https://github.com/mesamirh/MovieBox-Tui
 brew install moviebox-tui
 ```
-*नोट:* अगर Homebrew वेरिफिकेशन मांगे, तो `brew trust mesamirh/moviebox-tui` रन करें।
+> [!NOTE]
+> यदि Homebrew पहली बार इंस्टॉल करते समय वेरिफिकेशन मांगे, तो `brew trust mesamirh/moviebox-tui` चलाएं।
 
 ### Windows
 
-PowerShell में रन करें:
+Scoop से:
+```powershell
+scoop bucket add moviebox https://github.com/mesamirh/MovieBox-Tui
+scoop install moviebox-tui
+```
+
+या ऑटोमेटेड PowerShell स्क्रिप्ट से:
 ```powershell
 irm https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/install.ps1 | iex
 ```
 
 ### Android (Termux)
 
-1. जरूरी टूल्स इंस्टॉल करके रन करें:
+Termux खोलें और चलाएं:
 ```bash
 pkg update && pkg install -y curl tar termux-tools termux-am
 curl -fsSL https://raw.githubusercontent.com/mesamirh/MovieBox-Tui/main/install.sh | bash
-```
-
-2. स्टोरेज परमिशन दें (प्लेयर में वीडियो और सबटाइटल चलने के लिए):
-```bash
 termux-setup-storage
 ```
+> [!IMPORTANT]
+> एंड्रॉइड पर वीडियो प्लेबैक आपके इंस्टॉल किए गए बाहरी मीडिया प्लेयर (जैसे VLC, Just Player, या MX Player) के माध्यम से शुरू होता है।
 
 <details>
-<summary><b>Cargo या सोर्स कोड से बिल्ड करें</b></summary>
+<summary><b>Cargo और सोर्स कोड से बिल्ड करें</b></summary>
 
-crates.io से इंस्टॉल:
+crates.io से:
 ```bash
 cargo install moviebox-tui --locked
 ```
 
-सोर्स कोड से कंपाइल:
+सोर्स कोड से:
 ```bash
 git clone https://github.com/mesamirh/MovieBox-Tui.git
 cd MovieBox-Tui
@@ -91,7 +107,7 @@ cargo build --release --locked
 </details>
 
 <details>
-<summary><b>रिलीज की सत्यता जांचें (Checksum)</b></summary>
+<summary><b>रिलीज की सत्यता जांचें (Verification)</b></summary>
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
@@ -100,32 +116,69 @@ gh attestation verify <archive-file> -R mesamirh/MovieBox-Tui
 
 </details>
 
-## शुरू कैसे करें
+<details>
+<summary><b>अनइंस्टॉलेशन (Uninstallation)</b></summary>
+
+#### ऑटोमेटेड इंस्टॉलर (macOS, Linux, Windows, Android)
+
+बस अपना मूल इंस्टॉलेशन कमांड (`curl ... | bash` या `irm ... | iex`) फिर से चलाएं। जब MovieBox-TUI पहले से इंस्टॉल होता है, तो इंस्टॉलर इसे अपने आप पहचान लेता है और एक मेनू प्रदर्शित करता है:
+
+```text
+MovieBox-TUI is already installed.
+What would you like to do?
+  1) Reinstall / Update to latest version
+  2) Uninstall
+  3) Cancel
+```
+
+MovieBox-TUI को पूरी तरह हटाने के लिए `2` दर्ज करें।
+
+#### पैकेज मैनेजर्स
+
+```bash
+brew uninstall moviebox-tui     # Homebrew (macOS)
+scoop uninstall moviebox-tui    # Scoop (Windows)
+cargo uninstall moviebox-tui    # Cargo
+```
+
+</details>
+
+## शुरुआत कैसे करें
 
 ```bash
 moviebox-tui
 ```
 
-- किसी भी मूवी या शो का नाम लिखकर सर्च करें, प्ले करने के लिए `Enter` दबाएं।
-- शॉर्टकट्स देखने के लिए ऐप में कभी भी `?` दबाएं, सेटिंग्स के लिए `/settings` टाइप करें।
+- सर्च करने के लिए कोई भी टाइटल टाइप करें, प्ले करने के लिए `Enter` दबाएं।
+- शॉर्टकट्स के लिए TUI में `?` दबाएं, सेटिंग्स के लिए `/settings` टाइप करें।
 
 ## डॉक्यूमेंटेशन
 
-विस्तृत गाइड और आर्किटेक्चर समझने के लिए [**mesamirh.github.io/MovieBox-Tui**](https://mesamirh.github.io/MovieBox-Tui/) पर जाएं या प्रोजेक्ट का [`docs/`](docs/) फोल्डर देखें।
+विस्तृत गाइड और आर्किटेक्चर संदर्भ [**mesamirh.github.io/MovieBox-Tui**](https://mesamirh.github.io/MovieBox-Tui/) पर या [`docs/`](docs/) डायरेक्टरी में उपलब्ध हैं:
 
-## योगदान (Contribution)
+| गाइड | विवरण |
+| :--- | :--- |
+| [कीबोर्ड और कंट्रोल्स](docs/controls.md) | कीबाइंडिंग्स, vim नेविगेशन, सर्च और शॉर्टकट्स |
+| [कॉन्फ़िगरेशन](docs/config.md) | सेटिंग्स, थीम कस्टमाइज़ेशन और कॉन्फ़िगरेशन विकल्प |
+| [कंटेंट प्रोवाइडर्स](docs/providers.md) | नेटिव स्क्रेपर्स (MovieBox, Dramachi, BDIX) और स्ट्रीम एक्सट्रैक्टर्स |
+| [Stremio ऐड-ऑन्स](docs/addons-mode.md) | कम्युनिटी ऐड-ऑन इंस्टॉलेशन, मैनिफेस्ट URL और स्ट्रीम रेजोल्यूशन |
+| [हार्डवेयर प्लेयर्स](docs/players.md) | प्लेयर डिटेक्शन, लॉन्च ऑप्शंस और हार्डवेयर एक्सेलेरेशन |
+| [लाइव टीवी और IPTV](docs/tv-mode.md) | M3U प्लेलिस्ट इम्पोर्ट, चैनल सर्च और लाइव स्ट्रीमिंग |
+| [बैच डाउनलोड](docs/downloads.md) | पॉज और रिज्यूम के साथ मल्टी-सेगमेंट HTTP रेंज डाउनलोड |
 
-प्रोजेक्ट में आपके योगदान का स्वागत है। पुल रिक्वेस्ट भेजने से पहले [CONTRIBUTING.md](CONTRIBUTING.md) जरूर देखें।
+## योगदान
 
-कोई बग मिले या नए फीचर का आइडिया हो, तो बेझिझक [GitHub Issues](https://github.com/mesamirh/MovieBox-Tui/issues) पर बताएं।
+प्रोजेक्ट में योगदान का स्वागत है। पुल रिक्वेस्ट सबमिट करने से पहले [CONTRIBUTING.md](CONTRIBUTING.md) की समीक्षा करें।
+
+बग रिपोर्ट करने या नए फीचर का अनुरोध करने के लिए [GitHub Issues](https://github.com/mesamirh/MovieBox-Tui/issues) का उपयोग करें।
 
 <details>
-<summary><b>डेवलपमेंट में सपोर्ट करें</b></summary>
+<summary><b>वैकल्पिक सहयोग (Optional Support)</b></summary>
 <div id="optional-support" tabindex="-1"></div>
 
-अगर आप प्रोजेक्ट डेवलपमेंट में सीधा सहयोग करना चाहते हैं:
+यदि आप सीधे निरंतर विकास का समर्थन करना चाहते हैं:
 
-| Network / Asset | Address |
+| नेटवर्क / क्रिप्टोकरेंसी | पता (Address) |
 | :--- | :--- |
 | **USDT (TRC20)** | `TL4yW73qmbKZpBWwbEFgjBpwVkPDFTkJgV` |
 | **Bitcoin (BTC)** | `3MEAtqtRWrQBhnaMi3Zuf5nt2efNUS2LUQ` |
@@ -134,14 +187,14 @@ moviebox-tui
 
 </details>
 
-## प्राइवेसी और सुरक्षा
+## गोपनीयता (Privacy)
 
-MovieBox-TUI कोई भी यूजर डेटा, टेलीमेट्री या एनालिटिक्स ट्रैक नहीं करता है। आपका सर्च इतिहास, बुकमार्क और सेटिंग्स सिर्फ और सिर्फ आपके अपने डिवाइस पर सुरक्षित रहते हैं।
+MovieBox-TUI में शून्य टेलीमेट्री, एनालिटिक्स या यूजर ट्रैकिंग है। सभी सर्च हिस्ट्री, बुकमार्क्स और कॉन्फ़िगरेशन फाइलें पूरी तरह से आपके स्थानीय फाइलसिस्टम पर ही रहती हैं।
 
 ## लाइसेंस
 
-[MIT](LICENSE-MIT) या [Apache-2.0](LICENSE-APACHE) लाइसेंस के तहत जारी।
+यह सॉफ्टवेयर [MIT](LICENSE-MIT) या [Apache-2.0](LICENSE-APACHE) के तहत लाइसेंस प्राप्त है।
 
-## डिस्क्लेमर
+## अस्वीकरण (Disclaimer)
 
-यह प्रोजेक्ट खुद कोई भी मीडिया या वीडियो फाइल स्टोर या होस्ट नहीं करता है। यह इंटरनेट पर पब्लिकली उपलब्ध वीडियो स्ट्रीम्स चलाने के लिए केवल एक ओपन-सोर्स टर्मिनल ऐप है।
+यह प्रोजेक्ट किसी भी मीडिया को होस्ट या स्टोर नहीं करता है। यह सार्वजनिक रूप से उपलब्ध स्ट्रीम्स चलाने के लिए केवल एक स्वतंत्र क्लाइंट है। उपयोगकर्ता अपने देश के कानूनों का पालन करने के लिए स्वयं जिम्मेदार हैं।
