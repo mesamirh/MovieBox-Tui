@@ -54,7 +54,7 @@ percent-encoding = "2.3.2"
 log = "0.4.33"
 flexi_logger = "0.31.10"
 hickory-resolver = { version = "0.25.2", default-features = false, features = ["system-config", "tokio"] }
-reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "stream"] }
+reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "rustls-tls-native-roots", "stream"] }
 sha2 = "0.10.8"
 flate2 = "1.0.35"
 tar = "0.4.44"
