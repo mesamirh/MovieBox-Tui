@@ -242,9 +242,16 @@ jobs:
           TOOLCHAIN="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "$TOOLCHAIN" >> $GITHUB_PATH
           export PATH="$TOOLCHAIN:$PATH"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android24-clang"
-          export CC_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android24-clang"
+          # API 21 = Android 5.0 minSdk so the binary runs on 5.1 (SDK 22)
+          # e.g. Oppo A37fw (aarch64, SDK 22). API 24 binaries fail there with:
+          # CANNOT LINK EXECUTABLE: empty/missing DT_HASH (built with --hash-style=gnu?)
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android21-clang"
+          export CC_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android21-clang"
+          export CXX_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android21-clang++"
           export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+          # --hash-style=both emits SYSV DT_HASH for the Android 5.x linker
+          # (which ignores GNU_HASH) while staying compatible with newer Android.
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-C link-arg=-Wl,--hash-style=both -C link-arg=-Wl,-z,max-page-size=4096"
 
           cargo build --release --all-features --locked --target aarch64-linux-android
 
@@ -253,6 +260,7 @@ jobs:
           BIN="target/aarch64-linux-android/release/moviebox-tui"
           readelf -lW "$BIN" | grep -F "PHDR" || { echo "::error::Missing PT_PHDR"; exit 1; }
           readelf -lW "$BIN" | grep -F "/system/bin/linker64" || { echo "::error::Missing Android PT_INTERP"; exit 1; }
+          readelf -dW "$BIN" | grep -F "(HASH)" || { echo "::error::Missing DT_HASH (SYSV). Pre-Lollipop/M Android 5.x linker will fail with: empty/missing DT_HASH"; exit 1; }
 
       - name: Archive Android
         run: |

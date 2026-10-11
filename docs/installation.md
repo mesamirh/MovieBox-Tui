@@ -62,6 +62,9 @@ termux-setup-storage
 
 > [!IMPORTANT]
 > Video playback on Android launches through your installed external media player (such as VLC, Just Player, or MX Player).
+
+> [!NOTE]
+> Android 5.0–5.1.1 (e.g. Oppo A37fw, `aarch64 / sdk 22`): use [Android 5.x Legacy Install](android-legacy.md). Download to `$HOME` (not `/tmp`), and use the API-21 `DT_HASH` build until a post-fix release is published.
 ---
 
 ## Cargo (Crates.io)
