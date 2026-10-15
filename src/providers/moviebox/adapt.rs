@@ -561,6 +561,43 @@ pub fn moviebox_resource_item_to_release(item: &serde_json::Value) -> Release {
     }
 }
 
+pub fn moviebox_resource_position_json_to_release(
+    payload: &serde_json::Value,
+    original: &Release,
+    user_agent: &str,
+) -> Option<Release> {
+    let resource_id = original.resource_id.as_deref()?;
+    let data = payload.get("data").unwrap_or(payload);
+    let items = data.get("list")?.as_array()?;
+    for item in items {
+        let candidate = moviebox_resource_item_to_release(item);
+        if candidate.resource_id.as_deref() != Some(resource_id)
+            || candidate.season != original.season
+            || candidate.episode != original.episode
+        {
+            continue;
+        }
+        let Some(url) = candidate.direct_url() else {
+            continue;
+        };
+        let Ok(parsed) = url::Url::parse(url) else {
+            continue;
+        };
+        if !matches!(parsed.scheme(), "http" | "https") {
+            continue;
+        }
+        let mut release = original.clone();
+        release.mirrors = candidate.mirrors;
+        for mirror in &mut release.mirrors {
+            mirror.direct_file = true;
+            // Direct MP4s reject the DASH referer with HTTP 429.
+            mirror.headers = vec![("User-Agent".to_string(), user_agent.to_string())];
+        }
+        return Some(release);
+    }
+    None
+}
+
 pub fn is_deprecation_notice_url(url: &str) -> bool {
     let lower = url.to_ascii_lowercase();
     lower.contains("1c7de0bd3393702d9191801f15f88f8d")
@@ -819,6 +856,98 @@ pub fn moviebox_resource_json_to_releases(payload: &serde_json::Value) -> Vec<Re
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn test_resource_position_recovers_file_and_preserves_release_metadata() {
+        let original = moviebox_resource_item_to_release(&json!({
+            "resourceId": 6154402015721538488_i64,
+            "title": "Example Movie",
+            "resourceLink": "https://macdn.aoneroom.com/other/2026/10/10/upgrade.mp4",
+            "resolution": 1080,
+            "codecName": "hevc",
+            "size": "1010288591",
+            "se": 0,
+            "ep": 0
+        }));
+        assert!(original.mirrors.is_empty());
+        let payload = json!({"data": {"list": [{
+            "resourceId": "6154402015721538488",
+            "resourceLink": "https://cdn.example.com/resource/movie.mp4?sign=abc&t=123",
+            "se": 0,
+            "ep": 0
+        }]}});
+        let recovered =
+            moviebox_resource_position_json_to_release(&payload, &original, "TestAgent")
+                .expect("recover original file");
+        assert_eq!(recovered.filename, original.filename);
+        assert_eq!(recovered.quality.as_deref(), Some("1080p"));
+        assert_eq!(recovered.codec, original.codec);
+        assert_eq!(recovered.size_bytes, Some(1010288591));
+        assert_eq!(recovered.resource_id, original.resource_id);
+        assert_eq!(
+            recovered.direct_url(),
+            Some("https://cdn.example.com/resource/movie.mp4?sign=abc&t=123")
+        );
+        assert!(recovered.mirrors[0].direct_file);
+        assert_eq!(
+            recovered.mirrors[0].headers,
+            vec![("User-Agent".to_string(), "TestAgent".to_string())]
+        );
+    }
+
+    #[test]
+    fn test_resource_position_rejects_notices_wrong_resources_and_wrong_episodes() {
+        let original = moviebox_resource_item_to_release(&json!({
+            "resourceId": "episode2",
+            "se": "1",
+            "ep": "2"
+        }));
+        for item in [
+            json!({"resourceId": "episode1", "se": 1, "ep": 2,
+                "resourceLink": "https://cdn.example.com/another.mp4"}),
+            json!({"resourceId": "episode2", "se": 1, "ep": 1,
+                "resourceLink": "https://cdn.example.com/wrong-episode.mp4"}),
+            json!({"resourceId": "episode2", "se": 2, "ep": 2,
+                "resourceLink": "https://cdn.example.com/wrong-season.mp4"}),
+            json!({"resourceId": "episode2", "se": 1, "ep": 2,
+                "resourceLink": "https://macdn.aoneroom.com/other/2026/10/10/upgrade.mp4"}),
+            json!({"resourceId": "episode2", "se": 1, "ep": 2,
+                "resourceLink": "file:///tmp/movie.mp4"}),
+            json!({"resourceId": "episode2", "se": 1, "ep": 2,
+                "resourceLink": ""}),
+        ] {
+            assert!(
+                moviebox_resource_position_json_to_release(
+                    &json!({"list": [item]}),
+                    &original,
+                    "TestAgent"
+                )
+                .is_none()
+            );
+        }
+        for payload in [json!({}), json!({"list": []}), json!({"data": null})] {
+            assert!(
+                moviebox_resource_position_json_to_release(&payload, &original, "TestAgent")
+                    .is_none()
+            );
+        }
+
+        let payload = json!({"list": [
+            {"resourceId": "episode1", "se": 1, "ep": 1,
+                "resourceLink": "https://cdn.example.com/episode1.mp4"},
+            {"resourceId": "episode2", "se": 1, "ep": 2,
+                "resourceLink": "https://cdn.example.com/episode2.mp4"}
+        ]});
+        let recovered =
+            moviebox_resource_position_json_to_release(&payload, &original, "TestAgent")
+                .expect("recover matching episode only");
+        assert_eq!(recovered.season, Some(1));
+        assert_eq!(recovered.episode, Some(2));
+        assert_eq!(
+            recovered.direct_url(),
+            Some("https://cdn.example.com/episode2.mp4")
+        );
+    }
 
     #[test]
     fn test_moviebox_search_json_to_catalog() {

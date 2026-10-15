@@ -714,7 +714,6 @@ fn vlc_command(
             .arg(format!("--width={width}"))
             .arg(format!("--height={height}"));
     }
-    command.arg("--play-and-exit");
     #[cfg(not(target_os = "macos"))]
     command.arg("--no-one-instance");
     command.arg("--network-caching=3000");
@@ -1616,7 +1615,7 @@ mod tests {
 
         assert!(args.contains(&"--width=1280".into()));
         assert!(args.contains(&"--height=720".into()));
-        assert!(args.contains(&"--play-and-exit".into()));
+        assert!(!args.contains(&"--play-and-exit".into()));
         assert!(args.contains(&"--start-time=42".into()));
         assert!(args.contains(&"--http-referrer=https://example.test/".into()));
         assert!(args.contains(&"--http-user-agent=MovieBox-Test".into()));

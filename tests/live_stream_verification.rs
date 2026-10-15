@@ -13,22 +13,46 @@ async fn test_live_movie_stream_real_urls() {
         .expect("fetch movie streams");
     assert!(!releases.is_empty(), "releases should not be empty");
 
-    let notice_hash = "1c7de0bd3393702d9191801f15f88f8d";
     let mut real_streams_found = 0;
 
     for release in &releases {
         if let Some(link) = release.direct_url() {
             println!("Movie stream link: {}", link);
             assert!(
-                !link.contains(notice_hash),
+                !moviebox_tui::providers::moviebox::adapt::is_deprecation_notice_url(link),
                 "Stream URL should NOT be the legacy upgrade notice video: {}",
                 link
             );
             assert!(
-                link.contains("hakunaymatata.com") && link.ends_with("/index.mpd"),
-                "Stream URL should be a valid MPEG-DASH manifest: {}",
+                url::Url::parse(link).is_ok_and(|url| {
+                    url.scheme() == "https"
+                        && (url.path().ends_with("/index.mpd") || url.path().ends_with(".mp4"))
+                }),
+                "Stream URL should be a DASH manifest or recovered MP4 file: {}",
                 link
             );
+            // Resolving a URL is insufficient: verify the CDN serves media bytes.
+            let mut request = client.http_client().get(link).header("Range", "bytes=0-31");
+            for (name, value) in &release.mirrors[0].headers {
+                request = request.header(name.as_str(), value.as_str());
+            }
+            let mut response = request.send().await.expect("request media bytes");
+            assert!(
+                response.status().is_success(),
+                "CDN returned {}",
+                response.status()
+            );
+            let chunk = response
+                .chunk()
+                .await
+                .expect("read media bytes")
+                .expect("nonempty media");
+            if url::Url::parse(link).unwrap().path().ends_with(".mp4") {
+                assert!(
+                    chunk.windows(4).any(|bytes| bytes == b"ftyp"),
+                    "expected an MP4 file header"
+                );
+            }
             real_streams_found += 1;
         }
     }
@@ -70,7 +94,7 @@ async fn test_live_series_resolutions_and_streams() {
     assert!(!releases_ep1.is_empty(), "should find episode 1 streams");
     let ep1_url = releases_ep1[0].direct_url().expect("valid direct url");
     println!("Resolved S01E01 direct URL: {}", ep1_url);
-    assert!(ep1_url.contains("_1_1_"));
+    assert!(!moviebox_tui::providers::moviebox::adapt::is_deprecation_notice_url(ep1_url));
 
     let releases_ep2 = client
         .episode_streams(&series.id.value, 1, 2)
@@ -79,7 +103,7 @@ async fn test_live_series_resolutions_and_streams() {
     assert!(!releases_ep2.is_empty(), "should find episode 2 streams");
     let ep2_url = releases_ep2[0].direct_url().expect("valid direct url");
     println!("Resolved S01E02 direct URL: {}", ep2_url);
-    assert!(ep2_url.contains("_1_2_"));
+    assert!(!moviebox_tui::providers::moviebox::adapt::is_deprecation_notice_url(ep2_url));
     assert_ne!(
         ep1_url, ep2_url,
         "different episodes must have different manifests"
@@ -96,7 +120,7 @@ async fn test_live_multiple_seasons_and_episodes_return_distinct_streams() {
         (
             "6207982430134357800",
             "Breaking Bad",
-            vec![(1, 1), (1, 2), (2, 1), (2, 2)],
+            vec![(1, 1), (1, 2), (2, 1), (2, 2), (5, 1)],
         ),
         (
             "4585605580068379856",
@@ -127,12 +151,9 @@ async fn test_live_multiple_seasons_and_episodes_return_distinct_streams() {
                 "{} S{:02}E{:02} -> filename: {}, url: {}",
                 series_title, season, episode, releases[0].filename, url
             );
-            assert!(
-                releases[0]
-                    .filename
-                    .contains(&format!("S{:02}E{:02}", season, episode)),
-                "filename must match season and episode"
-            );
+            assert_eq!(releases[0].season, Some(season));
+            assert_eq!(releases[0].episode, Some(episode));
+            assert!(!moviebox_tui::providers::moviebox::adapt::is_deprecation_notice_url(&url));
             urls.push(((season, episode), url));
         }
 
