@@ -33,14 +33,14 @@ dirs = "7.0.0"
 futures = "0.3.34"
 hmac = "0.13.0"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
-lru = "0.18.1"
+lru = "0.19.0"
 md-5 = "0.11.0"
 rand = "0.10.2"
 ratatui = { version = "0.30.2", default-features = false, features = ["std", "layout-cache"] }
 ratatui-crossterm = { version = "0.1.2", default-features = false, features = ["crossterm_0_29"] }
 ratatui-image = { version = "11.0.6", default-features = false }
 rustls = { version = "0.23.42", default-features = false, features = ["ring", "std"] }
-scraper = "0.27.0"
+scraper = "0.29.0"
 semver = "1.0.28"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
