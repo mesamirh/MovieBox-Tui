@@ -695,7 +695,9 @@ async fn download_segment(
                     let bytes = chunk.len().min(remaining as usize);
                     file.write_all(&chunk[..bytes]).await?;
                     written += bytes as u64;
-                    segment_written.store(written, Ordering::Relaxed);
+                    // Workers are aborted without a flush when a sibling pauses or
+                    // fails, so resume progress must exclude bytes still buffered.
+                    segment_written.store(written - file.buffer().len() as u64, Ordering::Relaxed);
                     unbatched_bytes += bytes as u64;
                     if unbatched_bytes >= 512 * 1024
                         || last_progress_send.elapsed() >= Duration::from_millis(120)
@@ -1037,6 +1039,112 @@ mod tests {
         assert_eq!(saved, *payload);
         assert!(!sidecar_path(&dest_file, "part").exists());
         assert!(!sidecar_path(&dest_file, "part.json").exists());
+
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_segmented_pause_records_only_bytes_on_disk() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let total_size: usize = 16 * 1024 * 1024;
+        let payload: Arc<Vec<u8>> = Arc::new((0..total_size).map(|i| (i % 251) as u8).collect());
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let url = format!("http://127.0.0.1:{port}/slow_movie.mp4");
+
+        // Serve ranges slowly so every worker still holds unflushed bytes when paused.
+        let server_payload = Arc::clone(&payload);
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let data = Arc::clone(&server_payload);
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 2048];
+                    let Ok(n) = socket.read(&mut buf).await else {
+                        return;
+                    };
+                    let req = String::from_utf8_lossy(&buf[..n]);
+                    let range = req.lines().find_map(|line| {
+                        line.strip_prefix("Range: bytes=")
+                            .or_else(|| line.strip_prefix("range: bytes="))
+                            .map(|v| v.trim().to_string())
+                    });
+                    let total = data.len();
+                    let Some(range) = range else {
+                        return;
+                    };
+                    let (s_str, e_str) = range.split_once('-').unwrap();
+                    let start: usize = s_str.parse().unwrap();
+                    let end: usize = if e_str.is_empty() {
+                        total - 1
+                    } else {
+                        e_str.parse().unwrap()
+                    };
+                    let resp = format!(
+                        "HTTP/1.1 206 Partial Content\r\nAccept-Ranges: bytes\r\nContent-Range: bytes {start}-{end}/{total}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        end - start + 1
+                    );
+                    if socket.write_all(resp.as_bytes()).await.is_err() {
+                        return;
+                    }
+                    for chunk in data[start..=end].chunks(16 * 1024) {
+                        if socket.write_all(chunk).await.is_err() {
+                            return;
+                        }
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                });
+            }
+        });
+
+        let temp_dir = std::env::temp_dir().join(format!("mbx_seg_pause_{}", std::process::id()));
+        tokio::fs::create_dir_all(&temp_dir).await.unwrap();
+        let dest_file = temp_dir.join("movie.mp4");
+        let part_file = sidecar_path(&dest_file, "part");
+        let meta_file = sidecar_path(&dest_file, "part.json");
+        let client = crate::net::http_client_builder_base().build().unwrap();
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let pause = Arc::clone(&cancel);
+        let res = download(&client, &url, &dest_file, cancel, move |prog| {
+            if prog.downloaded >= 1024 * 1024 {
+                pause.store(true, Ordering::Relaxed);
+            }
+        })
+        .await;
+        assert!(matches!(res, Ok(DownloadOutcome::Paused { .. })));
+
+        let metadata = read_metadata(&meta_file).await;
+        let partial = tokio::fs::read(&part_file).await.unwrap();
+        let ranges = segment_ranges(total_size as u64, metadata.segments.unwrap());
+        for (&(start, _), &written) in ranges.iter().zip(&metadata.segment_progress) {
+            let (start, written) = (start as usize, written as usize);
+            assert_eq!(
+                partial[start..start + written],
+                payload[start..start + written],
+                "segment at {start} claims {written} bytes that are not on disk"
+            );
+        }
+
+        let res = download(
+            &client,
+            &url,
+            &dest_file,
+            Arc::new(AtomicBool::new(false)),
+            |_| {},
+        )
+        .await;
+        server.abort();
+        assert!(
+            matches!(res, Ok(DownloadOutcome::Completed { bytes }) if bytes == total_size as u64)
+        );
+        let saved = tokio::fs::read(&dest_file).await.unwrap();
+        assert!(saved == *payload, "resumed download must match the source");
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }

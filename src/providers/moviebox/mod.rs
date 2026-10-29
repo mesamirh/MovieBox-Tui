@@ -63,7 +63,9 @@ impl crate::providers::ReleaseProvider for client::MovieBoxClient {
         episode: usize,
     ) -> Result<Vec<crate::providers::models::Release>, ProviderError> {
         let resource_path = episode_resource_path(id, season, episode);
-        let (play_info_res, resources_res) = tokio::join!(
+        let details_path = format!("/wefeed-mobile-bff/subject-api/get?subjectId={id}");
+        let (details_res, play_info_res, resources_res) = tokio::join!(
+            self.get(&details_path),
             self.get_play_info(id, season, episode),
             self.get(&resource_path)
         );
@@ -73,6 +75,28 @@ impl crate::providers::ReleaseProvider for client::MovieBoxClient {
         // Track why nothing playable came back, so the user sees the real cause.
         let mut placeholders = 0;
         let mut play_info_error = None;
+
+        // Subject details still list the real files while play-info and the
+        // resource listing only return the upgrade clip.
+        match details_res {
+            Ok(json) => {
+                for rel in adapt::moviebox_detector_json_to_releases(
+                    &json,
+                    season,
+                    episode,
+                    self.user_agent(),
+                ) {
+                    if let Some(url) = rel.direct_url() {
+                        let base = url.split('?').next().unwrap_or(url).to_string();
+                        if !base.is_empty() && !seen_urls.insert(base) {
+                            continue;
+                        }
+                    }
+                    releases.push(rel);
+                }
+            }
+            Err(error) => log::warn!("moviebox subject details failed: {error}"),
+        }
 
         match play_info_res {
             Ok(json) => {
