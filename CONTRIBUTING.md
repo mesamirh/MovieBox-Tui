@@ -35,7 +35,7 @@ Short version:
 - `src/tui/app/`: The application object (`App`). `run.rs` holds the thin
   `handle_action` dispatcher that routes every `Action` to a `handle_*` method in its
   module (`run.rs`, `requests.rs`, `search.rs`, `playback.rs`, `download.rs`, `favorites.rs`,
-  `navigation.rs`, `tv.rs`, `addons.rs`, `keyboard.rs`, `mouse.rs`, `system.rs`, `network.rs`).
+  `navigation.rs`, `tv.rs`, `addons.rs`, `keyboard.rs`, `mouse.rs`, `system.rs`).
 - `src/tui/`: UI state, event loop plumbing, slash commands (`commands.rs`), screens, themes, and widgets.
 - `src/providers/`: HTTP clients for streaming sources (`moviebox`, `fourkhdhub`, `dramachi`,
   `bdix`), community HTTP addons (`addons/`), and Live TV playlists (`tv/`).
