@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Providers & Stream Resolution**:
+  - Restored MovieBox TV series streaming by generating and attaching the official `X-Client-Build` APK certificate stamp with signed requests.
+  - Preserved multi colon and namespaced media identifiers (such as Kitsu anime IDs) in Stremio addon stream aggregation.
+  - Replaced hard assertions on HTTP client builders with safe fallbacks in MovieBox, CircleFTP, and DhakaFlix clients.
+- **Networking & DNS**:
+  - Added runtime fallback to public DNS (Cloudflare, Google, Quad9) in `FallbackResolver` when primary system DNS lookup fails or is blocked by an ISP.
+- **Media Playback & Sidecar Proxy**:
+  - Handled poisoned watchdog activity locks gracefully in the stream proxy sidecar loop to prevent unwrap crashes.
+  - Standardized cross-platform temporary subtitle cleanup path joins to eliminate forward-slash path issues on Windows.
+- **Test Infrastructure**:
+  - Synchronized environment dependent player tests with `ENV_MUTEX` and probed Android intent openers dynamically to eliminate parallel test race conditions.
+
 ## [0.1.28] - 2026-10-29
 
 ### Fixed

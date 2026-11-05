@@ -37,8 +37,8 @@ src/
                      history and favorites).
 
   net.rs             Shared HTTP plumbing: FallbackResolver (hickory DNS reading the
-                     OS configuration, falling back to Cloudflare/Google/Quad9 when
-                     absent) wired into every reqwest client via
+                     OS configuration, with automatic runtime fallback to Cloudflare/Google/Quad9
+                     on failure or when absent) wired into every reqwest client via
                      net::http_client_builder().
 
   player.rs          Player detection (OnceLock) and command construction for
