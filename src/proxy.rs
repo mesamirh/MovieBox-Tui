@@ -210,9 +210,9 @@ pub async fn run_sidecar(
         loop {
             tokio::time::sleep(Duration::from_secs(15)).await;
             let conns = watchdog_conns.load(Ordering::Relaxed);
-            let elapsed = {
-                let lock = watchdog_activity.lock().unwrap();
-                lock.elapsed()
+            let elapsed = match watchdog_activity.lock() {
+                Ok(lock) => lock.elapsed(),
+                Err(poisoned) => poisoned.into_inner().elapsed(),
             };
             if conns == 0 && elapsed > Duration::from_secs(WATCHDOG_IDLE_SECS) {
                 std::process::exit(0);
