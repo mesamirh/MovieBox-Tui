@@ -15,6 +15,16 @@ pub const APP_HTTP_USER_AGENT: &str = concat!("MovieBox-Tui/", env!("CARGO_PKG_V
 static GLOBAL_RESOLVER: std::sync::LazyLock<Arc<TokioResolver>> =
     std::sync::LazyLock::new(|| Arc::new(build_resolver()));
 
+static FALLBACK_RESOLVER: std::sync::LazyLock<Arc<TokioResolver>> =
+    std::sync::LazyLock::new(|| Arc::new(build_fallback_resolver()));
+
+fn build_fallback_resolver() -> TokioResolver {
+    let mut builder =
+        TokioResolver::builder_with_config(fallback_config(), TokioConnectionProvider::default());
+    builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+    builder.build()
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct FallbackResolver;
 
@@ -59,15 +69,42 @@ fn build_resolver() -> TokioResolver {
 
 impl Resolve for FallbackResolver {
     fn resolve(&self, name: Name) -> Resolving {
-        let resolver = Arc::clone(&GLOBAL_RESOLVER);
+        let primary = Arc::clone(&GLOBAL_RESOLVER);
+        let fallback = Arc::clone(&FALLBACK_RESOLVER);
         Box::pin(async move {
-            let lookup = resolver.lookup_ip(name.as_str()).await?;
-            let addrs: Addrs = Box::new(
-                lookup
-                    .into_iter()
-                    .map(|address| SocketAddr::new(address, 0)),
-            );
-            Ok(addrs)
+            match primary.lookup_ip(name.as_str()).await {
+                Ok(lookup) => {
+                    let addrs: Addrs = Box::new(
+                        lookup
+                            .into_iter()
+                            .map(|address| SocketAddr::new(address, 0)),
+                    );
+                    Ok(addrs)
+                }
+                Err(primary_err) => {
+                    log::debug!(
+                        "primary DNS lookup for {} failed ({primary_err}); retrying with fallback public DNS",
+                        name.as_str()
+                    );
+                    let lookup =
+                        fallback
+                            .lookup_ip(name.as_str())
+                            .await
+                            .map_err(|fallback_err| {
+                                log::warn!(
+                                    "fallback DNS lookup for {} also failed: {fallback_err}",
+                                    name.as_str()
+                                );
+                                primary_err
+                            })?;
+                    let addrs: Addrs = Box::new(
+                        lookup
+                            .into_iter()
+                            .map(|address| SocketAddr::new(address, 0)),
+                    );
+                    Ok(addrs)
+                }
+            }
         })
     }
 }
