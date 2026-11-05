@@ -1,42 +1,9 @@
 use super::models::{MetaDetail, MetaItem, StreamItem};
-use crate::models::SearchResult;
 use crate::providers::models::{
     CatalogItem, Episode, MediaDetails, MediaType, PlaybackSource, ProviderKind, ProviderMediaId,
     Release, Season, SourceMirror,
 };
 use std::collections::BTreeMap;
-
-pub fn meta_to_search_result(item: &MetaItem) -> SearchResult {
-    let is_series = item.r#type.eq_ignore_ascii_case("series")
-        || item.r#type.eq_ignore_ascii_case("tv")
-        || item.r#type.eq_ignore_ascii_case("anime");
-    let year: String = item
-        .release_info
-        .as_deref()
-        .or(item.year.as_deref())
-        .or(item.released.as_deref())
-        .map(crate::providers::models::extract_4digit_year)
-        .unwrap_or_default();
-
-    let title = if !item.name.trim().is_empty() {
-        item.name.clone()
-    } else {
-        item.title.clone().unwrap_or_else(|| "Unknown".to_string())
-    };
-
-    let cover = item.poster.clone().or_else(|| item.cover.clone());
-
-    SearchResult {
-        id: item.id.clone(),
-        title,
-        stype: if is_series { 2 } else { 1 },
-        release_year: year,
-        cover_url: cover,
-        season: 0,
-        episode: 0,
-        provider: ProviderKind::Addons,
-    }
-}
 
 type SeasonEpisodeMap = BTreeMap<usize, BTreeMap<usize, (Option<String>, Option<String>)>>;
 

@@ -3,6 +3,13 @@ use super::client::AddonClient;
 use super::models::InstalledAddon;
 use crate::providers::models::Release;
 
+pub fn clean_addon_subject_id(subject_id: &str) -> &str {
+    subject_id
+        .strip_prefix("series:")
+        .or_else(|| subject_id.strip_prefix("movie:"))
+        .unwrap_or(subject_id)
+}
+
 pub async fn aggregate_streams(
     client: &AddonClient,
     addons: &[InstalledAddon],
@@ -20,10 +27,15 @@ pub async fn aggregate_streams(
         return (Vec::new(), Vec::new());
     }
 
-    let clean_id = subject_id.split(':').next_back().unwrap_or(subject_id);
+    let clean_id = clean_addon_subject_id(subject_id);
     let media_type = if is_series { "series" } else { "movie" };
     let stream_id = if is_series && episode > 0 {
-        format!("{clean_id}:{season}:{episode}")
+        let suffix = format!(":{season}:{episode}");
+        if clean_id.ends_with(&suffix) {
+            clean_id.to_string()
+        } else {
+            format!("{clean_id}{suffix}")
+        }
     } else {
         clean_id.to_string()
     };
@@ -217,5 +229,14 @@ mod tests {
         assert_eq!(releases.len(), 2);
         assert_eq!(releases[0].quality.as_deref(), Some("2160p"));
         assert_eq!(releases[1].quality.as_deref(), Some("720p"));
+    }
+
+    #[test]
+    fn test_clean_addon_subject_id_preserves_namespaces() {
+        assert_eq!(clean_addon_subject_id("series:kitsu:12345"), "kitsu:12345");
+        assert_eq!(clean_addon_subject_id("movie:kitsu:999"), "kitsu:999");
+        assert_eq!(clean_addon_subject_id("series:tt0903747"), "tt0903747");
+        assert_eq!(clean_addon_subject_id("movie:tt1234567"), "tt1234567");
+        assert_eq!(clean_addon_subject_id("tt1234567"), "tt1234567");
     }
 }

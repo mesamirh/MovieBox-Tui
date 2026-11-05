@@ -4,8 +4,8 @@ pub mod client;
 pub mod models;
 
 pub use adapter::{
-    meta_detail_to_media_details, meta_to_catalog_item, meta_to_search_result,
-    release_to_playback_source, stream_item_to_release,
+    meta_detail_to_media_details, meta_to_catalog_item, release_to_playback_source,
+    stream_item_to_release,
 };
 pub use aggregator::aggregate_streams;
 pub use client::AddonClient;
