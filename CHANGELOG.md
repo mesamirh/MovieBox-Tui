@@ -15,6 +15,10 @@
 - **Test Infrastructure**:
   - Synchronized environment dependent player tests with `ENV_MUTEX` and probed Android intent openers dynamically to eliminate parallel test race conditions.
 
+### Changed
+- **Dependencies & Build Infrastructure**:
+  - Upgraded `unicode-width` to 0.2.3, `log` to 0.4.35, and `zip` to 9.2.1 (#234).
+
 ## [0.1.28] - 2026-10-29
 
 ### Fixed
