@@ -96,7 +96,7 @@ impl DhakaFlixClient {
                 .timeout(Duration::from_secs(5))
                 .user_agent(crate::net::DEFAULT_BROWSER_USER_AGENT)
                 .build()
-                .expect("dhakaflix http client"),
+                .unwrap_or_default(),
             recent_fails: Arc::new(RwLock::new(HashMap::new())),
         }
     }
