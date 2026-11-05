@@ -494,7 +494,7 @@ impl App {
                 (link.clone(), local_subtitle.clone())
             };
 
-            let log_dir = std::env::temp_dir().join("moviebox-tui/subs");
+            let log_dir = std::env::temp_dir().join("moviebox-tui").join("subs");
             let _ = std::fs::create_dir_all(&log_dir);
             let log_stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

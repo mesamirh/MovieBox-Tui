@@ -29,7 +29,7 @@ fn purge_stale_subtitles() {
         let max_age = 24 * 60 * 60;
         let dirs = [
             moviebox_tui::config::cache_dir().join("subs"),
-            std::env::temp_dir().join("moviebox-tui/subs"),
+            std::env::temp_dir().join("moviebox-tui").join("subs"),
         ];
 
         for dir in dirs {
