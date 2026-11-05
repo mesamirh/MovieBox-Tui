@@ -326,11 +326,8 @@ pub fn probe_android_openers() -> Vec<AndroidOpener> {
     openers
 }
 
-static ANDROID_OPENERS: std::sync::LazyLock<Vec<AndroidOpener>> =
-    std::sync::LazyLock::new(probe_android_openers);
-
-pub fn android_openers() -> &'static [AndroidOpener] {
-    ANDROID_OPENERS.as_slice()
+pub fn android_openers() -> Vec<AndroidOpener> {
+    probe_android_openers()
 }
 
 fn append_android_intent_extras(
@@ -1929,6 +1926,7 @@ mod tests {
 
     #[test]
     fn test_mpv_command_headers_and_arguments_assembly() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         let headers = vec![
             ("User-Agent".to_string(), "MovieBox-Tui/0.1.23".to_string()),
             ("Referer".to_string(), "https://upstream.cdn/".to_string()),
@@ -2210,6 +2208,7 @@ mod tests {
 
     #[test]
     fn test_mpv_command_keeps_open_invariants() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         let cmd = mpv_command(
             "https://example.com/video.mkv",
             None,
