@@ -14,7 +14,7 @@ exclude = [
     "book.toml",
     "book/",
 ]
-version = "0.1.28"
+version = "0.1.29"
 edition = "2024"
 description = "Terminal interface to find, download, and stream movies, TV shows, and live TV using local media players."
 repository = "https://github.com/mesamirh/MovieBox-Tui"

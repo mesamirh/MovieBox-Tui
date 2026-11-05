@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.29] - 2026-11-05
+
 ### Fixed
 - **Providers & Stream Resolution**:
   - Restored MovieBox TV series streaming by generating and attaching the official `X-Client-Build` APK certificate stamp with signed requests.
