@@ -10,6 +10,43 @@ const SIGNATURE_BODY_MAX_BYTES: usize = 102_400;
 
 type HmacMd5 = Hmac<Md5>;
 
+const STOCK_CERT_SHA256: &str = "03d4b741632d136bc23e2de4c6adcdb7712f1980b619c183221801730bbd0410";
+const BUILD_TAG_SALT: &str = "oneroom";
+const BUILD_TAG_HEADER: reqwest::header::HeaderName =
+    reqwest::header::HeaderName::from_static("x-client-build");
+const BUILD_TAG_INFO_KEY: &str = "X-Client-Build";
+
+fn build_tag_stamp(ts_ms: u64, rand_part: u32) -> String {
+    format!("{}{:03}000{}", ts_ms / 1000, ts_ms % 1000, rand_part)
+}
+
+fn build_tag_for_cert(ts_ms: u64, rand_part: u32, cert_sha256_hex: &str) -> String {
+    let stamp = build_tag_stamp(ts_ms, rand_part);
+    let hash = crate::cache::md5_hex_bytes(
+        format!("{}{}{}", cert_sha256_hex, BUILD_TAG_SALT, stamp).as_bytes(),
+    );
+    format!("{}.{}", stamp, hash)
+}
+
+pub fn generate_x_client_build(ts_ms: u64) -> String {
+    use rand::RngExt;
+    let mut rng = rand::rng();
+    build_tag_for_cert(ts_ms, rng.random_range(0..1000), STOCK_CERT_SHA256)
+}
+
+fn client_info_with_build_tag(client_info: &str, tag: &str) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(client_info) else {
+        return client_info.to_string();
+    };
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            BUILD_TAG_INFO_KEY.to_string(),
+            serde_json::Value::String(tag.to_string()),
+        );
+    }
+    serde_json::to_string(&value).unwrap_or_else(|_| client_info.to_string())
+}
+
 fn insert_header(
     headers: &mut reqwest::header::HeaderMap,
     name: reqwest::header::HeaderName,
@@ -142,6 +179,8 @@ pub fn build_signed_headers(
     let client_token = generate_x_client_token(ts);
     let signature =
         generate_x_tr_signature(method, Some(accept), Some(content_type), url, body, ts);
+    let build_tag = generate_x_client_build(ts);
+    let client_info = client_info_with_build_tag(client_info, &build_tag);
 
     let mut headers = reqwest::header::HeaderMap::new();
 
@@ -159,10 +198,11 @@ pub fn build_signed_headers(
         reqwest::header::HeaderName::from_static("x-tr-signature"),
         &signature,
     );
+    insert_header(&mut headers, BUILD_TAG_HEADER, &build_tag);
     insert_header(
         &mut headers,
         reqwest::header::HeaderName::from_static("x-client-info"),
-        client_info,
+        &client_info,
     );
     insert_header(
         &mut headers,
@@ -322,5 +362,84 @@ mod tests {
         assert!((50020117..=50020121).contains(&code));
         assert_eq!(parsed["sp_code"], "40401");
         assert_eq!(parsed["X-Play-Mode"], "2");
+    }
+
+    fn test_cert_hex() -> String {
+        use sha2::Digest;
+        sha2::Sha256::digest(b"stock-certificate")
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect()
+    }
+
+    #[test]
+    fn test_build_tag_matches_published_vectors() {
+        assert_eq!(
+            build_tag_for_cert(1700000000123, 45, &test_cert_hex()),
+            "170000000012300045.1a8f8b991f95799fba169a8a7f889ebc"
+        );
+        assert_eq!(
+            build_tag_for_cert(1700000000007, 7, &test_cert_hex()),
+            "17000000000070007.d1c4e3525f7a8bf894ffdb6fcda377b2"
+        );
+    }
+
+    #[test]
+    fn test_generate_x_client_build_format() {
+        let tag = generate_x_client_build(1700000000123);
+        let (stamp, hash) = tag.split_once('.').expect("tag has stamp.hash shape");
+        assert!((17..=19).contains(&stamp.len()));
+        assert!(stamp.chars().all(|c| c.is_ascii_digit()));
+        assert!(stamp.starts_with("1700000000123"));
+        assert_eq!(hash.len(), 32);
+        assert!(
+            hash.chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+        );
+    }
+
+    #[test]
+    fn test_client_info_with_build_tag_inserts_and_replaces() {
+        let tagged = client_info_with_build_tag(r#"{"device_id":"d1"}"#, "stamp.hash");
+        let parsed: serde_json::Value = serde_json::from_str(&tagged).expect("valid JSON");
+        assert_eq!(parsed["device_id"], "d1");
+        assert_eq!(parsed["X-Client-Build"], "stamp.hash");
+
+        let replaced = client_info_with_build_tag(&tagged, "new.tag");
+        let parsed: serde_json::Value = serde_json::from_str(&replaced).expect("valid JSON");
+        assert_eq!(parsed["X-Client-Build"], "new.tag");
+
+        assert_eq!(
+            client_info_with_build_tag("not json", "stamp.hash"),
+            "not json"
+        );
+    }
+
+    #[test]
+    fn test_build_signed_headers_include_build_tag() {
+        let (_, client_info) = generate_client_info_and_ua();
+        let headers = build_signed_headers(
+            "GET",
+            "https://api.example.com/path",
+            None,
+            None,
+            "ua",
+            &client_info,
+            "1.2.3.4",
+        );
+        let tag = headers
+            .get("x-client-build")
+            .and_then(|v| v.to_str().ok())
+            .expect("x-client-build header present");
+        let (stamp, hash) = tag.split_once('.').expect("tag shape");
+        assert!((17..=19).contains(&stamp.len()));
+        assert_eq!(hash.len(), 32);
+
+        let info = headers
+            .get("x-client-info")
+            .and_then(|v| v.to_str().ok())
+            .expect("x-client-info header present");
+        let parsed: serde_json::Value = serde_json::from_str(info).expect("valid JSON");
+        assert_eq!(parsed["X-Client-Build"], tag);
     }
 }
