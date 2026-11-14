@@ -557,6 +557,22 @@ fn compute_notification_cards<'a>(
     cards
 }
 
+/// Spinner frame for sticky notifications, driven by wall-clock time so it
+/// keeps moving on every redraw.
+fn activity_indicator(basic_terminal: bool) -> String {
+    const FANCY: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    const BASIC: [&str; 4] = ["|", "/", "-", "\\"];
+    let step = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| (d.as_millis() / 100) as usize)
+        .unwrap_or(0);
+    if basic_terminal {
+        format!("{} running", BASIC[step % BASIC.len()])
+    } else {
+        format!("{} running", FANCY[step % FANCY.len()])
+    }
+}
+
 pub fn notifications(
     frame: &mut Frame,
     area: Rect,
@@ -584,26 +600,32 @@ pub fn notifications(
             )]));
         }
 
-        let total_duration = card.notification.kind.total_duration();
-        let remaining = card
-            .notification
-            .expires_at
-            .saturating_duration_since(std::time::Instant::now());
-        let ratio = (remaining.as_secs_f64() / total_duration.as_secs_f64()).clamp(0.0, 1.0);
-        let bar_width = card.inner_width.clamp(3, 16);
-        let filled = ((bar_width as f64) * ratio).round() as usize;
-        let countdown_bar = if basic_terminal {
-            format!(
-                "[{}{}]",
-                "=".repeat(filled),
-                "-".repeat(bar_width.saturating_sub(filled))
-            )
+        let countdown_bar = if card.notification.sticky {
+            // No countdown: the card stays until it is dismissed, so show
+            // that something is still running instead.
+            activity_indicator(basic_terminal)
         } else {
-            format!(
-                "{}{}",
-                "━".repeat(filled),
-                "─".repeat(bar_width.saturating_sub(filled))
-            )
+            let total_duration = card.notification.kind.total_duration();
+            let remaining = card
+                .notification
+                .expires_at
+                .saturating_duration_since(std::time::Instant::now());
+            let ratio = (remaining.as_secs_f64() / total_duration.as_secs_f64()).clamp(0.0, 1.0);
+            let bar_width = card.inner_width.clamp(3, 16);
+            let filled = ((bar_width as f64) * ratio).round() as usize;
+            if basic_terminal {
+                format!(
+                    "[{}{}]",
+                    "=".repeat(filled),
+                    "-".repeat(bar_width.saturating_sub(filled))
+                )
+            } else {
+                format!(
+                    "{}{}",
+                    "━".repeat(filled),
+                    "─".repeat(bar_width.saturating_sub(filled))
+                )
+            }
         };
 
         let block = Block::default()

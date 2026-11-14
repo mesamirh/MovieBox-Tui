@@ -232,6 +232,8 @@ pub fn get_provider_stream_path(
         ProviderKind::FourKHdHub => "v4_",
         // Discard streams cached with the DASH referer on recovered MP4 files.
         ProviderKind::MovieBox => "v2_",
+        // Discard addon streams cached before torrent streams were supported.
+        ProviderKind::Addons => "v2_",
         _ => "",
     };
     let hashed_id = md5_hex(subject_id);

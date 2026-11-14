@@ -8,6 +8,7 @@ impl App {
                 let mut needs_redraw = (self.state.is_loading && self.state.tick_count % 5 == 0)
                     || self.state.tick_count < 15;
                 self.state.tick_count = self.state.tick_count.wrapping_add(1);
+                self.tick_torrent_notice();
                 if !self.state.notifications.is_empty() {
                     needs_redraw = true;
                     self.state.expire_notifications();

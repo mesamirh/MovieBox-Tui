@@ -130,6 +130,27 @@ where
     deserializer.deserialize_any(StringOrNumberVisitor)
 }
 
+/// `videoSize` arrives as an integer from most addons, but some send a float or
+/// a numeric string. Anything unreadable becomes `None` instead of failing.
+fn de_opt_u64_lenient<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = <Option<serde_json::Value> as serde::Deserialize>::deserialize(deserializer)?;
+    let non_negative = |f: f64| (f.is_finite() && f >= 0.0).then_some(f as u64);
+    Ok(match value {
+        Some(serde_json::Value::Number(n)) => {
+            n.as_u64().or_else(|| n.as_f64().and_then(non_negative))
+        }
+        Some(serde_json::Value::String(s)) => s
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .or_else(|| s.trim().parse::<f64>().ok().and_then(non_negative)),
+        _ => None,
+    })
+}
+
 fn de_opt_usize_or_string<'de, D>(deserializer: D) -> Result<Option<usize>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -400,18 +421,18 @@ pub struct MetaDetail {
     pub videos: Vec<MetaVideo>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StreamBehaviorHints {
     #[serde(rename = "notWebReady", default)]
     pub not_web_ready: bool,
     #[serde(default)]
     pub headers: Option<HashMap<String, String>>,
-    #[serde(rename = "videoSize")]
+    #[serde(rename = "videoSize", default, deserialize_with = "de_opt_u64_lenient")]
     pub video_size: Option<u64>,
     pub filename: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StreamItem {
     pub name: Option<String>,
     pub title: Option<String>,
@@ -419,6 +440,19 @@ pub struct StreamItem {
     pub url: Option<String>,
     #[serde(rename = "behaviorHints")]
     pub behavior_hints: Option<StreamBehaviorHints>,
+    /// Torrent info-hash (40 hex chars) for P2P streams.
+    #[serde(rename = "infoHash", default)]
+    pub info_hash: Option<String>,
+    /// Zero-based index of the video file inside the torrent.
+    #[serde(
+        rename = "fileIdx",
+        default,
+        deserialize_with = "de_opt_usize_or_string"
+    )]
+    pub file_idx: Option<usize>,
+    /// Tracker (`tracker:udp://...`) and DHT (`dht:<hash>`) hints for the swarm.
+    #[serde(default, deserialize_with = "de_string_or_vec")]
+    pub sources: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -438,6 +472,8 @@ pub struct InstalledAddon {
     pub id_prefixes: Vec<String>,
     #[serde(default)]
     pub types: Vec<String>,
+    #[serde(default)]
+    pub catalogs: Vec<CatalogDefinition>,
 }
 
 impl InstalledAddon {
@@ -455,6 +491,7 @@ impl InstalledAddon {
             provides_stream: false,
             id_prefixes: vec!["tt".to_string()],
             types: vec!["movie".to_string(), "series".to_string()],
+            catalogs: Vec::new(),
         }
     }
 
@@ -475,6 +512,7 @@ impl InstalledAddon {
             provides_stream: manifest.provides_stream(),
             id_prefixes: manifest.id_prefixes.clone(),
             types: manifest.types.clone(),
+            catalogs: manifest.catalogs.clone(),
         }
     }
 }
@@ -488,11 +526,85 @@ pub struct AddonCatalogTarget {
     pub catalog_id: String,
 }
 
+const MAX_BROWSE_CATALOGS: usize = 32;
+
+fn humanize_catalog_token(raw: &str) -> String {
+    match raw.trim() {
+        "top" | "popular" | "Popular" => "Top".to_string(),
+        "imdbRating" | "Featured" | "featured" => "Top Rated".to_string(),
+        "year" | "New" => "New".to_string(),
+        other if !other.contains(' ') && (other.contains('-') || other.contains('_')) => other
+            .split(['-', '_'])
+            .filter(|w| !w.is_empty())
+            .map(|w| {
+                let mut c = w.chars();
+                match c.next() {
+                    Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        other => other.to_string(),
+    }
+}
+
+fn format_catalog_label(cat: &CatalogDefinition, addon_name: &str, multi: bool) -> String {
+    let type_label = match cat.r#type.to_ascii_lowercase().as_str() {
+        "movie" | "movies" => "Movies".to_string(),
+        "series" | "tv" | "show" | "shows" => "Series".to_string(),
+        "anime" => "Anime".to_string(),
+        "channel" | "channels" => "Channels".to_string(),
+        other => humanize_catalog_token(other),
+    };
+    let raw_name = cat
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(cat.id.as_str());
+    let clean_name = humanize_catalog_token(raw_name);
+    let lower_name = clean_name.to_ascii_lowercase();
+    let lower_type = type_label.to_ascii_lowercase();
+    let base = if clean_name.is_empty() || lower_name == lower_type {
+        format!("Top {type_label}")
+    } else if lower_name.contains(&lower_type)
+        || (lower_type == "movies" && lower_name.contains("movie"))
+        || (lower_type == "series"
+            && (lower_name.contains("series") || lower_name.contains("show")))
+    {
+        clean_name
+    } else {
+        format!("{clean_name} {type_label}")
+    };
+    if multi
+        && !base
+            .to_ascii_lowercase()
+            .contains(&addon_name.to_ascii_lowercase())
+    {
+        format!("{base} ({addon_name})")
+    } else {
+        base
+    }
+}
+
+fn push_unique_target(targets: &mut Vec<AddonCatalogTarget>, target: AddonCatalogTarget) {
+    if targets.len() < MAX_BROWSE_CATALOGS
+        && !targets.iter().any(|existing| {
+            existing.manifest_url == target.manifest_url
+                && existing.r#type.eq_ignore_ascii_case(&target.r#type)
+                && existing.catalog_id == target.catalog_id
+        })
+    {
+        targets.push(target);
+    }
+}
+
 pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTarget> {
-    let mut targets = Vec::new();
+    let mut targets: Vec<AddonCatalogTarget> = Vec::new();
     let enabled_catalogs: Vec<&InstalledAddon> = addons
         .iter()
-        .filter(|a| a.enabled && a.provides_catalog)
+        .filter(|a| a.enabled && (a.provides_catalog || !a.catalogs.is_empty()))
         .collect();
 
     let multi = enabled_catalogs.len() > 1;
@@ -504,48 +616,86 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
             String::new()
         };
 
+        let browsable: Vec<&CatalogDefinition> = addon
+            .catalogs
+            .iter()
+            .filter(|c| {
+                !c.r#type.trim().is_empty()
+                    && !c.id.trim().is_empty()
+                    && !c.extra.iter().any(|e| e.is_required)
+            })
+            .collect();
+
+        if !browsable.is_empty() {
+            for cat in browsable {
+                push_unique_target(
+                    &mut targets,
+                    AddonCatalogTarget {
+                        label: format_catalog_label(cat, &addon.name, multi),
+                        addon_name: addon.name.clone(),
+                        manifest_url: addon.manifest_url.clone(),
+                        r#type: cat.r#type.clone(),
+                        catalog_id: cat.id.clone(),
+                    },
+                );
+            }
+            continue;
+        }
+
         let has_movies =
             addon.types.is_empty() || addon.types.iter().any(|t| t.eq_ignore_ascii_case("movie"));
         let has_series =
             addon.types.is_empty() || addon.types.iter().any(|t| t.eq_ignore_ascii_case("series"));
 
         if has_movies {
-            targets.push(AddonCatalogTarget {
-                label: format!("Top Movies{suffix}"),
-                addon_name: addon.name.clone(),
-                manifest_url: addon.manifest_url.clone(),
-                r#type: "movie".to_string(),
-                catalog_id: "top".to_string(),
-            });
+            push_unique_target(
+                &mut targets,
+                AddonCatalogTarget {
+                    label: format!("Top Movies{suffix}"),
+                    addon_name: addon.name.clone(),
+                    manifest_url: addon.manifest_url.clone(),
+                    r#type: "movie".to_string(),
+                    catalog_id: "top".to_string(),
+                },
+            );
         }
         if has_series {
-            targets.push(AddonCatalogTarget {
-                label: format!("Top Series{suffix}"),
-                addon_name: addon.name.clone(),
-                manifest_url: addon.manifest_url.clone(),
-                r#type: "series".to_string(),
-                catalog_id: "top".to_string(),
-            });
+            push_unique_target(
+                &mut targets,
+                AddonCatalogTarget {
+                    label: format!("Top Series{suffix}"),
+                    addon_name: addon.name.clone(),
+                    manifest_url: addon.manifest_url.clone(),
+                    r#type: "series".to_string(),
+                    catalog_id: "top".to_string(),
+                },
+            );
         }
         if has_movies && addon.is_core() {
-            targets.push(AddonCatalogTarget {
-                label: format!("Top Rated Movies{suffix}"),
-                addon_name: addon.name.clone(),
-                manifest_url: addon.manifest_url.clone(),
-                r#type: "movie".to_string(),
-                catalog_id: "imdbRating".to_string(),
-            });
+            push_unique_target(
+                &mut targets,
+                AddonCatalogTarget {
+                    label: format!("Top Rated Movies{suffix}"),
+                    addon_name: addon.name.clone(),
+                    manifest_url: addon.manifest_url.clone(),
+                    r#type: "movie".to_string(),
+                    catalog_id: "imdbRating".to_string(),
+                },
+            );
         }
         if has_series && addon.is_core() {
-            targets.push(AddonCatalogTarget {
-                label: format!("Top Rated Series{suffix}"),
-                addon_name: addon.name.clone(),
-                manifest_url: addon.manifest_url.clone(),
-                r#type: "series".to_string(),
-                catalog_id: "imdbRating".to_string(),
-            });
+            push_unique_target(
+                &mut targets,
+                AddonCatalogTarget {
+                    label: format!("Top Rated Series{suffix}"),
+                    addon_name: addon.name.clone(),
+                    manifest_url: addon.manifest_url.clone(),
+                    r#type: "series".to_string(),
+                    catalog_id: "imdbRating".to_string(),
+                },
+            );
         }
-        if targets.len() >= 6 {
+        if targets.len() >= MAX_BROWSE_CATALOGS {
             break;
         }
     }
@@ -582,6 +732,33 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
         });
     }
 
-    targets.truncate(6);
+    targets.truncate(MAX_BROWSE_CATALOGS);
     targets
+}
+
+/// Finds a catalog target matching a `/browse <filter>` query by label, addon
+/// name, catalog ID, or media type.
+pub fn find_catalog_preset(addons: &[InstalledAddon], filter: &str) -> Option<AddonCatalogTarget> {
+    let needle = filter.trim().to_ascii_lowercase();
+    if needle.is_empty() {
+        return None;
+    }
+    let presets = curated_catalog_presets(addons);
+    presets
+        .iter()
+        .find(|t| t.label.to_ascii_lowercase() == needle)
+        .or_else(|| {
+            presets
+                .iter()
+                .find(|t| t.label.to_ascii_lowercase().starts_with(&needle))
+        })
+        .or_else(|| {
+            presets.iter().find(|t| {
+                t.label.to_ascii_lowercase().contains(&needle)
+                    || t.addon_name.to_ascii_lowercase().contains(&needle)
+                    || t.catalog_id.to_ascii_lowercase().contains(&needle)
+                    || t.r#type.to_ascii_lowercase().contains(&needle)
+            })
+        })
+        .cloned()
 }

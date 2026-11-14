@@ -60,6 +60,7 @@ flate2 = "1.0.35"
 tar = "0.4.44"
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 tempfile = "3.17.1"
+librqbit = { version = "9.1", default-features = false, features = ["rust-tls"] }
 
 [lib]
 name = "moviebox_tui"
