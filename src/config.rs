@@ -267,6 +267,49 @@ pub fn load() -> Config {
     Config::default()
 }
 
+pub const DEFAULT_BUILTIN_TORRENT_PORT: u16 = 11490;
+pub const BUILTIN_TORRENT_PORT_TRIES: u16 = 20;
+
+static BOUND_TORRENT_PORT: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
+
+/// Port of the built-in torrent engine (`MOVIEBOX_BUILTIN_TORRENT_PORT` overrides).
+pub fn builtin_torrent_port() -> u16 {
+    std::env::var("MOVIEBOX_BUILTIN_TORRENT_PORT")
+        .ok()
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .filter(|p| *p > 0)
+        .unwrap_or(DEFAULT_BUILTIN_TORRENT_PORT)
+}
+
+/// Records the loopback port actually bound by `crate::torrent_engine`.
+pub fn set_bound_torrent_port(port: u16) {
+    BOUND_TORRENT_PORT.store(port, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Returns the active loopback port of the built-in torrent engine, falling
+/// back to [`builtin_torrent_port`] before the listener starts.
+pub fn active_torrent_port() -> u16 {
+    let bound = BOUND_TORRENT_PORT.load(std::sync::atomic::Ordering::Relaxed);
+    if bound > 0 {
+        bound
+    } else {
+        builtin_torrent_port()
+    }
+}
+
+/// True when `port` is within the local torrent engine's candidate port range.
+pub fn is_local_torrent_port(port: u16) -> bool {
+    let base = builtin_torrent_port();
+    let max = base.saturating_add(BUILTIN_TORRENT_PORT_TRIES);
+    (base..=max).contains(&port)
+        || port == BOUND_TORRENT_PORT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Base URL of the built-in torrent engine (loopback only).
+pub fn torrent_engine_base() -> String {
+    format!("http://127.0.0.1:{}", active_torrent_port())
+}
+
 pub fn save(config: &Config) {
     let Some(path) = config_path() else {
         return;
@@ -314,6 +357,17 @@ pub fn load_addons() -> Vec<InstalledAddon> {
         for a in &mut list {
             if a.is_core() {
                 a.enabled = true;
+            }
+        }
+    }
+    for a in &mut list {
+        if a.provides_catalog && a.catalogs.is_empty() && !a.is_core() {
+            let norm =
+                crate::providers::addons::AddonClient::normalize_manifest_url(&a.manifest_url);
+            if let Some(cached) = crate::cache::get_addon_manifest_cache_typed(&norm)
+                && !cached.catalogs.is_empty()
+            {
+                a.catalogs = cached.catalogs;
             }
         }
     }

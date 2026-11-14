@@ -3101,6 +3101,7 @@ mod tests {
                     provides_stream: false,
                     id_prefixes: vec![],
                     types: vec![],
+                    catalogs: vec![],
                 },
                 crate::providers::addons::models::InstalledAddon {
                     manifest_url: "https://x2".into(),
@@ -3113,6 +3114,7 @@ mod tests {
                     provides_stream: false,
                     id_prefixes: vec![],
                     types: vec![],
+                    catalogs: vec![],
                 },
                 crate::providers::addons::models::InstalledAddon {
                     manifest_url: "https://x3".into(),
@@ -3125,6 +3127,7 @@ mod tests {
                     provides_stream: false,
                     id_prefixes: vec![],
                     types: vec![],
+                    catalogs: vec![],
                 },
             ],
             addon_manager_selected: 2,

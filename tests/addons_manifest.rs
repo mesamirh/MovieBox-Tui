@@ -117,6 +117,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
             description: None,
             url: Some("https://cdn.example.com/s01e08_1080p.mp4".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("HdHub\n1080p".to_string()),
@@ -124,6 +125,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
             description: None,
             url: Some("https://cdn.example.com/s01e06_1080p.mp4".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("HdHub\n720p".to_string()),
@@ -131,6 +133,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
             description: None,
             url: Some("https://cdn.example.com/s01e08_720p.mp4".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("HdHub\n720p".to_string()),
@@ -138,6 +141,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
             description: None,
             url: Some("https://cdn.example.com/s01e07_720p.mp4".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
     ];
 
@@ -184,6 +188,7 @@ fn test_addon_movie_stream_resolution_remains_unaffected() {
         description: None,
         url: Some("https://cdn.example.com/inception_1080p.mp4".to_string()),
         behavior_hints: None,
+        ..Default::default()
     };
 
     let release = stream_item_to_release("Cinemeta", &movie_stream, 0, 0)
@@ -216,6 +221,7 @@ fn test_addon_stream_parsing_and_release_mapping() {
             video_size: Some(1_234_567_890),
             filename: Some("Breaking.Bad.S01E01.1080p.mkv".to_string()),
         }),
+        ..Default::default()
     };
 
     let release = stream_item_to_release("HdHub", &stream, 1, 1).expect("valid release");
@@ -290,8 +296,65 @@ fn test_installed_addon_cinemeta_protection() {
         provides_stream: true,
         id_prefixes: vec!["tt".to_string()],
         types: vec!["movie".to_string(), "series".to_string()],
+        catalogs: vec![],
     };
     assert!(!community_addon.is_core());
+}
+
+#[test]
+fn test_curated_catalog_presets_includes_installed_addon_catalogs_and_skips_search_only() {
+    use moviebox_tui::providers::addons::models::{
+        AddonManifest, CatalogDefinition, CatalogExtra, curated_catalog_presets,
+        find_catalog_preset,
+    };
+
+    let raw_manifest = r#"{
+        "id": "org.kitsu.anime",
+        "name": "Kitsu Anime",
+        "version": "1.0.0",
+        "resources": ["catalog", "meta"],
+        "types": ["anime", "series"],
+        "catalogs": [
+            {"type": "anime", "id": "kitsu-anime-trending", "name": "Trending"},
+            {"type": "anime", "id": "kitsu-anime-popular", "name": "Popular"},
+            {"type": "anime", "id": "kitsu-anime-search", "name": "Search", "extra": [{"name": "search", "isRequired": true}]}
+        ]
+    }"#;
+    let manifest: AddonManifest = serde_json::from_str(raw_manifest).unwrap();
+    let kitsu = InstalledAddon::from_manifest(
+        "https://kitsu.example.com/manifest.json".to_string(),
+        &manifest,
+    );
+    assert_eq!(kitsu.catalogs.len(), 3);
+
+    let addons = vec![InstalledAddon::cinemeta_default(), kitsu];
+    let presets = curated_catalog_presets(&addons);
+    assert!(
+        presets
+            .iter()
+            .any(|p| p.catalog_id == "kitsu-anime-trending")
+    );
+    assert!(
+        presets
+            .iter()
+            .any(|p| p.catalog_id == "kitsu-anime-popular")
+    );
+    assert!(!presets.iter().any(|p| p.catalog_id == "kitsu-anime-search"));
+
+    let matched = find_catalog_preset(&addons, "trending").expect("trending preset");
+    assert_eq!(matched.catalog_id, "kitsu-anime-trending");
+    assert_eq!(matched.addon_name, "Kitsu Anime");
+
+    let _ = (CatalogDefinition {
+        r#type: "movie".to_string(),
+        id: "top".to_string(),
+        name: None,
+        extra: vec![CatalogExtra {
+            name: "genre".to_string(),
+            is_required: false,
+            options: None,
+        }],
+    },);
 }
 
 #[tokio::test]
@@ -318,7 +381,7 @@ async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_st
 }
 
 #[test]
-fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+fn test_addon_mixed_stream_filtering_and_magnet_mapping() {
     let raw_streams = vec![
         StreamItem {
             name: Some("HTTP 1080p Stream".to_string()),
@@ -326,6 +389,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
             description: None,
             url: Some("https://example.test/stream1.mp4".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("HTTP 720p Stream".to_string()),
@@ -333,6 +397,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
             description: None,
             url: Some("http://example.test/stream2.mp4".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("Magnet Link".to_string()),
@@ -340,6 +405,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
             description: None,
             url: Some("magnet:?xt=urn:btih:d08244124e9f0863014f56947ab51404ec102770".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("Local File".to_string()),
@@ -347,6 +413,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
             description: None,
             url: Some("file:///etc/passwd".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("FTP Stream".to_string()),
@@ -354,6 +421,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
             description: None,
             url: Some("ftp://example.test/video.mkv".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("Invalid".to_string()),
@@ -361,6 +429,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
             description: None,
             url: Some("not-a-valid-url-string".to_string()),
             behavior_hints: None,
+            ..Default::default()
         },
         StreamItem {
             name: Some("Empty".to_string()),
@@ -368,6 +437,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
             description: None,
             url: None,
             behavior_hints: None,
+            ..Default::default()
         },
     ];
 
@@ -378,7 +448,9 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
         }
     }
 
-    assert_eq!(accepted_releases.len(), 2);
+    // Two HTTP streams plus the magnet, which now plays through the built-in
+    // torrent engine. file://, ftp:// and junk URLs are still rejected.
+    assert_eq!(accepted_releases.len(), 3);
     assert_eq!(
         accepted_releases[0].mirrors[0].resolver_url,
         "https://example.test/stream1.mp4"
@@ -386,6 +458,15 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
     assert_eq!(
         accepted_releases[1].mirrors[0].resolver_url,
         "http://example.test/stream2.mp4"
+    );
+    let engine_prefix = format!(
+        "{}/stream?link=magnet",
+        moviebox_tui::config::torrent_engine_base()
+    );
+    assert!(
+        accepted_releases[2].mirrors[0]
+            .resolver_url
+            .starts_with(&engine_prefix)
     );
 }
 

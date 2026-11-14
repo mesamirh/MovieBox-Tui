@@ -137,6 +137,59 @@ impl MovieBoxService {
         Ok(items)
     }
 
+    pub async fn fetch_addon_catalog_page(
+        &self,
+        manifest_url: &str,
+        r#type: &str,
+        catalog_id: &str,
+        page: usize,
+        skip: usize,
+    ) -> Result<Vec<CatalogItem>, String> {
+        if page <= 1 || skip == 0 {
+            return self
+                .fetch_addon_catalog(manifest_url, r#type, catalog_id)
+                .await;
+        }
+        let paged_id = format!("{catalog_id}_skip_{skip}");
+        let manifest_clone = manifest_url.to_string();
+        let type_clone = r#type.to_string();
+        let cat_id_clone = paged_id.clone();
+        if let Ok(Some(cached)) = tokio::task::spawn_blocking(move || {
+            crate::cache::get_addon_catalog_cache_typed(&manifest_clone, &type_clone, &cat_id_clone)
+        })
+        .await
+        {
+            return Ok(cached);
+        }
+
+        let base_url = crate::providers::addons::AddonClient::base_addon_url(manifest_url);
+        let extra = format!("skip={skip}");
+        let metas = self
+            .addon_client
+            .fetch_catalog(&base_url, r#type, catalog_id, Some(&extra))
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let items: Vec<CatalogItem> = metas
+            .iter()
+            .map(crate::providers::addons::adapter::meta_to_catalog_item)
+            .collect();
+
+        let manifest_clone = manifest_url.to_string();
+        let type_clone = r#type.to_string();
+        let cat_id_clone = paged_id;
+        let items_clone = items.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::cache::set_addon_catalog_cache_typed(
+                &manifest_clone,
+                &type_clone,
+                &cat_id_clone,
+                &items_clone,
+            );
+        });
+        Ok(items)
+    }
+
     pub async fn details_typed(
         &self,
         provider: ProviderKind,
