@@ -22,5 +22,6 @@ dist/
 book/
 docs/changelog.md
 docs/contributing.md
-# Generated UniFFI bindings for the iOS client (regenerate with ios/scripts/build-rust.sh)
-ios/Generated/
+# Xcode user state for the iOS project
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/

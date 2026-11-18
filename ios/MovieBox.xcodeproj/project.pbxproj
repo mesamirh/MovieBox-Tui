@@ -1,0 +1,357 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1A0000000000000000000014 /* Exceptions for "MovieBox" folder in "MovieBox" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1A0000000000000000000005 /* MovieBox */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		1A0000000000000000000006 /* MovieBox */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1A0000000000000000000014 /* Exceptions for "MovieBox" folder in "MovieBox" target */,
+			);
+			path = MovieBox;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileReference section */
+		1A0000000000000000000003 /* MovieBox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MovieBox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000000000000000000018 /* moviebox_tui.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = moviebox_tui.swift; sourceTree = "<group>"; };
+		1A0000000000000000000019 /* moviebox_tuiFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = moviebox_tuiFFI.h; sourceTree = "<group>"; };
+		1A000000000000000000001A /* moviebox_tuiFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.module-map; path = moviebox_tuiFFI.modulemap; sourceTree = "<group>"; };
+		1A000000000000000000001B /* bridging.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bridging.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXBuildFile section */
+		1A0000000000000000000009 /* moviebox_tui.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* moviebox_tui.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1A000000000000000000000B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1A0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000006 /* MovieBox */,
+				1A0000000000000000000017 /* Generated */,
+				1A0000000000000000000002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1A0000000000000000000002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000003 /* MovieBox.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1A0000000000000000000017 /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000018 /* moviebox_tui.swift */,
+				1A000000000000000000001B /* bridging.h */,
+				1A0000000000000000000019 /* moviebox_tuiFFI.h */,
+				1A000000000000000000001A /* moviebox_tuiFFI.modulemap */,
+			);
+			name = Generated;
+			path = Generated;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1A0000000000000000000005 /* MovieBox */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A000000000000000000000F /* Build configuration list for PBXNativeTarget "MovieBox" */;
+			buildPhases = (
+				1A000000000000000000000D /* Build Rust core */,
+				1A000000000000000000000A /* Sources */,
+				1A000000000000000000000B /* Frameworks */,
+				1A000000000000000000000C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1A0000000000000000000006 /* MovieBox */,
+			);
+			name = MovieBox;
+			packageProductDependencies = (
+			);
+			productName = MovieBox;
+			productReference = 1A0000000000000000000003 /* MovieBox.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1A0000000000000000000004 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					1A0000000000000000000005 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 1A000000000000000000000E /* Build configuration list for PBXProject "MovieBox" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1A0000000000000000000001;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1A0000000000000000000002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1A0000000000000000000005 /* MovieBox */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1A000000000000000000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		1A000000000000000000000D /* Build Rust core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust core";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# The Rust static library is what the UniFFI bindings call into.\n# Skipped when it already exists so ordinary UI builds stay fast; delete\n# target/*/release/libmoviebox_tui.a or run ios/scripts/build-rust.sh to refresh.\nset -e\nARCH_DIR=\"$SRCROOT/../target/aarch64-apple-ios-sim/release/libmoviebox_tui.a\"\nDEVICE_DIR=\"$SRCROOT/../target/aarch64-apple-ios/release/libmoviebox_tui.a\"\nif [ ! -f \"$ARCH_DIR\" ] || [ ! -f \"$DEVICE_DIR\" ]; then\n    echo \"note: building the Rust core for iOS (one time, several minutes)\"\n    \"$SRCROOT/scripts/build-rust.sh\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1A000000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A0000000000000000000009 /* moviebox_tui.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1A0000000000000000000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1A0000000000000000000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1A0000000000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Generated";
+				INFOPLIST_FILE = MovieBox/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../target/aarch64-apple-ios/release",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../target/aarch64-apple-ios-sim/release",
+				);
+				MARKETING_VERSION = 0.1.29;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lmoviebox_tui",
+					"-lc++",
+					"-liconv",
+					"-lresolv",
+					"-lz",
+					"-framework",
+					Security,
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					CoreFoundation,
+					"-framework",
+					Network,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.moviebox.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Generated/bridging.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1A0000000000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Generated";
+				INFOPLIST_FILE = MovieBox/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../target/aarch64-apple-ios/release",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../target/aarch64-apple-ios-sim/release",
+				);
+				MARKETING_VERSION = 0.1.29;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lmoviebox_tui",
+					"-lc++",
+					"-liconv",
+					"-lresolv",
+					"-lz",
+					"-framework",
+					Security,
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					CoreFoundation,
+					"-framework",
+					Network,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.moviebox.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Generated/bridging.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1A000000000000000000000E /* Build configuration list for PBXProject "MovieBox" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000000000000000000010 /* Debug */,
+				1A0000000000000000000011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A000000000000000000000F /* Build configuration list for PBXNativeTarget "MovieBox" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000000000000000000012 /* Debug */,
+				1A0000000000000000000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1A0000000000000000000004 /* Project object */;
+}

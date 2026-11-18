@@ -99,7 +99,7 @@ one `MobileClient` per process behind a serial queue and wraps every call in a
 
 ## Build pipeline
 
-The build is script-driven; no Xcode project is committed.
+There are two ways to build it: the committed `ios/MovieBox.xcodeproj` (Xcode and CI) and a script-only `swiftc` path for environments without a project file. Both consume the same static library and the same generated bindings.
 
 | Script | What it does | Output |
 | --- | --- | --- |
@@ -169,7 +169,7 @@ SIMCTL_CHILD_MOVIEBOX_OPEN_URL="moviebox://play/<id>?autoplay=1" \
 - **App Transport Security is relaxed.** `NSAllowsArbitraryLoads` is enabled because
   stream CDNs are served over plain HTTP with provider-specific headers.
 - **Sideload/simulator oriented.** There is no App Store distribution path, no code
-  signing configuration and no Xcode project in the repository; the build is entirely
+  signing configuration and no distribution profile; the committed project signs with
   script-driven. Device static libraries link, but the packaged bundle targets the
   simulator.
 

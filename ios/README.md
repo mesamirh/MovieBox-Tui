@@ -10,30 +10,55 @@ AVFoundation, Foundation — no third-party dependencies.
 
 ## Prerequisites
 
-- Xcode with the iOS 17+ SDK and an iOS simulator runtime.
+- Xcode 16 or newer with the iOS 17+ SDK and an iOS simulator runtime.
 - Rust with the iOS targets (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`).
 - `cargo`, plus the `uniffi-bindgen` binary target that ships in this repository.
 
-## Build and run
+## Build and run in Xcode
 
-Two scripts, run from the repository root:
+Open the project and hit Run:
 
 ```bash
-# 1. Build the Rust core for device + simulator and regenerate the Swift bindings.
-./ios/scripts/build-rust.sh
-
-# 2. Compile the SwiftUI app for the simulator and assemble MovieBox.app.
-./ios/scripts/build-app.sh
-
-# 3. Install and launch on a booted simulator (defaults to "iPhone 17 Pro").
-./ios/scripts/run-simulator.sh
+open ios/MovieBox.xcodeproj
 ```
 
-`build-app.sh` type-checks and compiles every `ios/MovieBox/**/*.swift` file with
-`swiftc`, links `target/aarch64-apple-ios-sim/release/libmoviebox_tui.a` and the
-generated bindings from `ios/Generated/`, and writes the bundle to
-`target/ios/arm64/MovieBox.app`. There is no Xcode project: re-run it after any
-Swift change.
+Pick the `MovieBox` scheme and any iPhone simulator. The target is fully
+configured: bundle id `com.moviebox.ios`, iOS 17.0 deployment target, Swift 5
+language mode, device family iPhone + iPad, and the generated UniFFI sources are
+already referenced.
+
+The Rust side is built by the target's first build phase, `Build Rust core`. It
+is a no-op while `target/aarch64-apple-ios{,-sim}/release/libmoviebox_tui.a`
+exist, so ordinary UI builds stay fast. Delete those files (or run
+`ios/scripts/build-rust.sh` yourself) after changing anything under `src/`.
+
+**Running on a physical device**: select your team under *Signing &
+Capabilities* — the project uses automatic signing with no team preset. The
+`Info.plist` already declares the `moviebox` URL scheme, App Transport Security
+for provider CDNs and the local-network usage string.
+
+## Build from the command line
+
+The same project builds headless, which is what CI uses:
+
+```bash
+xcodebuild -project ios/MovieBox.xcodeproj -scheme MovieBox \
+  -configuration Debug -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+```
+
+There is also a `swiftc` path that needs no Xcode project at all, useful for a
+quick check or for environments without one:
+
+```bash
+./ios/scripts/build-rust.sh   # Rust core + bindings (device and simulator)
+./ios/scripts/build-app.sh    # compiles to target/ios/arm64/MovieBox.app
+./ios/scripts/run-simulator.sh  # installs and launches it
+```
+
+`build-app.sh` compiles every `ios/MovieBox/**/*.swift` file directly, links
+`target/aarch64-apple-ios-sim/release/libmoviebox_tui.a`, and writes
+`target/ios/arm64/MovieBox.app`. Re-run it after any Swift change.
 
 To use a different simulator device, pass a name:
 
