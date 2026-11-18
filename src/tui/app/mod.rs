@@ -201,6 +201,7 @@ impl App {
         state.bdix_probed = config.bdix_probed;
         state.streaming_enabled = config.streaming_enabled;
         state.tv_enabled = config.tv_enabled;
+        state.hide_hindi = config.hide_hindi;
         state.addons_enabled = config.addons_enabled;
         if !state.streaming_enabled && !state.tv_enabled {
             state.streaming_enabled = true;
@@ -337,6 +338,7 @@ impl App {
             streaming_enabled: self.state.streaming_enabled,
             tv_enabled: self.state.tv_enabled,
             addons_enabled: self.state.addons_enabled,
+            hide_hindi: self.state.hide_hindi,
             default_player: self.state.default_player.clone(),
             download_dir: self
                 .state

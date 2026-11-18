@@ -897,6 +897,15 @@ impl App {
                     }
                 }
 
+                // Spec S2: the details dub list is the client state the language
+                // picker and dub switching read, so Hindi dubs are dropped here
+                // (after the merge with the previously shown subject's dubs, so
+                // no unfiltered list can slip back in).
+                if crate::config::load().hide_hindi {
+                    details.dubs =
+                        crate::language_filter::filter_dubs(std::mem::take(&mut details.dubs));
+                }
+
                 self.state.active_subject_id = Some(id.clone());
                 self.state.selected_details = Some(details.clone());
 
@@ -1605,6 +1614,11 @@ impl App {
 
                 let mut filtered = raw_list;
                 filtered.sort_by_key(|b| std::cmp::Reverse(b.resolution_u64()));
+                // Spec S2/S4: the picker never offers a Hindi release, unless it
+                // is the only one left, in which case the title stays playable.
+                if crate::config::load().hide_hindi {
+                    filtered = crate::language_filter::filter_releases(filtered);
+                }
 
                 let count = filtered.len();
                 if count > 0 {
@@ -1972,7 +1986,10 @@ mod tests {
         assert_eq!(details.genres, vec!["Romance", "Drama"]);
         assert_eq!(details.director.as_deref(), Some("Director Name"));
         assert_eq!(details.stars.as_deref(), Some("Actor One, Actor Two"));
-        assert_eq!(details.dubs.len(), 2);
+        // The previous subject's dubs are merged back in, minus the Hindi one:
+        // spec S2 keeps the remaining versions playable and hides the Hindi dub.
+        assert_eq!(details.dubs.len(), 1);
+        assert_eq!(details.dubs[0].language, "Original");
     }
 
     #[tokio::test]

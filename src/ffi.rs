@@ -226,6 +226,13 @@ impl MobileClient {
                 .await
         });
         let releases = releases.map_err(|error| MobileError::new(error.to_string()))?;
+        // Spec S2/S3: the Hindi filter lives in the core, so the iOS picker and
+        // autoplay see exactly what the terminal client sees.
+        let releases = if crate::config::load().hide_hindi {
+            crate::language_filter::filter_releases(releases)
+        } else {
+            releases
+        };
         Ok(releases.into_iter().map(release_from).collect())
     }
 
@@ -452,6 +459,13 @@ fn details_for_storage(item: &MobileCatalogItem) -> MediaDetails {
 }
 
 fn details_from(details: &MediaDetails) -> MobileDetails {
+    // Spec S2/S3: Hindi dubs are dropped here, so `sibling_subject_ids` (and the
+    // caption search that walks it) never reaches a Hindi dub either.
+    let dubs = if crate::config::load().hide_hindi {
+        crate::language_filter::filter_dubs(details.dubs.clone())
+    } else {
+        details.dubs.clone()
+    };
     MobileDetails {
         id: details.id.value.clone(),
         provider: details.id.provider.label().to_string(),
@@ -466,8 +480,7 @@ fn details_from(details: &MediaDetails) -> MobileDetails {
         runtime: details.duration.clone(),
         genres: details.genres.clone(),
         poster_url: details.poster_url.clone(),
-        sibling_subject_ids: details
-            .dubs
+        sibling_subject_ids: dubs
             .iter()
             .map(|dub| dub.subject_id.clone())
             .filter(|id| !id.is_empty() && *id != details.id.value)

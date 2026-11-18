@@ -21,6 +21,7 @@ pub struct Config {
     pub streaming_enabled: bool,
     pub tv_enabled: bool,
     pub addons_enabled: bool,
+    pub hide_hindi: bool,
     pub default_player: Option<String>,
     pub download_dir: Option<String>,
     pub vlc_path: Option<String>,
@@ -44,6 +45,7 @@ impl Default for Config {
             streaming_enabled: true,
             tv_enabled: true,
             addons_enabled: false,
+            hide_hindi: true,
             default_player: None,
             download_dir: None,
             vlc_path: None,
@@ -350,5 +352,27 @@ mod tests {
         let json = serde_json::to_string(&config).expect("serialize");
         let deserialized: Config = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(deserialized.active_mode, config.active_mode);
+    }
+
+    #[test]
+    fn hide_hindi_defaults_on_and_round_trips() {
+        // S5b: the filter is on by default.
+        assert!(Config::default().hide_hindi);
+
+        let json = serde_json::to_string(&Config::default()).expect("serialize");
+
+        let mut value: serde_json::Value = serde_json::from_str(&json).expect("json value");
+        value["hide_hindi"] = serde_json::Value::Bool(false);
+        let configured: Config = serde_json::from_value(value).expect("deserialize false");
+        assert!(!configured.hide_hindi);
+
+        // An older config file without the key keeps loading, and defaults on.
+        let mut value: serde_json::Value = serde_json::from_str(&json).expect("json value");
+        value
+            .as_object_mut()
+            .expect("config object")
+            .remove("hide_hindi");
+        let legacy: Config = serde_json::from_value(value).expect("deserialize legacy");
+        assert!(legacy.hide_hindi);
     }
 }

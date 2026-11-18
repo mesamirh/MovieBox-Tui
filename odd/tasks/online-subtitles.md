@@ -50,11 +50,21 @@ receives a subset of what the TUI shows.
 
 | ID | Spec | Route | Commit |
 | --- | --- | --- | --- |
-| T1 | S3, S5 | writer | IMDb resolver + OpenSubtitles client + unit tests | `feat(subtitle): resolve an imdb id and query the opensubtitles addon` |
+| T1 | S3, S5 | writer | IMDb resolver + OpenSubtitles client + unit tests | d753764 |
 | T2 | S1, S2, S4, S6 | inline | `MovieBoxService::search_online_subtitles` + ranking + cache | same commit as T1 |
-| T3 | S1, S2, S7 | inline | FFI method + dub-sibling ids for iOS | `feat(subtitle): expose online subtitle search to the clients` |
+| T3 | S1, S2, S7 | inline | FFI method + dub-sibling ids for iOS | 5b5ea48 |
 | T4 | S1, S4, S6 | inline | iOS subtitle menu: online section, ordering, states | same commit as T3 |
-| T5 | — | inline | ios/README.md + docs table + CHANGELOG | `docs(subtitle): document online subtitle search` |
+| T5 | — | inline | ios/README.md + docs table + CHANGELOG | 5b5ea48 |
+
+## Delivery slices
+
+- Slice 1 (d753764): `src/providers/opensubtitles.rs`, `src/providers/mod.rs`,
+  `src/cache.rs`, `src/service.rs` — the whole T1+T2 core unit, new client and its
+  tests together. 1025 authored lines is above the ~400-line target on its own: this
+  commit is the reviewable unit for the core client and must be reviewed as one,
+  while the client-facing work stays in slice 2.
+- Slice 2 (5b5ea48): `src/ffi.rs`, regenerated `ios/Generated`, the iOS Swift files,
+  docs and CHANGELOG — ~294 authored lines.
 
 ## Log
 

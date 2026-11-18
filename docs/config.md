@@ -7,7 +7,7 @@ MovieBox-TUI stores its settings in `config.json` inside your platform configura
 Enter `/settings` in the search bar or click `[ ⚙ Settings ]` on the Home screen to configure options interactively:
 
 - **General**: Toggle automatic update checks, select default media player (`mpv`, `VLC`, `IINA`, `Android`), and customize download directory.
-- **Content Modes**: Toggle Streaming Mode, enable or disable specific streaming providers (MovieBox, 4KHDHub, Dramachi, CircleFTP, DhakaFlix), and toggle Live TV Mode.
+- **Content Modes**: Toggle Streaming Mode, enable or disable specific streaming providers (MovieBox, 4KHDHub, Dramachi, CircleFTP, DhakaFlix), toggle Live TV Mode, and hide Hindi releases and Hindi audio tracks.
 - **Appearance**: Select among 9 color themes (Mocha, Latte, Macchiato, Frappe, Nord, TokyoNight, Dracula, Gruvbox, RosePine) with live preview.
 - **Maintenance**: Check for updates, re-test local BDIX network connectivity, clear disk cache, clear watch history, and open the GitHub repository.
 
@@ -31,6 +31,7 @@ Enter `/settings` in the search bar or click `[ ⚙ Settings ]` on the Home scre
 | `dramachi_enabled` | `bool` | `true` | Enable Dramachi streaming provider |
 | `bdix_circleftp_enabled` | `bool` | `false` | Enable CircleFTP (BDIX) provider |
 | `bdix_dhakaflix_enabled` | `bool` | `false` | Enable DhakaFlix (BDIX) provider |
+| `hide_hindi` | `bool` | `true` | Hide Hindi releases and Hindi audio tracks. A title that only exists in Hindi is still offered, so this never empties a picker |
 | `theme` | `string` | `"TokyoNight"` | Active color theme |
 | `mpv_path` | `string?` | `None` | Custom executable path for `mpv` |
 | `vlc_path` | `string?` | `None` | Custom executable path for `VLC` |

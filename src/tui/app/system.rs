@@ -402,6 +402,10 @@ impl App {
                                 }
                             }
                         }
+                        3 => {
+                            self.state.hide_hindi = !self.state.hide_hindi;
+                            self.persist_config();
+                        }
                         _ => {}
                     }
                 }
@@ -531,6 +535,10 @@ impl App {
                                     }
                                 }
                             }
+                        }
+                        3 => {
+                            self.state.hide_hindi = !self.state.hide_hindi;
+                            self.persist_config();
                         }
                         _ => {}
                     }

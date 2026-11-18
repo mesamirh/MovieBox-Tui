@@ -84,7 +84,7 @@ impl SettingsCategory {
     pub fn row_count(self) -> usize {
         match self {
             Self::General => 3,
-            Self::ContentModes => 3,
+            Self::ContentModes => 4,
             Self::Appearance => 1,
             Self::StorageInfo => 5,
         }
@@ -308,6 +308,7 @@ pub struct AppState {
 
     pub is_tv_mode: bool,
     pub tv_enabled: bool,
+    pub hide_hindi: bool,
     pub tv_config_popup: bool,
     pub tv_channels: Vec<crate::providers::tv::Channel>,
     pub tv_playlists: Vec<String>,
@@ -479,6 +480,7 @@ impl Default for AppState {
             streaming_enabled: true,
             is_tv_mode: false,
             tv_enabled: true,
+            hide_hindi: true,
             tv_config_popup: false,
             tv_channels: Vec::new(),
             tv_playlists: Vec::new(),

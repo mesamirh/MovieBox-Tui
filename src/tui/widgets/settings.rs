@@ -468,7 +468,7 @@ fn render_general_settings(frame: &mut Frame, area: Rect, state: &AppState, them
 }
 
 fn render_content_modes_settings(frame: &mut Frame, area: Rect, state: &AppState, theme: &Theme) {
-    let row_rects = settings_row_rects_in_area(area, 3);
+    let row_rects = settings_row_rects_in_area(area, 4);
     let has_active_popup = has_active_settings_popup(state);
 
     if let Some(&row_area) = row_rects.first() {
@@ -546,6 +546,28 @@ fn render_content_modes_settings(frame: &mut Frame, area: Rect, state: &AppState
                 is_selected,
                 has_active_popup,
                 label: "Live TV Mode",
+                value_spans,
+            },
+            theme,
+            state.basic_terminal,
+        );
+    }
+
+    if let Some(&row_area) = row_rects.get(3) {
+        let is_selected = state.settings_selected_row == 3;
+        let value_spans = on_off_spans(
+            state.hide_hindi,
+            has_active_popup,
+            theme,
+            state.basic_terminal,
+        );
+        render_row(
+            frame,
+            row_area,
+            SettingRow {
+                is_selected,
+                has_active_popup,
+                label: "Hide Hindi Releases",
                 value_spans,
             },
             theme,
@@ -1049,6 +1071,44 @@ mod tests {
         let popup = Rect::new(4, 4, 76, 17);
         let rows = settings_row_rects(popup, SettingsCategory::Appearance);
         assert_eq!(rows.len(), 1);
+    }
+
+    #[test]
+    fn test_render_content_modes_shows_hide_hindi_toggle() {
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let theme = Theme::mocha();
+        let mut state = AppState {
+            show_settings_popup: true,
+            settings_category: SettingsCategory::ContentModes,
+            settings_selected_row: 3,
+            hide_hindi: false,
+            ..Default::default()
+        };
+
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw(frame, area, &mut state, &theme);
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let rendered = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("Hide Hindi Releases"));
+        assert!(rendered.contains("OFF"));
+
+        let popup = Rect::new(4, 4, 76, 17);
+        let rows = settings_row_rects(popup, SettingsCategory::ContentModes);
+        assert_eq!(rows.len(), 4);
     }
 
     #[test]

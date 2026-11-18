@@ -6,6 +6,8 @@
 - **Subtitles**:
   - Added an online subtitle search backed by the keyless OpenSubtitles v3 Stremio addon. The Rust core resolves the title's IMDb id, fetches the matching subtitles and orders them Spanish first, English second, then the rest, so the TUI and the iOS client share one implementation.
   - The iOS player now offers a "Search subtitles online" section next to the provider captions, reports an empty answer instead of failing, and forwards the dub sibling ids so its caption list matches the terminal client.
+- **Language Filtering**:
+  - Added a `hide_hindi` preference (on by default) that removes Hindi releases and Hindi audio tracks from every client through one core filter, with a Content Modes toggle in the settings hub. Catalog titles stay visible: only the Hindi options disappear, and a title that exists only in Hindi is still offered so the picker can never be emptied by the preference.
 
 ## [0.1.29] - 2026-11-05
 
