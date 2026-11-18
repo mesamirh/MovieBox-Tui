@@ -554,6 +554,23 @@ pub fn set_captions_cache_typed(subject_id: &str, resource_id: &str, captions: &
     set_typed_cache(&path, CACHE_EXPIRY_SECS, captions);
 }
 
+/// A title's IMDb id never changes, so it outlives the one-day caption cache.
+const IMDB_CACHE_EXPIRY_SECS: u64 = 30 * 24 * 60 * 60;
+
+fn get_imdb_id_path(key: &str) -> PathBuf {
+    let mut path = crate::config::cache_dir().join("opensubtitles");
+    path.push(format!("imdb_{}.cache", md5_hex(key)));
+    path
+}
+
+pub fn get_imdb_id_cache(key: &str) -> Option<String> {
+    get_typed_cache(&get_imdb_id_path(key), IMDB_CACHE_EXPIRY_SECS)
+}
+
+pub fn set_imdb_id_cache(key: &str, imdb_id: &str) {
+    set_typed_cache(&get_imdb_id_path(key), IMDB_CACHE_EXPIRY_SECS, imdb_id);
+}
+
 #[cfg_attr(windows, allow(clippy::permissions_set_readonly_false))]
 fn resilient_remove_file(path: &Path) -> std::io::Result<()> {
     match fs::remove_file(path) {

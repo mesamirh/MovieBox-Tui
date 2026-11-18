@@ -4,6 +4,7 @@ pub mod dramachi;
 pub mod fourkhdhub;
 pub mod models;
 pub mod moviebox;
+pub mod opensubtitles;
 pub mod tv;
 
 pub use tv as m3u;

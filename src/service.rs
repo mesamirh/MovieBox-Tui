@@ -17,6 +17,7 @@ pub struct MovieBoxService {
     pub dhakaflix_client: DhakaFlixClient,
     pub addon_client: crate::providers::addons::AddonClient,
     pub dramachi_client: crate::providers::dramachi::DramachiClient,
+    pub opensubtitles: crate::providers::opensubtitles::OpenSubtitlesClient,
     pub http_client: reqwest::Client,
 }
 
@@ -40,6 +41,7 @@ impl MovieBoxService {
             dhakaflix_client: DhakaFlixClient::new(),
             addon_client: crate::providers::addons::AddonClient::new(),
             dramachi_client: crate::providers::dramachi::DramachiClient::new(),
+            opensubtitles: crate::providers::opensubtitles::OpenSubtitlesClient::new(),
             http_client,
         }
     }
@@ -297,6 +299,102 @@ impl MovieBoxService {
         }
 
         Ok(deduplicated)
+    }
+
+    /// Online subtitles for a title, keyed by its resolved IMDb id.
+    ///
+    /// S4 orders Spanish first, English second and the rest after. S6 means every
+    /// failure path returns an empty list: an unreachable addon or an IMDb title
+    /// with no confident match must never break playback or drop the provider
+    /// captions the caller already has.
+    pub async fn search_online_subtitles(
+        &self,
+        title: &str,
+        year: Option<&str>,
+        is_series: bool,
+        season: usize,
+        episode: usize,
+    ) -> Vec<crate::providers::models::SubtitleOption> {
+        let title = title.trim();
+        if title.is_empty() {
+            return Vec::new();
+        }
+        let year_number = year.and_then(|value| value.trim().parse::<i32>().ok());
+        let cache_key = format!(
+            "{}|{}|{}",
+            title.to_lowercase(),
+            year_number.map(|y| y.to_string()).unwrap_or_default(),
+            is_series
+        );
+
+        let cached = crate::cache::get_imdb_id_cache(&cache_key)
+            .filter(|value| crate::providers::opensubtitles::is_imdb_id(value));
+        let imdb_id = match cached {
+            Some(id) => id,
+            None => {
+                match self
+                    .opensubtitles
+                    .resolve_imdb_id(title, year_number, is_series)
+                    .await
+                {
+                    Ok(Some(id)) => {
+                        crate::cache::set_imdb_id_cache(&cache_key, &id);
+                        id
+                    }
+                    Ok(None) => return Vec::new(),
+                    Err(error) => {
+                        log::debug!("online subtitle imdb lookup failed: {}", error.user_message());
+                        return Vec::new();
+                    }
+                }
+            }
+        };
+
+        let season_episode = if is_series && season > 0 {
+            Some((season, episode))
+        } else {
+            None
+        };
+        match self
+            .opensubtitles
+            .fetch_subtitles(&imdb_id, season_episode)
+            .await
+        {
+            Ok(entries) => Self::online_subtitle_options(entries),
+            Err(error) => {
+                log::debug!("online subtitle search failed: {}", error.user_message());
+                Vec::new()
+            }
+        }
+    }
+
+    /// Turns addon entries into picker rows: labelled by language, deduped by URL
+    /// and ordered by the S4 preference.
+    fn online_subtitle_options(
+        entries: Vec<crate::providers::opensubtitles::OnlineSubtitle>,
+    ) -> Vec<crate::providers::models::SubtitleOption> {
+        use crate::providers::opensubtitles::{language_label, language_rank};
+
+        let mut seen_urls = std::collections::HashSet::new();
+        let mut ranked: Vec<(u8, String, String)> = entries
+            .into_iter()
+            .filter(|entry| seen_urls.insert(entry.url.clone()))
+            .map(|entry| {
+                let language = language_label(&entry.lang);
+                let release = entry.label.trim();
+                let name = if release.is_empty() {
+                    language
+                } else {
+                    format!("{language} · {release}")
+                };
+                (language_rank(&entry.lang), name, entry.url)
+            })
+            .collect();
+        ranked.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+        ranked
+            .into_iter()
+            .map(|(_, name, url)| crate::providers::models::SubtitleOption { name, url })
+            .collect()
     }
 
     fn append_unique_captions(
@@ -611,6 +709,78 @@ pub fn find_matching_resource_item(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn online(lang: &str, label: &str, url: &str) -> crate::providers::opensubtitles::OnlineSubtitle {
+        crate::providers::opensubtitles::OnlineSubtitle {
+            url: url.to_string(),
+            lang: lang.to_string(),
+            label: label.to_string(),
+            format: None,
+        }
+    }
+
+    #[test]
+    fn online_subtitle_options_orders_spanish_then_english_then_the_rest() {
+        let options = MovieBoxService::online_subtitle_options(vec![
+            online("por", "Portuguese.BluRay", "https://cdn.example.com/por.srt"),
+            online("eng", "English.WEB", "https://cdn.example.com/eng.srt"),
+            online("spa", "Spanish.BluRay", "https://cdn.example.com/spa.srt"),
+        ]);
+
+        assert_eq!(
+            options
+                .iter()
+                .map(|option| option.name.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "Español · Spanish.BluRay",
+                "English · English.WEB",
+                "POR · Portuguese.BluRay"
+            ]
+        );
+    }
+
+    #[test]
+    fn online_subtitle_options_orders_alphabetically_within_one_language() {
+        let options = MovieBoxService::online_subtitle_options(vec![
+            online("spa", "Zeta", "https://cdn.example.com/z.srt"),
+            online("spa", "Alfa", "https://cdn.example.com/a.srt"),
+        ]);
+
+        assert_eq!(
+            options
+                .iter()
+                .map(|option| option.url.as_str())
+                .collect::<Vec<_>>(),
+            ["https://cdn.example.com/a.srt", "https://cdn.example.com/z.srt"]
+        );
+    }
+
+    #[test]
+    fn online_subtitle_options_drops_a_repeated_url() {
+        let options = MovieBoxService::online_subtitle_options(vec![
+            online("spa", "First", "https://cdn.example.com/same.srt"),
+            online("eng", "Second", "https://cdn.example.com/same.srt"),
+        ]);
+
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].name, "Español · First");
+    }
+
+    #[test]
+    fn online_subtitle_options_falls_back_to_the_language_when_the_release_is_unknown() {
+        let options =
+            MovieBoxService::online_subtitle_options(vec![online("eng", "  ", "https://cdn.example.com/e.srt")]);
+
+        assert_eq!(options[0].name, "English");
+    }
+
+    #[tokio::test]
+    async fn search_online_subtitles_needs_no_network_without_a_title() {
+        let service = MovieBoxService::new();
+
+        assert!(service.search_online_subtitles("  ", Some("2010"), false, 0, 0).await.is_empty());
+    }
 
     #[tokio::test]
     async fn test_decode_poster_caps_dimensions() {
