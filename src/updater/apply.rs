@@ -438,18 +438,14 @@ mod tests {
         let real_exe = temp.path().join("moviebox-tui");
         std::fs::write(&real_exe, b"test-bin").unwrap();
 
-        // Exact match
         assert_eq!(resolve_executable_path(&real_exe), real_exe);
 
-        // Linux deleted suffix
         let deleted_path = temp.path().join("moviebox-tui (deleted)");
         assert_eq!(resolve_executable_path(&deleted_path), real_exe);
 
-        // Linux old.deleted suffix
         let old_deleted_path = temp.path().join("moviebox-tui.old (deleted)");
         assert_eq!(resolve_executable_path(&old_deleted_path), real_exe);
 
-        // Linux old suffix
         let old_path = temp.path().join("moviebox-tui.old");
         assert_eq!(resolve_executable_path(&old_path), real_exe);
     }

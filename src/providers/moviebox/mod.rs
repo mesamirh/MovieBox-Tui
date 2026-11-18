@@ -437,7 +437,6 @@ fn empty_streams_error(
 }
 
 fn episode_resource_path(subject_id: &str, season: usize, episode: usize) -> String {
-    // The legacy resource listing ignores se/ep and paginates the entire series.
     format!(
         "/wefeed-mobile-bff/subject-api/resource/v2?subjectId={subject_id}&page=1&perPage=20&all=0&startPosition=1&endPosition=1&pagerMode=2&resolution=0&se={season}&epFrom={episode}&epTo={episode}&isVip=true"
     )

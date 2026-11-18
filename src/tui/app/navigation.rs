@@ -1136,7 +1136,6 @@ mod tests {
         };
 
         app.state.selected_resources = vec![r1, r2];
-        // Select the first release which has resource_id: None
         app.state.resource_list_state.select(Some(0));
 
         assert_eq!(

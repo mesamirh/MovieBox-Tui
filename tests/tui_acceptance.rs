@@ -89,10 +89,8 @@ async fn test_playback_resolves_subtitle_popup_when_selected_release_lacks_resou
     app.state_mut().selected_resources = vec![r1, r2];
     app.state_mut().resource_list_state.select(Some(0)); // Selected 1080p which has None
 
-    // Trigger PlayStream
     app.handle_action(Action::PlayStream).await;
 
-    // Sibling resource_id fallback must be engaged so it prepares playback instead of bypassing directly
     assert!(
         app.state().pending_playback_source.is_some(),
         "Playback source must be pending subtitle resolution rather than launched directly without subtitles"

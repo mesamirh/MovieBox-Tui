@@ -528,7 +528,6 @@ pub fn stream_item_to_release(
         }
 
         if let Some(proxy_val) = &hints.proxy_headers {
-            // Handle { "request": { "Referer": "...", "User-Agent": "..." } }
             if let Some(req_map) = proxy_val.get("request").and_then(|v| v.as_object()) {
                 for (k, v) in req_map {
                     if let Some(s) = v.as_str() {

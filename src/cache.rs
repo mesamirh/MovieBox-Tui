@@ -230,7 +230,6 @@ pub fn get_provider_stream_path(
     let mut path = get_provider_cache_dir(provider, "streams");
     let schema = match provider {
         ProviderKind::FourKHdHub => "v4_",
-        // Discard streams cached with the DASH referer on recovered MP4 files.
         ProviderKind::MovieBox => "v2_",
         _ => "",
     };

@@ -31,7 +31,6 @@ async fn test_live_movie_stream_real_urls() {
                 "Stream URL should be a DASH manifest or recovered MP4 file: {}",
                 link
             );
-            // Resolving a URL is insufficient: verify the CDN serves media bytes.
             let mut request = client.http_client().get(link).header("Range", "bytes=0-31");
             for (name, value) in &release.mirrors[0].headers {
                 request = request.header(name.as_str(), value.as_str());

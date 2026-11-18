@@ -588,13 +588,11 @@ pub fn moviebox_resource_position_json_to_release(
         }
         let mut release = original.clone();
         release.mirrors = candidate.mirrors;
-        // The original size belongs to the placeholder clip, not the recovered file.
         if candidate.size_bytes.is_some() {
             release.size_bytes = candidate.size_bytes;
         }
         for mirror in &mut release.mirrors {
             mirror.direct_file = true;
-            // Direct MP4s reject the DASH referer with HTTP 429.
             mirror.headers = vec![("User-Agent".to_string(), user_agent.to_string())];
         }
         return Some(release);
