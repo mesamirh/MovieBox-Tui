@@ -469,7 +469,9 @@ fn details_from(details: &MediaDetails) -> MobileDetails {
     MobileDetails {
         id: details.id.value.clone(),
         provider: details.id.provider.label().to_string(),
-        title: details.title.clone(),
+        // S8: the player HUD and the online subtitle search both read this title, so
+        // the dub marker of a MovieBox subject title never reaches the viewer.
+        title: crate::providers::moviebox::title::clean_subtitle_title(&details.title),
         is_series: details.is_series(),
         year: details.year.clone(),
         overview: details.description.clone(),

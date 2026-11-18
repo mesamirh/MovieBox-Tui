@@ -46,6 +46,8 @@ they do today.
 sibling `subject_id`s instead of `&[]` (`src/ffi.rs:239`), which is why it currently
 receives a subset of what the TUI shows.
 
+**S8 (user report, 2026-11-18)** — "Parace que la busqueda de subititulos busca usando la palabra [Hindi]. Por lo tanto no me trae data". The online search must clean the content title before querying IMDb: MovieBox subject titles reach `MediaDetails.title` untagged-cleaned (`src/providers/moviebox/adapt.rs:251-255`) and can carry dub markers such as `[Hindi] Title` or `Title - Hindi`, which fail the strict normalized-title match in `pick_best_candidate` and produce an empty list. The cleanup reuses the existing `clean_moviebox_title` (`src/providers/moviebox/title.rs:1-67`), strips a trailing year in parentheses, and must not alter a clean title. The same cleaned title is what the iOS player shows, so the viewer never reads a dub tag as the search query.
+
 ## Tasks
 
 | ID | Spec | Route | Commit |
@@ -55,6 +57,12 @@ receives a subset of what the TUI shows.
 | T3 | S1, S2, S7 | inline | FFI method + dub-sibling ids for iOS | 5b5ea48 |
 | T4 | S1, S4, S6 | inline | iOS subtitle menu: online section, ordering, states | same commit as T3 |
 | T5 | — | inline | ios/README.md + docs table + CHANGELOG | 5b5ea48 |
+| T9 | S8 | writer | normalize the query title + show the cleaned title + tests | `fix(subtitle): clean the title before the imdb lookup` |
+
+### L7 (user, verbatim) — "Parace que la busqueda de subititulos busca usando la palabra [Hindi]. Por lo tanto no me trae data"
+
+- **L8 (evidence, diagnosis)** — nothing in the iOS→Rust chain inserts a language: `PlayerView.swift:451` → `AppModel.swift:307` → `ffi.rs:268-283` → `service.rs:316-317,333`. The raw MovieBox subject title reaches `MediaDetails.title` uncleaned (`moviebox/adapt.rs:251-255`) while the repo already expects tagged titles (`moviebox/title.rs:1-67` strips `[...]` and ` - Hindi`). `[Hindi] Title` normalizes to `"hindi title"`, which cannot equal `"title"`, so the strict match returns `None` and the list is empty. Live probes: `tt1375666` returns 80 entries, `tt0903747:1:1` returns 89, `animal` resolves to `tt13751694` — the pipeline itself works.
+- **L9 (evidence, second finding)** — the iOS HUD also shows the raw tagged title, and provider caption rows are named by bare language (`lanName`, `moviebox/adapt.rs:35-58`), so the viewer sees "Hindi" next to a search that never used it.
 
 ## Delivery slices
 

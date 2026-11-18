@@ -307,6 +307,12 @@ impl MovieBoxService {
     /// failure path returns an empty list: an unreachable addon or an IMDb title
     /// with no confident match must never break playback or drop the provider
     /// captions the caller already has.
+    ///
+    /// S8: the incoming title is a MovieBox subject title and can carry a dub marker
+    /// (`[Hindi] Animal`, `Animal - Hindi`) or a trailing release year, none of which
+    /// the strict normalized-title match in `pick_best_candidate` accepts. It is
+    /// cleaned once, and that same cleaned form is both the IMDb query and the
+    /// cache key, so a tagged title and its clean form share one lookup.
     pub async fn search_online_subtitles(
         &self,
         title: &str,
@@ -315,17 +321,12 @@ impl MovieBoxService {
         season: usize,
         episode: usize,
     ) -> Vec<crate::providers::models::SubtitleOption> {
-        let title = title.trim();
-        if title.is_empty() {
+        let query_title = crate::providers::moviebox::title::clean_subtitle_title(title);
+        if query_title.is_empty() {
             return Vec::new();
         }
         let year_number = year.and_then(|value| value.trim().parse::<i32>().ok());
-        let cache_key = format!(
-            "{}|{}|{}",
-            title.to_lowercase(),
-            year_number.map(|y| y.to_string()).unwrap_or_default(),
-            is_series
-        );
+        let cache_key = imdb_cache_key(&query_title, year_number, is_series);
 
         let cached = crate::cache::get_imdb_id_cache(&cache_key)
             .filter(|value| crate::providers::opensubtitles::is_imdb_id(value));
@@ -334,7 +335,7 @@ impl MovieBoxService {
             None => {
                 match self
                     .opensubtitles
-                    .resolve_imdb_id(title, year_number, is_series)
+                    .resolve_imdb_id(&query_title, year_number, is_series)
                     .await
                 {
                     Ok(Some(id)) => {
@@ -706,9 +707,23 @@ pub fn find_matching_resource_item(
     })
 }
 
+/// Cache key of the resolved IMDb id for one title, year and kind (S8).
+///
+/// `clean_title` must come from `providers::moviebox::title::clean_subtitle_title`, which
+/// is what makes `[Hindi] Animal` and `Animal` share one on-disk lookup.
+fn imdb_cache_key(clean_title: &str, year: Option<i32>, is_series: bool) -> String {
+    format!(
+        "{}|{}|{}",
+        clean_title.to_lowercase(),
+        year.map(|value| value.to_string()).unwrap_or_default(),
+        is_series
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::moviebox::title::clean_subtitle_title;
 
     fn online(lang: &str, label: &str, url: &str) -> crate::providers::opensubtitles::OnlineSubtitle {
         crate::providers::opensubtitles::OnlineSubtitle {
@@ -780,6 +795,34 @@ mod tests {
         let service = MovieBoxService::new();
 
         assert!(service.search_online_subtitles("  ", Some("2010"), false, 0, 0).await.is_empty());
+    }
+
+    #[test]
+    fn imdb_cache_key_uses_the_cleaned_title() {
+        // The method derives the key from the cleaned title, so a tagged subject title
+        // and its clean form share one cached IMDb lookup (S8).
+        let tagged = imdb_cache_key(&clean_subtitle_title("[Hindi] Animal"), Some(2023), false);
+        let plain = imdb_cache_key(&clean_subtitle_title("Animal"), Some(2023), false);
+
+        assert_eq!(tagged, "animal|2023|false");
+        assert_eq!(tagged, plain);
+    }
+
+    #[test]
+    fn imdb_cache_key_keeps_year_and_kind_apart() {
+        // PRESERVE: the key still separates titles by year and by movie/series.
+        assert_eq!(
+            imdb_cache_key("Animal", Some(2023), false),
+            "animal|2023|false"
+        );
+        assert_ne!(
+            imdb_cache_key("Animal", Some(2023), false),
+            imdb_cache_key("Animal", None, false)
+        );
+        assert_ne!(
+            imdb_cache_key("Animal", Some(2023), false),
+            imdb_cache_key("Animal", Some(2023), true)
+        );
     }
 
     #[tokio::test]

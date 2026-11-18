@@ -111,6 +111,43 @@ pub fn clean_moviebox_title(raw_title: &str) -> &str {
     }
 }
 
+/// Cleans a subject title for the online subtitle lookup and for the player display (S8).
+///
+/// [`clean_moviebox_title`] drops dub markers such as `[Hindi]` and ` - Hindi` but keeps a
+/// release year in parentheses (`Inception (2010)` -> `Inception (2010)`), which the strict
+/// normalized-title match in `providers::opensubtitles::pick_best_candidate` cannot equal,
+/// so a trailing four-digit year is dropped here as well. A title with no marker and no
+/// trailing year comes back byte-identical.
+pub fn clean_subtitle_title(raw_title: &str) -> String {
+    strip_trailing_parenthesised_year(clean_moviebox_title(raw_title)).to_string()
+}
+
+/// Drops a `(YYYY)` that ends the title, leaving any other parentheses alone.
+fn strip_trailing_parenthesised_year(title: &str) -> &str {
+    let trimmed = title.trim_end();
+    if !trimmed.ends_with(')') {
+        return title;
+    }
+    let Some(open_pos) = trimmed.rfind('(') else {
+        return title;
+    };
+    let inside = trimmed[open_pos + 1..trimmed.len() - 1].trim();
+    let is_year = inside.len() == 4
+        && inside.chars().all(|character| character.is_ascii_digit())
+        && inside
+            .parse::<u32>()
+            .is_ok_and(|year| (1900..=2099).contains(&year));
+    if !is_year {
+        return title;
+    }
+    let without_year = trimmed[..open_pos].trim();
+    if without_year.is_empty() {
+        title
+    } else {
+        without_year
+    }
+}
+
 fn rfind_ignore_ascii_case(haystack: &str, needle: &str) -> Option<usize> {
     if needle.is_empty() {
         return Some(haystack.len());
@@ -227,5 +264,27 @@ mod tests {
         assert_eq!(clean_moviebox_title(""), "");
         assert_eq!(clean_moviebox_title("   "), "");
         assert_eq!(clean_moviebox_title("Interstellar"), "Interstellar");
+    }
+
+    #[test]
+    fn test_clean_subtitle_title_drops_dub_tags_and_a_trailing_year() {
+        // Spec S8: the online subtitle lookup and the iOS title use this form.
+        assert_eq!(clean_subtitle_title("[Hindi] Animal"), "Animal");
+        assert_eq!(clean_subtitle_title("Animal - Hindi"), "Animal");
+        assert_eq!(clean_subtitle_title("Animal (2023)"), "Animal");
+        assert_eq!(clean_subtitle_title("[Hindi] Animal (2023)"), "Animal");
+        // A title with no marker and no trailing year comes back byte-identical.
+        assert_eq!(clean_subtitle_title("Animal"), "Animal");
+        // `clean_moviebox_title` only treats a language word as a tag when it is a
+        // ` - `-separated suffix, so the leading word of the real title "Hindi Medium"
+        // is not a marker and must survive untouched.
+        assert_eq!(clean_subtitle_title("Hindi Medium"), "Hindi Medium");
+        // Only a trailing four-digit year is stripped: a leading parenthesised number
+        // is part of the title, and the year must be the last thing in it.
+        assert_eq!(
+            clean_subtitle_title("(500) Days of Summer"),
+            "(500) Days of Summer"
+        );
+        assert_eq!(clean_subtitle_title("  "), "");
     }
 }
