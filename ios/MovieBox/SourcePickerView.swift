@@ -12,9 +12,7 @@ struct SourcePickerView: View {
     @State private var releases: [MobileRelease] = []
 
     private var playable: [MobileRelease] {
-        releases
-            .filter { $0.isDirectFile && $0.url?.isEmpty == false }
-            .sorted { Format.qualityRank($0.quality) > Format.qualityRank($1.quality) }
+        Format.playableDirectFiles(releases)
     }
 
     private var manifests: [MobileRelease] {

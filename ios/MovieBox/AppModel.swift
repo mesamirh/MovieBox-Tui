@@ -509,9 +509,7 @@ final class AppModel: ObservableObject {
                 season: season,
                 episode: episode
             )
-            guard let release = releases.first(where: {
-                $0.isDirectFile && $0.url?.isEmpty == false
-            }) else {
+            guard let release = Format.playableDirectFiles(releases).first else {
                 // Nothing directly playable: fall back to the picker so the
                 // viewer sees why instead of a silent failure.
                 banner = "No directly playable source for this title."

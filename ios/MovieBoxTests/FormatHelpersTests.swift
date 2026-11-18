@@ -122,6 +122,29 @@ final class FormatHelpersTests: XCTestCase {
         XCTAssertEqual(Format.progress(historyItem(progress: UInt64.max, duration: 1)), 1)
     }
 
+    private func release(
+        _ filename: String,
+        quality: String? = "1080p",
+        codec: String? = "H264",
+        url: String? = "https://cdn.example.com/stream.mp4",
+        isDirectFile: Bool = true
+    ) -> MobileRelease {
+        MobileRelease(
+            filename: filename,
+            quality: quality,
+            codec: codec,
+            language: nil,
+            sizeBytes: nil,
+            season: nil,
+            episode: nil,
+            url: url,
+            sourceLabel: "Direct",
+            headers: [],
+            resourceId: nil,
+            isDirectFile: isDirectFile
+        )
+    }
+
     private func historyItem(
         progress: UInt64,
         duration: UInt64?,
@@ -139,6 +162,120 @@ final class FormatHelpersTests: XCTestCase {
             progressSeconds: progress,
             durationSeconds: duration,
             completed: completed
+        )
+    }
+}
+
+/// Playback source selection. `AVPlayer` decodes H.264 everywhere it runs, while
+/// MovieBox's 4K entries arrive as 10-bit HEVC or Dolby Vision and play their
+/// audio with no picture, so the first candidate has to be a decodable one
+/// instead of whatever the provider listed first.
+final class PlaybackSelectionTests: XCTestCase {
+
+    // MARK: - codecRank
+
+    func testH264OutranksHevcAndUnsupportedCodecs() {
+        XCTAssertEqual(Format.codecRank("H264"), 0)
+        XCTAssertEqual(Format.codecRank("h.264"), 0)
+        XCTAssertEqual(Format.codecRank("AVC"), 0)
+        XCTAssertEqual(Format.codecRank("HEVC"), 1)
+        XCTAssertEqual(Format.codecRank("H265"), 1)
+        XCTAssertEqual(Format.codecRank("Dolby Vision"), 1)
+        XCTAssertEqual(Format.codecRank("AV1"), 2)
+        XCTAssertEqual(Format.codecRank("VP9"), 2)
+    }
+
+    func testAnUnknownCodecRanksBetweenH264AndAV1() {
+        XCTAssertEqual(Format.codecRank(nil), 1)
+        XCTAssertEqual(Format.codecRank(""), 1)
+        XCTAssertTrue(Format.codecRank(nil) > Format.codecRank("H264"))
+        XCTAssertTrue(Format.codecRank(nil) < Format.codecRank("AV1"))
+    }
+
+    // MARK: - playableDirectFiles
+
+    func testPlayableDirectFilesPrefersH264OverAnEarlier4KHevcEntry() {
+        let releases = [
+            release("4k-hevc.mp4", quality: "4K", codec: "HEVC"),
+            release("1080-h264.mp4", quality: "1080p", codec: "H264"),
+        ]
+
+        let playable = Format.playableDirectFiles(releases)
+
+        XCTAssertEqual(playable.count, 2)
+        XCTAssertEqual(playable.first?.filename, "1080-h264.mp4")
+        XCTAssertEqual(playable.last?.filename, "4k-hevc.mp4")
+    }
+
+    func testPlayableDirectFilesPrefers1080pOver4KWithinOneCodec() {
+        let releases = [
+            release("4k-h264.mp4", quality: "4K", codec: "H264"),
+            release("1080-h264.mp4", quality: "1080p", codec: "H264"),
+            release("720-h264.mp4", quality: "720p", codec: "H264"),
+        ]
+
+        XCTAssertEqual(
+            Format.playableDirectFiles(releases).map(\.filename),
+            ["1080-h264.mp4", "720-h264.mp4", "4k-h264.mp4"]
+        )
+    }
+
+    func testPlayableDirectFilesKeepsHevcWhenItIsTheOnlyCandidate() {
+        let releases = [
+            release("4k-hevc.mp4", quality: "4K", codec: "HEVC"),
+            release("manifest.mpd", codec: "HEVC", isDirectFile: false),
+        ]
+
+        let playable = Format.playableDirectFiles(releases)
+
+        XCTAssertEqual(playable.map(\.filename), ["4k-hevc.mp4"])
+    }
+
+    func testPlayableDirectFilesDropsManifestsAndUrlLessEntries() {
+        let releases = [
+            release("manifest.m3u8", isDirectFile: false),
+            release("no-url.mp4", url: nil),
+            release("empty-url.mp4", url: ""),
+        ]
+
+        XCTAssertTrue(Format.playableDirectFiles(releases).isEmpty)
+    }
+
+    func testPlayableDirectFilesKeepsProviderOrderBetweenEqualCandidates() {
+        let releases = [
+            release("first.mp4"),
+            release("second.mp4"),
+            release("third.mp4"),
+        ]
+
+        XCTAssertEqual(
+            Format.playableDirectFiles(releases).map(\.filename),
+            ["first.mp4", "second.mp4", "third.mp4"]
+        )
+    }
+
+    // MARK: helpers
+
+    private func release(
+        _ filename: String,
+        quality: String? = "1080p",
+        codec: String? = "H264",
+        url: String? = "https://cdn.example.com/stream.mp4",
+        isDirectFile: Bool = true
+    ) -> MobileRelease {
+        MobileRelease(
+            filename: filename,
+            quality: quality,
+            codec: codec,
+            language: nil,
+            sizeBytes: nil,
+            season: nil,
+            episode: nil,
+            url: url,
+            sourceLabel: "Direct",
+            headers: [],
+            resourceId: nil,
+            isDirectFile: isDirectFile
         )
     }
 }

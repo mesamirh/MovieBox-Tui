@@ -50,6 +50,55 @@ enum Format {
         if digits.isEmpty { return 0 }
         return Int(String(digits)) ?? 0
     }
+
+    /// How reliably the system player decodes a codec: lower opens first.
+    ///
+    /// `AVPlayer` decodes H.264 on every device it runs on, while MovieBox's 4K
+    /// entries are usually 10-bit HEVC or Dolby Vision and can play their audio
+    /// with no picture at all. AV1/VP9 have no hardware path here, so they rank
+    /// last. An unlabelled codec sits in the middle: unknown, not promoted.
+    static func codecRank(_ codec: String?) -> Int {
+        guard let codec else { return 1 }
+        let normalized = codec.lowercased().filter { $0.isLetter || $0.isNumber }
+        guard !normalized.isEmpty else { return 1 }
+        if normalized.contains("avc") || normalized.contains("h264") || normalized.contains("x264") {
+            return 0
+        }
+        if normalized.contains("av1") || normalized.contains("vp9") {
+            return 2
+        }
+        return 1
+    }
+
+    /// Resolution preference for playback, lower first: 1080p, 720p, then
+    /// everything else, with 4K last because the 4K candidates are the ones
+    /// that arrive as 10-bit HEVC or Dolby Vision.
+    static func playbackQualityRank(_ quality: String?) -> Int {
+        let rank = qualityRank(quality)
+        if rank >= 2160 { return 3 }
+        if rank >= 1080 { return 0 }
+        if rank >= 720 { return 1 }
+        return 2
+    }
+
+    /// Direct files the system player can open, best candidate first.
+    ///
+    /// Codec wins over resolution, resolution breaks the codec tie, and the
+    /// provider order breaks everything left so the order stays deterministic.
+    static func playableDirectFiles(_ releases: [MobileRelease]) -> [MobileRelease] {
+        releases
+            .filter { $0.isDirectFile && $0.url?.isEmpty == false }
+            .enumerated()
+            .sorted { left, right in
+                let leftRank = codecRank(left.element.codec) * 4
+                    + playbackQualityRank(left.element.quality)
+                let rightRank = codecRank(right.element.codec) * 4
+                    + playbackQualityRank(right.element.quality)
+                if leftRank != rightRank { return leftRank < rightRank }
+                return left.offset < right.offset
+            }
+            .map(\.element)
+    }
 }
 
 // MARK: - Poster image

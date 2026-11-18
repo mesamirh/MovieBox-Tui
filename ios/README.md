@@ -110,7 +110,7 @@ there is no offline double for the UniFFI client.
 | Browse | Four catalog tabs matching the Roku channel — Home (`1`), Movies (`2`), TV Shows (`5`), Anime (`8`) — as a poster grid with title and year, paginated and pull-to-refresh. |
 | Search | Debounced and submit-on-return search with a results grid, type-ahead suggestions when nothing matches, and explicit empty/error states. |
 | Details | Poster, title, year, rating, runtime, genres, tagline, overview, credits; favorite toggle; season picker and episode list for series; a Play button for movies. |
-| Sources | Every `releases(...)` candidate with quality, codec, language, size and source label. Direct files are listed first and are the only ones you can tap; DASH/HLS manifests are shown disabled with an explanation. |
+| Sources | Every `releases(...)` candidate with quality, codec, language, size and source label. Direct files come first, ordered by what the system player decodes most reliably — H.264/1080p before 4K HEVC or Dolby Vision — and are the only ones you can tap; DASH/HLS manifests are shown disabled with an explanation. |
 | Player | `AVPlayerViewController` driven by the selected release URL. Provider headers are forwarded through `AVURLAssetHTTPHeaderFieldsKey`. Failures show a message with "Choose another source" instead of a blank screen. |
 | Subtitles | Caption tracks from `captions(...)`, fetched over HTTP, parsed as SRT or WebVTT and rendered as a timed overlay above the video. Toggleable from the CC button; malformed files degrade to a notice, never a crash. |
 | Library | Continue Watching from the on-disk history with progress bars, completed markers, resume, single-entry removal and clear-all; Favorites from the on-disk store with removal and details navigation. |
@@ -141,6 +141,12 @@ call may run on the main actor.
 - **Manifests.** Providers sometimes only offer DASH `.mpd` or HLS `.m3u8`
   manifests. AVPlayer cannot open those as files, so the source picker marks them
   unusable instead of failing silently during playback.
+- **Codec order.** Autoplay and the source picker share `Format.playableDirectFiles`,
+  which ranks H.264 above HEVC above AV1/VP9 and prefers 1080p over 4K. MovieBox's
+  4K entries are often 10-bit HEVC or Dolby Vision: AVPlayer reports
+  `readyToPlay`, plays the audio and never draws a picture, so a decodable
+  candidate has to win over a higher-numbered one. When HEVC is the only direct
+  file it is still played.
 - **Subtitles are an overlay, not an AVPlayer track.** AVPlayer cannot attach an
   arbitrary remote SRT to a stream, so cues are synced against the player clock
   and drawn above the video.
