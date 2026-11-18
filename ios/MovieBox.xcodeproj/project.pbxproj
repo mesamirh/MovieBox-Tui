@@ -6,6 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1A0000000000000000000009 /* moviebox_tui.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* moviebox_tui.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1A0000000000000000000003 /* MovieBox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MovieBox.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000000000000000000018 /* moviebox_tui.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = moviebox_tui.swift; sourceTree = "<group>"; };
+		1A0000000000000000000019 /* moviebox_tuiFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = moviebox_tuiFFI.h; sourceTree = "<group>"; };
+		1A000000000000000000001A /* moviebox_tuiFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = moviebox_tuiFFI.modulemap; sourceTree = "<group>"; };
+		1A000000000000000000001B /* bridging.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bridging.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		1A0000000000000000000014 /* Exceptions for "MovieBox" folder in "MovieBox" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -26,18 +38,6 @@
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
-
-/* Begin PBXFileReference section */
-		1A0000000000000000000003 /* MovieBox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MovieBox.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		1A0000000000000000000018 /* moviebox_tui.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = moviebox_tui.swift; sourceTree = "<group>"; };
-		1A0000000000000000000019 /* moviebox_tuiFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = moviebox_tuiFFI.h; sourceTree = "<group>"; };
-		1A000000000000000000001A /* moviebox_tuiFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.module-map; path = moviebox_tuiFFI.modulemap; sourceTree = "<group>"; };
-		1A000000000000000000001B /* bridging.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bridging.h; sourceTree = "<group>"; };
-/* End PBXFileReference section */
-
-/* Begin PBXBuildFile section */
-		1A0000000000000000000009 /* moviebox_tui.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* moviebox_tui.swift */; };
-/* End PBXBuildFile section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		1A000000000000000000000B /* Frameworks */ = {
@@ -75,7 +75,6 @@
 				1A0000000000000000000019 /* moviebox_tuiFFI.h */,
 				1A000000000000000000001A /* moviebox_tuiFFI.modulemap */,
 			);
-			name = Generated;
 			path = Generated;
 			sourceTree = "<group>";
 		};
@@ -235,7 +234,9 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TWZH6Z332Y;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Generated";
 				INFOPLIST_FILE = MovieBox/Info.plist;
@@ -243,7 +244,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../target/aarch64-apple-ios/release",
@@ -274,7 +274,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Generated/bridging.h";
+				SWIFT_OBJC_BRIDGING_HEADER = Generated/bridging.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -285,7 +285,9 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TWZH6Z332Y;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/Generated";
 				INFOPLIST_FILE = MovieBox/Info.plist;
@@ -293,7 +295,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
 					"$(SRCROOT)/../target/aarch64-apple-ios/release",
@@ -324,7 +325,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Generated/bridging.h";
+				SWIFT_OBJC_BRIDGING_HEADER = Generated/bridging.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

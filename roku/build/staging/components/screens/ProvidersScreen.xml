@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ProvidersScreen" extends="Group">
+    <interface>
+        <field id="action" type="assocarray" alwaysNotify="true" />
+        <field id="focusIn" type="boolean" alwaysNotify="true" onChange="onFocusIn" />
+        <field id="refresh" type="boolean" alwaysNotify="true" onChange="render" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/lib/Utils.brs" />
+    <script type="text/brightscript" uri="pkg:/components/screens/ProvidersScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/bslib.brs" />
+    <children>
+        <Poster uri="pkg:/images/bg_default.jpg" width="1920" height="1080" />
+        <Rectangle width="1920" height="1080" color="0x0A0E14C0" />
+        <Label id="heading" color="0xF2F4F8FF" translation="[96, 170]" text="Providers">
+            <Font role="font" uri="pkg:/fonts/Inter-Bold.ttf" size="48" />
+        </Label>
+        <Label id="intro" color="0x8A94A6FF" translation="[96, 240]" width="1180" wrap="true" text="Used when MovieBox can't play a title, and from Other Sources on any title. Add any Stremio addon that gives direct links: paste its manifest URL (for torrent addons, configure them with a debrid service first).">
+            <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="26" />
+        </Label>
+        <LabelList id="list" translation="[80, 400]" itemSize="[1180, 72]" itemSpacing="[0, 10]" numRows="7" vertFocusAnimationStyle="floatingFocus" focusBitmapUri="pkg:/images/pill.9.png" focusFootprintBitmapUri="pkg:/images/pill.9.png" focusFootprintBlendColor="0xFFFFFF1A" focusBitmapBlendColor="0xF5B82EFF" color="0xC9D1DCFF" focusedColor="0x0A0E14FF" textHorizAlign="left">
+            <Font role="font" uri="pkg:/fonts/Inter-Medium.ttf" size="28" />
+            <Font role="focusedFont" uri="pkg:/fonts/Inter-SemiBold.ttf" size="28" />
+        </LabelList>
+        <Group id="side" translation="[1340, 400]">
+            <Rectangle color="0x161C26FF" width="484" height="430" />
+            <Rectangle color="0xF5B82EFF" width="484" height="6" />
+            <Label color="0xF2F4F8FF" translation="[32, 36]" width="420" text="Tips">
+                <Font role="font" uri="pkg:/fonts/Inter-Bold.ttf" size="30" />
+            </Label>
+            <Label id="tips" color="0x8A94A6FF" translation="[32, 92]" width="420" wrap="true" lineSpacing="6">
+                <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="23" />
+            </Label>
+        </Group>
+        <Label id="status" color="0xF5B82EFF" translation="[96, 1010]" width="1700" wrap="false">
+            <Font role="font" uri="pkg:/fonts/Inter-Medium.ttf" size="26" />
+        </Label>
+        <SelectDialog id="dialog" visible="false" />
+    </children>
+</component>

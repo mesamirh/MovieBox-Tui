@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SearchScreen" extends="Group">
+    <interface>
+        <field id="action" type="assocarray" alwaysNotify="true" />
+        <field id="focusIn" type="boolean" alwaysNotify="true" onChange="onFocusIn" />
+        <field id="refresh" type="boolean" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/lib/Utils.brs" />
+    <script type="text/brightscript" uri="pkg:/components/screens/SearchScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/bslib.brs" />
+    <children>
+        <Poster uri="pkg:/images/bg_default.jpg" width="1920" height="1080" />
+        <Rectangle width="1920" height="1080" color="0x0A0E14A0" />
+        <Group id="left" translation="[96, 170]">
+            <Rectangle id="queryBox" color="0xFFFFFF14" width="574" height="84" />
+            <Rectangle id="queryAccent" color="0xF5B82EFF" width="574" height="4" translation="[0, 80]" />
+            <Label id="queryLabel" color="0xF2F4F8FF" translation="[24, 0]" width="526" height="84" vertAlign="center" wrap="false">
+                <Font role="font" uri="pkg:/fonts/Inter-Medium.ttf" size="34" />
+            </Label>
+            <MarkupGrid id="keyboard" translation="[0, 112]" itemComponentName="KeyItem" numColumns="6" numRows="7" itemSize="[86, 72]" itemSpacing="[11, 11]" drawFocusFeedback="false" vertFocusAnimationStyle="fixedFocusWrap" />
+            <Label id="kbHint" color="0x5A6476FF" translation="[0, 718]" width="574" wrap="true" text="Tip: use the Roku mobile app keyboard to type faster.">
+                <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="20" />
+            </Label>
+        </Group>
+        <Label id="resultsTitle" color="0xF2F4F8FF" translation="[760, 170]" width="1080" wrap="false">
+            <Font role="font" uri="pkg:/fonts/Inter-Bold.ttf" size="40" />
+        </Label>
+        <Label id="resultsHint" color="0x8A94A6FF" translation="[760, 232]" width="1060" wrap="true">
+            <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="26" />
+        </Label>
+        <MarkupGrid id="results" translation="[760, 290]" itemComponentName="PosterItem" numColumns="5" numRows="2" itemSize="[194, 372]" itemSpacing="[26, 30]" drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
+        <Spinner id="spinner" translation="[1300, 600]" />
+        <Timer id="debounce" duration="0.75" repeat="false" />
+    </children>
+</component>

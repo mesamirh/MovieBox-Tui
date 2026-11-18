@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="DetailsScreen" extends="Group">
+    <interface>
+        <field id="item" type="node" onChange="onItemChange" />
+        <field id="action" type="assocarray" alwaysNotify="true" />
+        <field id="focusIn" type="boolean" alwaysNotify="true" onChange="onFocusIn" />
+        <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/lib/Utils.brs" />
+    <script type="text/brightscript" uri="pkg:/components/screens/DetailsScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/bslib.brs" />
+    <children>
+        <Poster uri="pkg:/images/bg_default.jpg" width="1920" height="1080" />
+        <Poster id="backdrop" width="1920" height="1080" loadWidth="1280" loadHeight="720" loadDisplayMode="scaleToZoom" opacity="0" />
+        <Rectangle width="1920" height="1080" color="0x0A0E1460" />
+        <Poster uri="pkg:/images/grad_left.png" width="1920" height="1080" />
+        <Poster uri="pkg:/images/grad_bottom.png" width="1920" height="1080" />
+        <Group id="posterGroup" translation="[1404, 150]">
+            <Rectangle color="0x00000066" width="420" height="630" translation="[10, 14]" />
+            <Rectangle color="0x161C26FF" width="420" height="630" />
+            <Poster id="poster" width="420" height="630" loadWidth="420" loadHeight="630" loadDisplayMode="scaleToZoom" />
+        </Group>
+        <Group id="info" translation="[96, 150]">
+            <Group id="tag" visible="false">
+                <Rectangle id="tagBg" color="0xF5B82EFF" height="38" />
+                <Label id="tagText" color="0x0A0E14FF" height="38" vertAlign="center" translation="[14, 0]">
+                    <Font role="font" uri="pkg:/fonts/Inter-SemiBold.ttf" size="20" />
+                </Label>
+            </Group>
+            <Label id="title" color="0xF2F4F8FF" width="1200" wrap="true" maxLines="2" lineSpacing="-6">
+                <Font role="font" uri="pkg:/fonts/Inter-Bold.ttf" size="80" />
+            </Label>
+            <Label id="meta" color="0xC9D1DCFF" width="1240" wrap="false">
+                <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="27" />
+            </Label>
+            <Label id="description" color="0xB7C0CDFF" width="1180" wrap="true" maxLines="5" lineSpacing="6">
+                <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="28" />
+            </Label>
+            <Label id="cast" color="0x8A94A6FF" width="1180" wrap="true" maxLines="2">
+                <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="24" />
+            </Label>
+        </Group>
+        <Group id="buttons" translation="[96, 880]" />
+        <Label id="status" color="0x8A94A6FF" translation="[96, 980]" width="1700">
+            <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="24" />
+        </Label>
+        <Spinner id="spinner" translation="[160, 916]" />
+        <SelectDialog id="dialog" visible="false" />
+        <Animation id="fadeIn" duration="0.5" easeFunction="outQuad">
+            <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="backdrop.opacity" />
+        </Animation>
+    </children>
+</component>
