@@ -213,6 +213,7 @@ fn test_addon_stream_parsing_and_release_mapping() {
         behavior_hints: Some(StreamBehaviorHints {
             not_web_ready: false,
             headers: Some(headers),
+            proxy_headers: None,
             video_size: Some(1_234_567_890),
             filename: Some("Breaking.Bad.S01E01.1080p.mkv".to_string()),
         }),

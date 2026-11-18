@@ -406,6 +406,8 @@ pub struct StreamBehaviorHints {
     pub not_web_ready: bool,
     #[serde(default)]
     pub headers: Option<HashMap<String, String>>,
+    #[serde(rename = "proxyHeaders", default)]
+    pub proxy_headers: Option<serde_json::Value>,
     #[serde(rename = "videoSize")]
     pub video_size: Option<u64>,
     pub filename: Option<String>,

@@ -508,9 +508,7 @@ pub fn stream_item_to_release(
     let language = language.map(|l| crate::providers::models::clean_stream_text(&l));
 
     let mut headers = Vec::new();
-    if let Some(hints) = &stream.behavior_hints
-        && let Some(hdr_map) = &hints.headers
-    {
+    if let Some(hints) = &stream.behavior_hints {
         const ALLOWED_HEADERS: &[&str] = &[
             "user-agent",
             "referer",
@@ -520,9 +518,35 @@ pub fn stream_item_to_release(
             "accept",
             "accept-language",
         ];
-        for (k, v) in hdr_map {
+
+        let mut candidate_map = std::collections::HashMap::new();
+
+        if let Some(hdr_map) = &hints.headers {
+            for (k, v) in hdr_map {
+                candidate_map.insert(k.clone(), v.clone());
+            }
+        }
+
+        if let Some(proxy_val) = &hints.proxy_headers {
+            // Handle { "request": { "Referer": "...", "User-Agent": "..." } }
+            if let Some(req_map) = proxy_val.get("request").and_then(|v| v.as_object()) {
+                for (k, v) in req_map {
+                    if let Some(s) = v.as_str() {
+                        candidate_map.insert(k.clone(), s.to_string());
+                    }
+                }
+            } else if let Some(direct_map) = proxy_val.as_object() {
+                for (k, v) in direct_map {
+                    if let Some(s) = v.as_str() {
+                        candidate_map.insert(k.clone(), s.to_string());
+                    }
+                }
+            }
+        }
+
+        for (k, v) in candidate_map {
             if ALLOWED_HEADERS.contains(&k.to_ascii_lowercase().as_str()) {
-                headers.push((k.clone(), v.clone()));
+                headers.push((k, v));
             }
         }
     }
@@ -703,5 +727,49 @@ mod tests {
         assert_eq!(media.title, "Test Movie");
         assert_eq!(media.media_type, MediaType::Movie);
         assert!(media.seasons.is_empty());
+    }
+
+    #[test]
+    fn test_stream_to_release_extracts_nested_proxy_headers() {
+        let json_str = r#"{
+            "name": "BanglaPlex",
+            "title": "1080p [Abyss Stream]",
+            "url": "https://cdn.sssrr.org/video/manifest.mp4",
+            "behaviorHints": {
+                "notWebReady": true,
+                "proxyHeaders": {
+                    "request": {
+                        "Referer": "https://abyssplayer.com/",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                    }
+                }
+            }
+        }"#;
+
+        let stream_item: StreamItem = serde_json::from_str(json_str).expect("parse stream item");
+        let release =
+            stream_item_to_release("BanglaPlex", &stream_item, 0, 0).expect("build release");
+
+        assert_eq!(release.mirrors.len(), 1);
+        let mirror = &release.mirrors[0];
+        assert_eq!(
+            mirror.resolver_url,
+            "https://cdn.sssrr.org/video/manifest.mp4"
+        );
+
+        let header_map: std::collections::HashMap<_, _> = mirror
+            .headers
+            .iter()
+            .map(|(k, v)| (k.to_ascii_lowercase(), v.clone()))
+            .collect();
+
+        assert_eq!(
+            header_map.get("referer").map(String::as_str),
+            Some("https://abyssplayer.com/")
+        );
+        assert_eq!(
+            header_map.get("user-agent").map(String::as_str),
+            Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        );
     }
 }

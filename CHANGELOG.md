@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Fixed
+- **Providers & Stream Resolution**:
+  - Added support for Stremio addon `behaviorHints.proxyHeaders` (including nested `request` dictionaries), forwarding custom headers like `Referer` and `User-Agent` to player invocations (MPV/VLC) to prevent HTTP 403 Forbidden stream rejections (#244).
 - **Media Playback & Subtitle Engine**:
   - Fixed subtitle selection popup being skipped on subsequent series episodes or certain movie streams by falling back to sibling stream resource IDs when the selected release lacks an explicit `resource_id` (#236).
   - Switched background caption prefetching to use the active preferred stream's resource ID rather than hardcoding the first stream in the list (#236).
