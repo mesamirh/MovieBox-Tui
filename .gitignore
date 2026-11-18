@@ -22,3 +22,5 @@ dist/
 book/
 docs/changelog.md
 docs/contributing.md
+# Generated UniFFI bindings for the iOS client (regenerate with ios/scripts/build-rust.sh)
+ios/Generated/
