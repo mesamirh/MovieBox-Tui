@@ -23,6 +23,7 @@
 - [Caching Strategy](cache.md)
 - [Logging System](logging.md)
 - [Cross-Platform Operations](cross-platform.md)
+- [iOS Client](ios-client.md)
 
 # Reference & Maintenance
 

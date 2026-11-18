@@ -23,6 +23,14 @@ MovieBox-TUI runs on **macOS**, **Linux**, **Windows**, and **Android (Termux)**
 - **Prerequisites**: Run `pkg install -y termux-tools` in Termux.
 - **Subtitles**: Subtitles are saved to shared storage (`~/storage/downloads/moviebox_subs`) or served over the local `StreamRelay` loopback HTTP proxy when Termux shared storage is not mounted.
 - **DNS**: Built-in DNS resolver queries public resolvers (Cloudflare, Google, Quad9) without requiring root or Android JNI.
+
+### iOS (native app)
+- **Not a terminal client**: `ios/` is a SwiftUI app that links the same Rust core as a static library through UniFFI, so no terminal, shell or external player is involved.
+- **Targets**: Deployment target iOS 17.0, arm64 device and arm64 simulator static libraries, packaged as `target/MovieBox.xcframework`.
+- **Playback**: `AVPlayerViewController` with provider headers forwarded per request; subtitles render as a timed overlay because AVPlayer cannot attach arbitrary remote subtitle files.
+- **Build**: Script-driven (`ios/scripts/`), no Xcode project, no App Store distribution path.
+
+See [iOS Client](ios-client.md) for the FFI surface, build pipeline and limitations.
 ## Terminal Compatibility
 
 MovieBox-TUI automatically adapts to your terminal emulator:

@@ -1,0 +1,50 @@
+name: iOS
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    name: Build iOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "ios"
+      - name: Build Rust core, Swift bindings and XCFramework
+        run: ./ios/scripts/build-rust.sh
+      - name: Compile SwiftUI app bundle
+        run: ./ios/scripts/build-app.sh
+      - name: Upload XCFramework
+        uses: actions/upload-artifact@v7
+        with:
+          name: MovieBox.xcframework
+          path: target/MovieBox.xcframework
+          if-no-files-found: error
