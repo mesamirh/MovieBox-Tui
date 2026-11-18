@@ -7,6 +7,13 @@ MovieBox-TUI searches and streams media across multiple independent providers.
 | Provider | Description |
 | :--- | :--- |
 | **MovieBox** | Primary streaming catalog with multi-language audio, seasons, and subtitles. |
+
+Subtitle tracks come from the provider itself. When a release has no usable
+captions, the core can also search OpenSubtitles online: it resolves the title's
+IMDb id through the public suggestion endpoint, queries the keyless
+`opensubtitles-v3.strem.io` addon and returns the matches ordered Spanish, English,
+then everything else. The search never fails playback — an unreachable service or
+an unresolved title simply yields no online entries.
 | **4KHDHub** | High-bitrate 4K UHD and 1080p releases with fast CDN mirrors. |
 | **Dramachi** | Asian dramas and series catalog. |
 | **CircleFTP** | High-speed local BDIX mirror (Bangladesh ISPs). |

@@ -188,6 +188,8 @@ struct PlayerView: View {
     @StateObject private var subtitles = SubtitleController()
     @State private var lastRecordedTime: Double = -1
     @State private var captionNotice: String?
+    @State private var onlineTracks: [MobileSubtitle] = []
+    @State private var isSearchingOnline = false
 
     init(request: PlaybackRequest) {
         self.request = request
@@ -314,15 +316,26 @@ struct PlayerView: View {
             if subtitles.tracks.isEmpty {
                 Text("No subtitles for this release")
             } else {
-                ForEach(subtitles.tracks, id: \.self) { track in
+                Section("This release") {
+                    ForEach(subtitles.tracks, id: \.self) { track in
+                        trackButton(track)
+                    }
+                }
+            }
+            Section("OpenSubtitles") {
+                if onlineTracks.isEmpty {
                     Button {
-                        Task { await pick(track) }
+                        Task { await searchOnline() }
                     } label: {
-                        if subtitles.selectedTrack == track {
-                            Label(track.name, systemImage: "checkmark")
-                        } else {
-                            Text(track.name)
-                        }
+                        Label(
+                            isSearchingOnline ? "Searching…" : "Search subtitles online",
+                            systemImage: "magnifyingglass"
+                        )
+                    }
+                    .disabled(isSearchingOnline)
+                } else {
+                    ForEach(onlineTracks, id: \.self) { track in
+                        trackButton(track)
                     }
                 }
             }
@@ -403,6 +416,7 @@ struct PlayerView: View {
             let tracks = try await model.loadCaptions(
                 subjectId: request.subjectId,
                 resourceId: resourceId,
+                siblingIds: request.siblingIds,
                 season: request.season,
                 episode: request.episode
             )
@@ -413,6 +427,37 @@ struct PlayerView: View {
         } catch {
             subtitles.markUnavailable("Subtitles are unavailable for this release.")
         }
+    }
+
+    private func trackButton(_ track: MobileSubtitle) -> some View {
+        Button {
+            Task { await pick(track) }
+        } label: {
+            if subtitles.selectedTrack == track {
+                Label(track.name, systemImage: "checkmark")
+            } else {
+                Text(track.name)
+            }
+        }
+    }
+
+    /// Searches OpenSubtitles for the title being watched. An empty answer is
+    /// reported, never treated as an error: the provider captions stay usable.
+    private func searchOnline() async {
+        guard !isSearchingOnline else { return }
+        isSearchingOnline = true
+        defer { isSearchingOnline = false }
+        let tracks = await model.searchOnlineSubtitles(
+            title: request.title,
+            year: request.year,
+            isSeries: request.isSeries,
+            season: request.season,
+            episode: request.episode
+        )
+        onlineTracks = tracks
+        captionNotice = tracks.isEmpty
+            ? "No online subtitles found for this title."
+            : "\(tracks.count) online subtitles found."
     }
 
     private func pick(_ track: MobileSubtitle) async {
@@ -475,7 +520,8 @@ struct PlayerView: View {
             season: request.season,
             episode: request.episode,
             episodeTitle: request.contextLabel,
-            startAt: 0
+            startAt: 0,
+            siblingIds: request.siblingIds
         )
         engine.stop()
         model.dismissPlayer()

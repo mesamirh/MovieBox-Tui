@@ -504,8 +504,11 @@ public protocol MobileClientProtocol: AnyObject, Sendable {
     
     /**
      * Subtitle tracks for a release whose `resource_id` is known.
+     *
+     * `sibling_ids` are the dub subject ids from `MobileDetails`, which is how
+     * the terminal client reaches the captions of every available dub.
      */
-    func captions(subjectId: String, resourceId: String, season: UInt32, episode: UInt32) throws  -> [MobileSubtitle]
+    func captions(subjectId: String, resourceId: String, siblingIds: [String], season: UInt32, episode: UInt32) throws  -> [MobileSubtitle]
     
     func clearHistory() 
     
@@ -550,6 +553,14 @@ public protocol MobileClientProtocol: AnyObject, Sendable {
      * Free-text search against the default provider.
      */
     func search(query: String, page: UInt32) throws  -> [MobileCatalogItem]
+    
+    /**
+     * Online subtitles for a title, searched by the content being watched.
+     *
+     * Returns an empty list instead of failing: the picker still shows the
+     * provider captions, so a missing internet connection never blocks playback.
+     */
+    func searchOnlineSubtitles(title: String, year: String?, isSeries: Bool, season: UInt32, episode: UInt32)  -> [MobileSubtitle]
     
     /**
      * Type-ahead suggestions for the search field.
@@ -636,12 +647,16 @@ public convenience init(configDir: String, cacheDir: String, dataDir: String) {
     
     /**
      * Subtitle tracks for a release whose `resource_id` is known.
+     *
+     * `sibling_ids` are the dub subject ids from `MobileDetails`, which is how
+     * the terminal client reaches the captions of every available dub.
      */
-open func captions(subjectId: String, resourceId: String, season: UInt32, episode: UInt32)throws  -> [MobileSubtitle]  {
+open func captions(subjectId: String, resourceId: String, siblingIds: [String], season: UInt32, episode: UInt32)throws  -> [MobileSubtitle]  {
     return try  FfiConverterSequenceTypeMobileSubtitle.lift(try rustCallWithError(FfiConverterTypeMobileError_lift) {
     uniffi_moviebox_tui_fn_method_mobileclient_captions(self.uniffiClonePointer(),
         FfiConverterString.lower(subjectId),
         FfiConverterString.lower(resourceId),
+        FfiConverterSequenceString.lower(siblingIds),
         FfiConverterUInt32.lower(season),
         FfiConverterUInt32.lower(episode),$0
     )
@@ -759,6 +774,24 @@ open func search(query: String, page: UInt32)throws  -> [MobileCatalogItem]  {
     uniffi_moviebox_tui_fn_method_mobileclient_search(self.uniffiClonePointer(),
         FfiConverterString.lower(query),
         FfiConverterUInt32.lower(page),$0
+    )
+})
+}
+    
+    /**
+     * Online subtitles for a title, searched by the content being watched.
+     *
+     * Returns an empty list instead of failing: the picker still shows the
+     * provider captions, so a missing internet connection never blocks playback.
+     */
+open func searchOnlineSubtitles(title: String, year: String?, isSeries: Bool, season: UInt32, episode: UInt32) -> [MobileSubtitle]  {
+    return try!  FfiConverterSequenceTypeMobileSubtitle.lift(try! rustCall() {
+    uniffi_moviebox_tui_fn_method_mobileclient_search_online_subtitles(self.uniffiClonePointer(),
+        FfiConverterString.lower(title),
+        FfiConverterOptionString.lower(year),
+        FfiConverterBool.lower(isSeries),
+        FfiConverterUInt32.lower(season),
+        FfiConverterUInt32.lower(episode),$0
     )
 })
 }
@@ -962,10 +995,19 @@ public struct MobileDetails {
     public var genres: [String]
     public var posterUrl: String?
     public var seasons: [MobileSeason]
+    /**
+     * Dub `subject_id`s sibling to this subject. Passing them to `captions`
+     * widens the caption set the way the terminal client already does.
+     */
+    public var siblingSubjectIds: [String]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, provider: String, title: String, isSeries: Bool, year: String?, overview: String?, tagline: String?, rating: String?, director: String?, stars: String?, runtime: String?, genres: [String], posterUrl: String?, seasons: [MobileSeason]) {
+    public init(id: String, provider: String, title: String, isSeries: Bool, year: String?, overview: String?, tagline: String?, rating: String?, director: String?, stars: String?, runtime: String?, genres: [String], posterUrl: String?, seasons: [MobileSeason], 
+        /**
+         * Dub `subject_id`s sibling to this subject. Passing them to `captions`
+         * widens the caption set the way the terminal client already does.
+         */siblingSubjectIds: [String]) {
         self.id = id
         self.provider = provider
         self.title = title
@@ -980,6 +1022,7 @@ public struct MobileDetails {
         self.genres = genres
         self.posterUrl = posterUrl
         self.seasons = seasons
+        self.siblingSubjectIds = siblingSubjectIds
     }
 }
 
@@ -1032,6 +1075,9 @@ extension MobileDetails: Equatable, Hashable {
         if lhs.seasons != rhs.seasons {
             return false
         }
+        if lhs.siblingSubjectIds != rhs.siblingSubjectIds {
+            return false
+        }
         return true
     }
 
@@ -1050,6 +1096,7 @@ extension MobileDetails: Equatable, Hashable {
         hasher.combine(genres)
         hasher.combine(posterUrl)
         hasher.combine(seasons)
+        hasher.combine(siblingSubjectIds)
     }
 }
 
@@ -1075,7 +1122,8 @@ public struct FfiConverterTypeMobileDetails: FfiConverterRustBuffer {
                 runtime: FfiConverterOptionString.read(from: &buf), 
                 genres: FfiConverterSequenceString.read(from: &buf), 
                 posterUrl: FfiConverterOptionString.read(from: &buf), 
-                seasons: FfiConverterSequenceTypeMobileSeason.read(from: &buf)
+                seasons: FfiConverterSequenceTypeMobileSeason.read(from: &buf), 
+                siblingSubjectIds: FfiConverterSequenceString.read(from: &buf)
         )
     }
 
@@ -1094,6 +1142,7 @@ public struct FfiConverterTypeMobileDetails: FfiConverterRustBuffer {
         FfiConverterSequenceString.write(value.genres, into: &buf)
         FfiConverterOptionString.write(value.posterUrl, into: &buf)
         FfiConverterSequenceTypeMobileSeason.write(value.seasons, into: &buf)
+        FfiConverterSequenceString.write(value.siblingSubjectIds, into: &buf)
     }
 }
 
@@ -2101,7 +2150,7 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_moviebox_tui_checksum_method_mobileclient_captions() != 53952) {
+    if (uniffi_moviebox_tui_checksum_method_mobileclient_captions() != 65440) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_moviebox_tui_checksum_method_mobileclient_clear_history() != 1096) {
@@ -2135,6 +2184,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_moviebox_tui_checksum_method_mobileclient_search() != 3843) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_moviebox_tui_checksum_method_mobileclient_search_online_subtitles() != 51959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_moviebox_tui_checksum_method_mobileclient_suggest() != 59711) {

@@ -222,7 +222,8 @@ struct SourcePickerView: View {
             episode: request.episode,
             resourceId: release.resourceId,
             startAt: request.startAt,
-            releaseLabel: label.isEmpty ? release.sourceLabel : label
+            releaseLabel: label.isEmpty ? release.sourceLabel : label,
+            siblingIds: request.siblingIds
         )
         model.play(playback)
     }

@@ -39,6 +39,9 @@ struct SourceRequest: Identifiable, Hashable {
     let episodeTitle: String?
     /// Resume position in seconds (0 for a fresh start).
     let startAt: Double
+    /// Dub `subject_id`s, forwarded to the caption lookup so every dub's
+    /// captions reach the picker the way they already do in the terminal.
+    var siblingIds: [String] = []
 
     /// "S1 E3" or "Movie", used by the source picker header.
     var contextLabel: String {
@@ -71,6 +74,8 @@ struct PlaybackRequest: Identifiable, Hashable {
     let startAt: Double
     /// Quality / source label for the player HUD, e.g. "1080p · Direct".
     let releaseLabel: String
+    /// Dub `subject_id`s, forwarded to the caption lookup.
+    var siblingIds: [String] = []
 }
 
 @MainActor
@@ -271,6 +276,7 @@ final class AppModel: ObservableObject {
     func loadCaptions(
         subjectId: String,
         resourceId: String,
+        siblingIds: [String],
         season: UInt32,
         episode: UInt32
     ) async throws -> [MobileSubtitle] {
@@ -278,6 +284,29 @@ final class AppModel: ObservableObject {
             try $0.captions(
                 subjectId: subjectId,
                 resourceId: resourceId,
+                siblingIds: siblingIds,
+                season: season,
+                episode: episode
+            )
+        }
+    }
+
+    /// Online subtitles for the title being watched, Spanish first.
+    ///
+    /// An empty result is a normal answer (no IMDb match or no network), not an
+    /// error: the caller keeps the provider captions it already has.
+    func searchOnlineSubtitles(
+        title: String,
+        year: String,
+        isSeries: Bool,
+        season: UInt32,
+        episode: UInt32
+    ) async -> [MobileSubtitle] {
+        await Bridge.shared.performSync {
+            $0.searchOnlineSubtitles(
+                title: title,
+                year: year.isEmpty ? nil : year,
+                isSeries: isSeries,
                 season: season,
                 episode: episode
             )
@@ -445,7 +474,8 @@ final class AppModel: ObservableObject {
             season: season,
             episode: episode,
             episodeTitle: episodeTitle,
-            startAt: startAt
+            startAt: startAt,
+            siblingIds: details.siblingSubjectIds
         )
     }
 
@@ -541,7 +571,8 @@ final class AppModel: ObservableObject {
                     episode: request.episode,
                     resourceId: release.resourceId,
                     startAt: request.startAt,
-                    releaseLabel: label.isEmpty ? release.sourceLabel : label
+                    releaseLabel: label.isEmpty ? release.sourceLabel : label,
+                    siblingIds: details.siblingSubjectIds
                 )
             )
         } catch {

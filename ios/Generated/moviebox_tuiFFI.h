@@ -268,7 +268,7 @@ void*_Nonnull uniffi_moviebox_tui_fn_constructor_mobileclient_new(RustBuffer con
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_CAPTIONS
 #define UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_CAPTIONS
-RustBuffer uniffi_moviebox_tui_fn_method_mobileclient_captions(void*_Nonnull ptr, RustBuffer subject_id, RustBuffer resource_id, uint32_t season, uint32_t episode, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_moviebox_tui_fn_method_mobileclient_captions(void*_Nonnull ptr, RustBuffer subject_id, RustBuffer resource_id, RustBuffer sibling_ids, uint32_t season, uint32_t episode, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_CLEAR_HISTORY
@@ -324,6 +324,11 @@ void uniffi_moviebox_tui_fn_method_mobileclient_remove_history_entry(void*_Nonnu
 #ifndef UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_SEARCH
 RustBuffer uniffi_moviebox_tui_fn_method_mobileclient_search(void*_Nonnull ptr, RustBuffer query, uint32_t page, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_SEARCH_ONLINE_SUBTITLES
+#define UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_SEARCH_ONLINE_SUBTITLES
+RustBuffer uniffi_moviebox_tui_fn_method_mobileclient_search_online_subtitles(void*_Nonnull ptr, RustBuffer title, RustBuffer year, int8_t is_series, uint32_t season, uint32_t episode, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_FN_METHOD_MOBILECLIENT_SUGGEST
@@ -685,6 +690,12 @@ uint16_t uniffi_moviebox_tui_checksum_method_mobileclient_remove_history_entry(v
 #ifndef UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_CHECKSUM_METHOD_MOBILECLIENT_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_CHECKSUM_METHOD_MOBILECLIENT_SEARCH
 uint16_t uniffi_moviebox_tui_checksum_method_mobileclient_search(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_CHECKSUM_METHOD_MOBILECLIENT_SEARCH_ONLINE_SUBTITLES
+#define UNIFFI_FFIDEF_UNIFFI_MOVIEBOX_TUI_CHECKSUM_METHOD_MOBILECLIENT_SEARCH_ONLINE_SUBTITLES
+uint16_t uniffi_moviebox_tui_checksum_method_mobileclient_search_online_subtitles(void
     
 );
 #endif

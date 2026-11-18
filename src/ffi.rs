@@ -77,6 +77,9 @@ pub struct MobileDetails {
     pub genres: Vec<String>,
     pub poster_url: Option<String>,
     pub seasons: Vec<MobileSeason>,
+    /// Dub `subject_id`s sibling to this subject. Passing them to `captions`
+    /// widens the caption set the way the terminal client already does.
+    pub sibling_subject_ids: Vec<String>,
 }
 
 /// An HTTP header the player must send with the stream request.
@@ -227,10 +230,14 @@ impl MobileClient {
     }
 
     /// Subtitle tracks for a release whose `resource_id` is known.
+    ///
+    /// `sibling_ids` are the dub subject ids from `MobileDetails`, which is how
+    /// the terminal client reaches the captions of every available dub.
     pub fn captions(
         &self,
         subject_id: String,
         resource_id: String,
+        sibling_ids: Vec<String>,
         season: u32,
         episode: u32,
     ) -> MobileResult<Vec<MobileSubtitle>> {
@@ -239,12 +246,37 @@ impl MobileClient {
             .block_on(self.service.get_ext_captions(
                 &subject_id,
                 &resource_id,
-                &[],
+                &sibling_ids,
                 season as usize,
                 episode as usize,
             ))
             .map_err(MobileError::new)?;
         Ok(captions.into_iter().map(subtitle_from).collect())
+    }
+
+    /// Online subtitles for a title, searched by the content being watched.
+    ///
+    /// Returns an empty list instead of failing: the picker still shows the
+    /// provider captions, so a missing internet connection never blocks playback.
+    pub fn search_online_subtitles(
+        &self,
+        title: String,
+        year: Option<String>,
+        is_series: bool,
+        season: u32,
+        episode: u32,
+    ) -> Vec<MobileSubtitle> {
+        self.runtime
+            .block_on(self.service.search_online_subtitles(
+                &title,
+                year.as_deref(),
+                is_series,
+                season as usize,
+                episode as usize,
+            ))
+            .into_iter()
+            .map(subtitle_from)
+            .collect()
     }
 
     /// Favorites, newest last, mirroring the terminal client's ordering.
@@ -434,6 +466,12 @@ fn details_from(details: &MediaDetails) -> MobileDetails {
         runtime: details.duration.clone(),
         genres: details.genres.clone(),
         poster_url: details.poster_url.clone(),
+        sibling_subject_ids: details
+            .dubs
+            .iter()
+            .map(|dub| dub.subject_id.clone())
+            .filter(|id| !id.is_empty() && *id != details.id.value)
+            .collect(),
         seasons: details
             .seasons
             .iter()
