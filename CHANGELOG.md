@@ -5,6 +5,7 @@
 ### Added
 - **iOS Playback**:
   - A failed source no longer dead-ends: the player reports the underlying `AVError` domain and code and automatically tries the next candidate of the same title, up to two extra attempts, carrying the resume position and reloading subtitles for the new release.
+  - A source is validated before it plays: a candidate without a decodable video track, or one that reaches playback with an audio-only surface, is skipped through the same bounded chain instead of leaving the system's video placeholder on screen. When no candidate has a playable video track the overlay says so and reports how many sources were tried.
 - **Subtitles**:
   - Added an online subtitle search backed by the keyless OpenSubtitles v3 Stremio addon. The Rust core resolves the title's IMDb id, fetches the matching subtitles and orders them Spanish first, English second, then the rest, so the TUI and the iOS client share one implementation.
   - The iOS player now offers a "Search subtitles online" section next to the provider captions, reports an empty answer instead of failing, and forwards the dub sibling ids so its caption list matches the terminal client.

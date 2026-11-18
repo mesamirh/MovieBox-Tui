@@ -11,8 +11,30 @@ import UIKit
 /// domain, code and underlying reason, which is what distinguishes a container
 /// rejection from a 403 or a timeout (S2).
 struct PlaybackFailure: Equatable {
+    /// What kind of problem this is, so an exhausted chain can stop repeating an
+    /// AVFoundation description once the reason is "no picture" (S7).
+    enum Kind: Equatable {
+        /// The item itself failed; `detail` carries its real error.
+        case systemError
+        /// The asset had no decodable video track, so it was never played (S6a).
+        case noVideoTrack
+        /// The item reached `readyToPlay` with no video surface (S6b).
+        case audioOnly
+    }
+
     let headline: String
     let detail: String
+    var kind: Kind = .systemError
+}
+
+/// What the pre-play check could establish about one candidate (S6a).
+enum VideoValidation {
+    /// The asset answered: the verdict is final for this candidate.
+    case checked(Format.VideoVerdict)
+    /// The asset never answered (offline, timeout, cancelled). Nothing was
+    /// learned, so the candidate is played unchecked and the post-ready guard
+    /// stays off for it (S6b).
+    case notChecked
 }
 
 /// Owns the `AVPlayer` for one playback session: header-authenticated asset,
@@ -24,6 +46,9 @@ final class PlayerEngine: ObservableObject {
 
     @Published private(set) var isReady = false
     @Published private(set) var failure: PlaybackFailure?
+    /// True while the next candidate's video tracks are being checked, so the
+    /// loading overlay can say what the player is waiting for (S6a).
+    @Published private(set) var isValidatingSource = false
     @Published private(set) var currentTime: Double = 0
     @Published private(set) var duration: Double = 0
     @Published private(set) var isPlaying = false
@@ -34,6 +59,11 @@ final class PlayerEngine: ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var observations: [NSKeyValueObservation] = []
+    private var validationTask: Task<Void, Never>?
+    /// Only a candidate whose asset reported a decodable video track is held to
+    /// the audio-only guard, so a genuine audio-only title whose check was
+    /// skipped still plays (S6b).
+    private var passedVideoCheck = false
     private var stopped = false
 
     init(url: URL, headers: [MobileHeader], startAt: Double) {
@@ -55,10 +85,14 @@ final class PlayerEngine: ObservableObject {
     ///
     /// Every observer and the previous item are released first, so an attempt
     /// that failed leaves no KVO observation or notification behind, and the
-    /// same `AVPlayer` keeps driving the already-mounted view controller.
+    /// same `AVPlayer` keeps driving the already-mounted view controller. The
+    /// new item is only installed after its asset reports a video track this
+    /// device can decode (S6a).
     func load(url: URL, headers: [MobileHeader], startAt: Double) {
         guard !stopped else { return }
         releaseObservers()
+        validationTask?.cancel()
+        validationTask = nil
 
         self.startAt = startAt
         didInitialSeek = false
@@ -68,19 +102,27 @@ final class PlayerEngine: ObservableObject {
         duration = 0
         isPlaying = false
         didReachEnd = false
+        passedVideoCheck = false
+        isValidatingSource = true
 
         let asset = AVURLAsset(url: url, options: Self.options(for: headers))
-        let item = AVPlayerItem(asset: asset)
-        player.automaticallyWaitsToMinimizeStalling = true
-        player.replaceCurrentItem(with: item)
-        observe(item: item)
-        player.play()
+        // Nothing is mounted while the asset is checked, so AVKit can never show
+        // the placeholder for a candidate that would render nothing. The check
+        // itself runs off the main actor; only its verdict comes back here.
+        validationTask = Task { @MainActor [weak self] in
+            let validation = await Self.validate(asset)
+            guard !Task.isCancelled, let self else { return }
+            self.install(asset: asset, validation: validation)
+        }
     }
 
     /// Stops playback and releases every observer. Safe to call more than once.
     func stop() {
         guard !stopped else { return }
         stopped = true
+        validationTask?.cancel()
+        validationTask = nil
+        isValidatingSource = false
         player.pause()
         releaseObservers()
         player.replaceCurrentItem(with: nil)
@@ -113,6 +155,66 @@ final class PlayerEngine: ObservableObject {
         }
         // AVFoundation still reads this key by name on iOS.
         return ["AVURLAssetHTTPHeaderFieldsKey": fields]
+    }
+
+    // MARK: Validation
+
+    /// Asks AVFoundation whether the candidate has a video track this device can
+    /// decode, off the main thread and without ever throwing into the view.
+    private static func validate(_ asset: AVURLAsset) async -> VideoValidation {
+        let tracks: [AVAssetTrack]
+        do {
+            tracks = try await asset.loadTracks(withMediaType: .video)
+        } catch {
+            // The asset never answered: skip the check rather than reject a
+            // candidate for a signal that was never received.
+            return .notChecked
+        }
+        guard !tracks.isEmpty else {
+            return .checked(Format.videoVerdict(hasVideoTrack: false, anyDecodable: false))
+        }
+        var unanswered = 0
+        for track in tracks {
+            do {
+                if try await track.load(.isDecodable) {
+                    return .checked(Format.videoVerdict(hasVideoTrack: true, anyDecodable: true))
+                }
+            } catch {
+                unanswered += 1
+            }
+        }
+        // No track said "decodable" but at least one refused to answer: the
+        // evidence is incomplete, so treat the check as skipped.
+        guard unanswered < tracks.count else { return .notChecked }
+        return .checked(Format.videoVerdict(hasVideoTrack: true, anyDecodable: false))
+    }
+
+    /// Mounts the checked candidate, or reports an unusable one so the caller
+    /// advances through the same bounded chain as a failure (S6a).
+    private func install(asset: AVURLAsset, validation: VideoValidation) {
+        guard !stopped else { return }
+        validationTask = nil
+        isValidatingSource = false
+
+        if case .checked(let verdict) = validation, !verdict.isUsable {
+            isReady = false
+            player.pause()
+            failure = PlaybackFailure(
+                headline: verdict.reason,
+                detail: "AVAssetTrack.isDecodable reported no playable video track for this file.",
+                kind: .noVideoTrack
+            )
+            return
+        }
+        if case .checked(.usable) = validation {
+            passedVideoCheck = true
+        }
+
+        let item = AVPlayerItem(asset: asset)
+        player.automaticallyWaitsToMinimizeStalling = true
+        player.replaceCurrentItem(with: item)
+        observe(item: item)
+        player.play()
     }
 
     // MARK: Observation
@@ -151,6 +253,21 @@ final class PlayerEngine: ObservableObject {
     private func apply(itemStatus: AVPlayerItem.Status, item: AVPlayerItem) {
         switch itemStatus {
         case .readyToPlay:
+            // S6b: a ready item with no video surface renders the AVKit
+            // placeholder forever. Only a candidate that passed the pre-play
+            // check is held to this, so an uncheckable audio-only title is never
+            // interrupted.
+            if passedVideoCheck,
+               Format.isAudioOnly(presentationHeight: item.presentationSize.height) {
+                isReady = false
+                player.pause()
+                failure = PlaybackFailure(
+                    headline: "This source has sound but no picture to show.",
+                    detail: "AVPlayerItem.presentationSize has no height after readyToPlay.",
+                    kind: .audioOnly
+                )
+                return
+            }
             failure = nil
             isReady = true
             let itemDuration = item.duration.seconds
@@ -236,6 +353,12 @@ struct PlayerView: View {
     @State private var extraAttempts = 0
     /// Set by a close or a "Choose another source" tap: the chain stops (S4).
     @State private var chainCancelled = false
+    /// Attempts rejected because the candidate had no playable video track, so
+    /// an exhausted chain can say why it ended (S7).
+    @State private var videoRejections = 0
+    /// Set when the chain stopped without a candidate left, which is what turns
+    /// the failure overlay into the exhausted message (S7).
+    @State private var chainExhausted = false
     @State private var lastRecordedTime: Double = -1
     @State private var captionNotice: String?
     @State private var onlineTracks: [MobileSubtitle] = []
@@ -416,7 +539,7 @@ struct PlayerView: View {
             ProgressView()
                 .controlSize(.large)
                 .tint(.white)
-            Text(attemptedURLs.count > 1 ? "Trying another source…" : "Opening stream…")
+            Text(loadingMessage)
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.75))
             Text(attempt.releaseLabel)
@@ -427,8 +550,28 @@ struct PlayerView: View {
         .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
+    /// Says which half of an attempt is running: the video check reads the
+    /// asset's tracks before anything is mounted (S6a).
+    private var loadingMessage: String {
+        if engine.isValidatingSource {
+            return attemptedURLs.count > 1 ? "Checking another source…" : "Checking the source…"
+        }
+        return attemptedURLs.count > 1 ? "Trying another source…" : "Opening stream…"
+    }
+
     private func failureOverlay(_ failure: PlaybackFailure) -> some View {
-        VStack(spacing: 14) {
+        // S7: a chain that ended because no candidate had a playable video track
+        // says so and reports the count, instead of repeating the last opaque
+        // AVFoundation description. A chain that ended on real errors keeps the
+        // per-attempt headline and its technical detail (S2).
+        let exhaustedNotice = chainExhausted
+            ? Format.videoExhaustedNotice(
+                triedCount: attemptedURLs.count,
+                hadVideoRejection: videoRejections > 0
+            )
+            : nil
+
+        return VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 34))
                 .foregroundStyle(.yellow)
@@ -438,22 +581,39 @@ struct PlayerView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.accent)
                 .lineLimit(1)
-            Text(failure.headline)
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.78))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            // Domain, code and the underlying reason: the part that separates a
-            // format rejection from a 403 or a timeout (S2).
-            Text(failure.detail)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.5))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            if attemptedURLs.count > 1 {
-                Text("\(attemptedURLs.count) sources tried")
-                    .font(.caption2)
+            if let exhaustedNotice {
+                Text(exhaustedNotice)
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                // The last attempt failed for a real system error: keep its
+                // technical line, it is the part worth reporting.
+                if failure.kind == .systemError {
+                    Text(failure.detail)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text(failure.headline)
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Domain, code and the underlying reason: the part that separates a
+                // format rejection from a 403 or a timeout (S2).
+                Text(failure.detail)
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                if attemptedURLs.count > 1 {
+                    Text("\(attemptedURLs.count) sources tried")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.5))
+                }
             }
             HStack(spacing: 12) {
                 Button("Choose another source") {
@@ -481,6 +641,11 @@ struct PlayerView: View {
     /// candidate of this title, or leave the last real error on screen when the
     /// chain has to stop.
     private func advance(after failure: PlaybackFailure) {
+        // A rejection for "no playable video" counts like any other failed
+        // attempt: it already cost its URL and its budget slot (S6a).
+        if failure.kind != .systemError {
+            videoRejections += 1
+        }
         guard !chainCancelled,
               let next = Format.nextFallback(
                   alternatives: attempt.alternatives,
@@ -496,6 +661,7 @@ struct PlayerView: View {
         else {
             // No candidate left or the budget is spent: stop watching the clock
             // and keep the failure the viewer needs to report.
+            chainExhausted = true
             subtitles.disable()
             return
         }

@@ -450,3 +450,85 @@ final class PlaybackFallbackTests: XCTestCase {
         )
     }
 }
+
+/// A candidate can be `readyToPlay` and still show nothing: the player has to
+/// decide from the asset's own video tracks whether the file can put a picture
+/// on screen (S6a), and from `presentationSize` whether the item it already
+/// mounted has any video surface at all (S6b). The exhausted overlay then has to
+/// say that no source had a playable video track instead of echoing AVFoundation
+/// (S7).
+final class PlaybackVideoCheckTests: XCTestCase {
+
+    // MARK: - videoVerdict
+
+    func testACandidateWithoutAVideoTrackIsUnusable() {
+        let verdict = Format.videoVerdict(hasVideoTrack: false, anyDecodable: false)
+
+        XCTAssertEqual(verdict, .noVideoTrack)
+        XCTAssertFalse(verdict.isUsable)
+        XCTAssertFalse(verdict.reason.isEmpty)
+    }
+
+    func testACandidateWithoutAVideoTrackIsUnusableEvenWhenATrackClaimsDecodable() {
+        XCTAssertEqual(
+            Format.videoVerdict(hasVideoTrack: false, anyDecodable: true),
+            .noVideoTrack
+        )
+    }
+
+    func testVideoTracksThatAreAllUndecodableAreUnusable() {
+        let verdict = Format.videoVerdict(hasVideoTrack: true, anyDecodable: false)
+
+        XCTAssertEqual(verdict, .undecodable)
+        XCTAssertFalse(verdict.isUsable)
+        XCTAssertFalse(verdict.reason.isEmpty)
+        // A missing track and an undecodable one are distinct reasons.
+        XCTAssertNotEqual(
+            Format.videoVerdict(hasVideoTrack: false, anyDecodable: false).reason,
+            verdict.reason
+        )
+    }
+
+    func testOneDecodableVideoTrackIsUsable() {
+        let verdict = Format.videoVerdict(hasVideoTrack: true, anyDecodable: true)
+
+        XCTAssertEqual(verdict, .usable)
+        XCTAssertTrue(verdict.isUsable)
+    }
+
+    // MARK: - isAudioOnly
+
+    func testAZeroHeightPresentationSizeIsAudioOnly() {
+        XCTAssertTrue(Format.isAudioOnly(presentationHeight: 0))
+    }
+
+    func testAPositiveHeightPresentationSizeHasAVideoSurface() {
+        XCTAssertFalse(Format.isAudioOnly(presentationHeight: 1080))
+        XCTAssertFalse(Format.isAudioOnly(presentationHeight: 0.5))
+    }
+
+    // MARK: - videoExhaustedNotice
+
+    func testTheExhaustedNoticeNamesTheMissingVideoTrackAndTheCount() {
+        XCTAssertEqual(
+            Format.videoExhaustedNotice(triedCount: 1, hadVideoRejection: true),
+            "No source of this title has a playable video track — 1 source tried."
+        )
+        XCTAssertEqual(
+            Format.videoExhaustedNotice(triedCount: 3, hadVideoRejection: true),
+            "No source of this title has a playable video track — 3 sources tried."
+        )
+    }
+
+    // PRESERVE: a chain that ended on a real AVFoundation error keeps the
+    // per-attempt headline and technical detail (S2), so no video notice appears.
+    func testTheExhaustedNoticeStaysQuietWhenNoCandidateWasRejectedForVideo() {
+        XCTAssertNil(Format.videoExhaustedNotice(triedCount: 3, hadVideoRejection: false))
+
+        let failure = PlaybackFailure(
+            headline: "Cannot Open",
+            detail: "AVFoundationErrorDomain -11828"
+        )
+        XCTAssertEqual(failure.kind, .systemError)
+    }
+}

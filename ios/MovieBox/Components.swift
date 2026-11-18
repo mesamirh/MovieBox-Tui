@@ -1,3 +1,4 @@
+import CoreGraphics
 import SwiftUI
 
 // MARK: - Theme
@@ -148,6 +149,59 @@ enum Format {
             guard let raw = release.url, let url = URL(string: raw) else { return false }
             return !attemptedURLs.contains(url)
         }
+    }
+
+    // MARK: - Video suitability
+
+    /// What the asset says about its own picture, before anything is played
+    /// (S6a). Apart from `usable`, the case itself is the reason the candidate
+    /// is replaced through the fallback chain.
+    enum VideoVerdict: Equatable {
+        /// At least one video track reports `isDecodable`.
+        case usable
+        /// The asset carries no video track at all.
+        case noVideoTrack
+        /// Video tracks exist, but the system reports none of them decodable.
+        case undecodable
+
+        var isUsable: Bool { self == .usable }
+
+        /// Sentence the overlay leads with when this candidate is rejected.
+        var reason: String {
+            switch self {
+            case .usable:
+                return "This source has a decodable video track."
+            case .noVideoTrack:
+                return "This source has no video track."
+            case .undecodable:
+                return "This device cannot decode this source’s video."
+            }
+        }
+    }
+
+    /// Decide whether a candidate can put a picture on screen from what
+    /// AVFoundation reported about its tracks.
+    ///
+    /// The signal is `AVAssetTrack.isDecodable`, never a list of fourCCs, so
+    /// `hev1`, `av01` and `vp09` all reach the same rule.
+    static func videoVerdict(hasVideoTrack: Bool, anyDecodable: Bool) -> VideoVerdict {
+        guard hasVideoTrack else { return .noVideoTrack }
+        return anyDecodable ? .usable : .undecodable
+    }
+
+    /// A mounted item whose presentation size has no height is delivering audio
+    /// only, which AVKit renders as a bare placeholder (S6b).
+    static func isAudioOnly(presentationHeight: CGFloat) -> Bool {
+        !(presentationHeight > 0)
+    }
+
+    /// Headline for an exhausted chain that ran out of candidates with a
+    /// playable video track, or `nil` when the chain ended on real errors and
+    /// the last error has to stay on screen (S7).
+    static func videoExhaustedNotice(triedCount: Int, hadVideoRejection: Bool) -> String? {
+        guard hadVideoRejection else { return nil }
+        let sources = triedCount == 1 ? "1 source" : "\(triedCount) sources"
+        return "No source of this title has a playable video track — \(sources) tried."
     }
 
     /// Technical one-liner for a failed playback attempt: the error domain and
