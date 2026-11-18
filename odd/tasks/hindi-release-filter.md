@@ -39,9 +39,15 @@ already in the providers (`src/providers/fourkhdhub/parser.rs:424-511`,
 
 | ID | Spec | Route | Commit |
 | --- | --- | --- | --- |
-| T6 | S1-S5 | inline | config key + core filter for releases and dubs + tests | `feat(language): hide hindi dubs and releases` |
+| T6 | S1-S5 | inline | config key + core filter for releases and dubs + tests | 7274e33 |
 | T7 | S5 | inline | TUI settings toggle | same commit as T6 |
-| T8 | — | inline | docs + CHANGELOG | `docs(language): document the hindi release filter` |
+| T8 | — | inline | docs + CHANGELOG | 7274e33 |
+
+## Delivery slices
+
+- Slice 3 (7274e33): the whole feature in one commit — `src/language_filter.rs`,
+  the config key, both client boundaries, the TUI toggle and the docs. 375 authored
+  lines, inside the ~400-line target.
 
 ## Log
 
