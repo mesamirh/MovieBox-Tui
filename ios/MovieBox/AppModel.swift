@@ -76,6 +76,45 @@ struct PlaybackRequest: Identifiable, Hashable {
     let releaseLabel: String
     /// Dub `subject_id`s, forwarded to the caption lookup.
     var siblingIds: [String] = []
+    /// Ordered candidates for the same title still untried, in the order
+    /// `Format.playableDirectFiles` produced. The player walks them when the
+    /// current stream fails; they are not part of the request's identity.
+    var alternatives: [MobileRelease] = []
+}
+
+// MARK: - Building attempts
+
+extension PlaybackRequest {
+    /// A request for one more candidate of the title `base` already describes.
+    ///
+    /// `startAt` is the resume position to carry into the new attempt and
+    /// `alternatives` are the candidates left after this one.
+    static func attempt(
+        for release: MobileRelease,
+        basedOn base: PlaybackRequest,
+        startAt: Double,
+        alternatives: [MobileRelease]
+    ) -> PlaybackRequest? {
+        guard let raw = release.url, let url = URL(string: raw) else { return nil }
+        return PlaybackRequest(
+            url: url,
+            headers: release.headers,
+            title: base.title,
+            contextLabel: base.contextLabel,
+            posterUrl: base.posterUrl,
+            provider: base.provider,
+            subjectId: base.subjectId,
+            isSeries: base.isSeries,
+            year: base.year,
+            season: base.season,
+            episode: base.episode,
+            resourceId: release.resourceId,
+            startAt: startAt,
+            releaseLabel: Format.releaseLabel(release),
+            siblingIds: base.siblingIds,
+            alternatives: alternatives
+        )
+    }
 }
 
 @MainActor
@@ -539,7 +578,8 @@ final class AppModel: ObservableObject {
                 season: season,
                 episode: episode
             )
-            guard let release = Format.playableDirectFiles(releases).first else {
+            let candidates = Format.playableDirectFiles(releases)
+            guard let release = candidates.first else {
                 // Nothing directly playable: fall back to the picker so the
                 // viewer sees why instead of a silent failure.
                 banner = "No directly playable source for this title."
@@ -552,10 +592,6 @@ final class AppModel: ObservableObject {
                 return
             }
 
-            let label = [release.quality, release.sourceLabel]
-                .compactMap { $0 }
-                .filter { !$0.isEmpty }
-                .joined(separator: " · ")
             play(
                 PlaybackRequest(
                     url: streamURL,
@@ -571,8 +607,9 @@ final class AppModel: ObservableObject {
                     episode: request.episode,
                     resourceId: release.resourceId,
                     startAt: request.startAt,
-                    releaseLabel: label.isEmpty ? release.sourceLabel : label,
-                    siblingIds: details.siblingSubjectIds
+                    releaseLabel: Format.releaseLabel(release),
+                    siblingIds: details.siblingSubjectIds,
+                    alternatives: Format.fallbackCandidates(after: release, in: candidates)
                 )
             )
         } catch {

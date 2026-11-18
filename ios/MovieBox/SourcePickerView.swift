@@ -204,10 +204,6 @@ struct SourcePickerView: View {
 
     private func start(_ release: MobileRelease) {
         guard let raw = release.url, let url = URL(string: raw) else { return }
-        let label = [release.quality, release.sourceLabel]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: " · ")
         let playback = PlaybackRequest(
             url: url,
             headers: release.headers,
@@ -222,8 +218,9 @@ struct SourcePickerView: View {
             episode: request.episode,
             resourceId: release.resourceId,
             startAt: request.startAt,
-            releaseLabel: label.isEmpty ? release.sourceLabel : label,
-            siblingIds: request.siblingIds
+            releaseLabel: Format.releaseLabel(release),
+            siblingIds: request.siblingIds,
+            alternatives: Format.fallbackCandidates(after: release, in: playable)
         )
         model.play(playback)
     }

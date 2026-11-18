@@ -99,6 +99,86 @@ enum Format {
             }
             .map(\.element)
     }
+
+    /// HUD label for one candidate, e.g. "1080p · Direct".
+    static func releaseLabel(_ release: MobileRelease) -> String {
+        let label = [release.quality, release.sourceLabel]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        return label.isEmpty ? release.sourceLabel : label
+    }
+
+    // MARK: - Playback fallback
+
+    /// Extra sources tried after the first one fails. Bounded so a broken title
+    /// cannot walk through every candidate it has (S3/S4).
+    static let maxFallbackAttempts = 2
+
+    /// The candidates to try after `release` fails, in the order
+    /// `playableDirectFiles` produced: only the ones that come after it, and
+    /// never the URL already playing.
+    static func fallbackCandidates(
+        after release: MobileRelease,
+        in candidates: [MobileRelease]
+    ) -> [MobileRelease] {
+        let remaining: ArraySlice<MobileRelease>
+        if let index = candidates.firstIndex(of: release) {
+            remaining = candidates[(index + 1)...]
+        } else {
+            // The chosen release is not from this list: keep all of it, the URL
+            // filter below still drops the one already playing.
+            remaining = candidates[...]
+        }
+        return remaining.filter { $0.url != release.url }
+    }
+
+    /// The next source to try after a failed attempt, or `nil` when the chain
+    /// must stop.
+    ///
+    /// Stops when the attempt budget is spent, when no candidate is left, and
+    /// for any candidate whose URL this session already tried.
+    static func nextFallback(
+        alternatives: [MobileRelease],
+        attemptedURLs: Set<URL>,
+        extraAttempts: Int
+    ) -> MobileRelease? {
+        guard extraAttempts < maxFallbackAttempts else { return nil }
+        return alternatives.first { release in
+            guard let raw = release.url, let url = URL(string: raw) else { return false }
+            return !attemptedURLs.contains(url)
+        }
+    }
+
+    /// Technical one-liner for a failed playback attempt: the error domain and
+    /// code plus the underlying description, which is what tells a container
+    /// rejection apart from a 403 or a timeout (S2).
+    static func failureDetail(_ error: Error?) -> String {
+        guard let error else { return "No error detail reported by the system player." }
+        let failure = error as NSError
+        var parts = ["\(failure.domain) \(failure.code)"]
+        var described = false
+        if let underlying = failure.userInfo[NSUnderlyingErrorKey] as? NSError {
+            if underlying.domain != failure.domain {
+                parts.append("\(underlying.domain) \(underlying.code)")
+            }
+            let description = underlying.localizedDescription
+            if !description.isEmpty {
+                parts.append(description)
+                described = true
+            }
+        }
+        if let reason = failure.localizedFailureReason, !reason.isEmpty {
+            parts.append(reason)
+            described = true
+        }
+        if !described, !failure.localizedDescription.isEmpty {
+            // No underlying reason to report: the item's own sentence is all
+            // the system gave us, and the overlay must never be detail-less.
+            parts.append(failure.localizedDescription)
+        }
+        return parts.joined(separator: " · ")
+    }
 }
 
 // MARK: - Poster image

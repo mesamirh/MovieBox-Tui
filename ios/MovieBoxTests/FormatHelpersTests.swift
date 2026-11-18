@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import MovieBox
 
@@ -255,6 +256,176 @@ final class PlaybackSelectionTests: XCTestCase {
     }
 
     // MARK: helpers
+
+    private func release(
+        _ filename: String,
+        quality: String? = "1080p",
+        codec: String? = "H264",
+        url: String? = "https://cdn.example.com/stream.mp4",
+        isDirectFile: Bool = true
+    ) -> MobileRelease {
+        MobileRelease(
+            filename: filename,
+            quality: quality,
+            codec: codec,
+            language: nil,
+            sizeBytes: nil,
+            season: nil,
+            episode: nil,
+            url: url,
+            sourceLabel: "Direct",
+            headers: [],
+            resourceId: nil,
+            isDirectFile: isDirectFile
+        )
+    }
+}
+
+/// A failed attempt has to move on to another candidate of the same title, but
+/// only a bounded number of times and never back to a URL it already tried.
+/// The failure overlay also has to name what actually went wrong.
+final class PlaybackFallbackTests: XCTestCase {
+
+    // MARK: - nextFallback
+
+    func testAFailureWithARemainingCandidateReturnsThatCandidate() {
+        let next = Format.nextFallback(
+            alternatives: [
+                release("second.mp4", url: "https://cdn.example.com/second.mp4"),
+                release("third.mp4", url: "https://cdn.example.com/third.mp4"),
+            ],
+            attemptedURLs: [url("https://cdn.example.com/first.mp4")],
+            extraAttempts: 0
+        )
+
+        XCTAssertEqual(next?.filename, "second.mp4")
+    }
+
+    func testAFailureWithNoRemainingCandidateReturnsNil() {
+        XCTAssertNil(
+            Format.nextFallback(alternatives: [], attemptedURLs: [], extraAttempts: 0)
+        )
+        // A candidate without a usable URL can never be attempted.
+        XCTAssertNil(
+            Format.nextFallback(
+                alternatives: [release("no-url.mp4", url: nil)],
+                attemptedURLs: [url("https://cdn.example.com/first.mp4")],
+                extraAttempts: 0
+            )
+        )
+    }
+
+    func testTheFallbackStopsAfterTwoExtraAttempts() {
+        let candidate = release("next.mp4", url: "https://cdn.example.com/next.mp4")
+
+        XCTAssertEqual(
+            Format.nextFallback(alternatives: [candidate], attemptedURLs: [], extraAttempts: 0)?.filename,
+            "next.mp4"
+        )
+        XCTAssertEqual(
+            Format.nextFallback(alternatives: [candidate], attemptedURLs: [], extraAttempts: 1)?.filename,
+            "next.mp4"
+        )
+        XCTAssertNil(
+            Format.nextFallback(alternatives: [candidate], attemptedURLs: [], extraAttempts: 2)
+        )
+        XCTAssertNil(
+            Format.nextFallback(alternatives: [candidate], attemptedURLs: [], extraAttempts: 3)
+        )
+    }
+
+    func testAURLAlreadyTriedIsNeverReturnedAgain() {
+        let tried = release("first.mp4", url: "https://cdn.example.com/first.mp4")
+        let fresh = release("second.mp4", url: "https://cdn.example.com/second.mp4")
+        let attempted: Set<URL> = [url("https://cdn.example.com/first.mp4")]
+
+        XCTAssertEqual(
+            Format.nextFallback(
+                alternatives: [tried, fresh],
+                attemptedURLs: attempted,
+                extraAttempts: 0
+            )?.filename,
+            "second.mp4"
+        )
+        XCTAssertNil(
+            Format.nextFallback(alternatives: [tried], attemptedURLs: attempted, extraAttempts: 0)
+        )
+    }
+
+    // MARK: - fallbackCandidates
+
+    func testFallbackCandidatesStartAfterTheChosenSourceAndSkipItsURL() {
+        let first = release("first.mp4", url: "https://cdn.example.com/first.mp4")
+        let second = release("second.mp4", url: "https://cdn.example.com/second.mp4")
+        let third = release("third.mp4", url: "https://cdn.example.com/third.mp4")
+        let ordered = [first, second, third]
+
+        XCTAssertEqual(
+            Format.fallbackCandidates(after: first, in: ordered).map(\.filename),
+            ["second.mp4", "third.mp4"]
+        )
+        XCTAssertEqual(
+            Format.fallbackCandidates(after: second, in: ordered).map(\.filename),
+            ["third.mp4"]
+        )
+        XCTAssertTrue(Format.fallbackCandidates(after: third, in: ordered).isEmpty)
+        XCTAssertEqual(
+            Format.fallbackCandidates(after: first, in: [first, release("dup.mp4", url: first.url)]).map(\.filename),
+            []
+        )
+    }
+
+    // MARK: - failureDetail
+
+    func testFailureDetailReportsTheDomainCodeAndUnderlyingReason() {
+        let underlying = NSError(
+            domain: NSOSStatusErrorDomain,
+            code: -12847,
+            userInfo: [NSLocalizedDescriptionKey: "The media format is not supported."]
+        )
+        let error = NSError(
+            domain: AVFoundationErrorDomain,
+            code: AVError.Code.unknown.rawValue,
+            userInfo: [NSUnderlyingErrorKey: underlying]
+        )
+
+        let detail = Format.failureDetail(error)
+
+        XCTAssertFalse(detail.isEmpty)
+        XCTAssertTrue(detail.contains(AVFoundationErrorDomain), detail)
+        XCTAssertTrue(detail.contains("\(AVError.Code.unknown.rawValue)"), detail)
+        XCTAssertTrue(detail.contains("-12847"), detail)
+        XCTAssertTrue(detail.contains("The media format is not supported."), detail)
+    }
+
+    func testFailureDetailNeverLeavesAnErrorUndescribed() {
+        let error = NSError(
+            domain: NSURLErrorDomain,
+            code: NSURLErrorNotConnectedToInternet,
+            userInfo: [NSLocalizedDescriptionKey: "The network connection was lost."]
+        )
+
+        let detail = Format.failureDetail(error)
+
+        XCTAssertFalse(detail.isEmpty)
+        XCTAssertTrue(detail.contains(NSURLErrorDomain), detail)
+        XCTAssertTrue(detail.contains("\(NSURLErrorNotConnectedToInternet)"), detail)
+        XCTAssertTrue(detail.contains("The network connection was lost."), detail)
+    }
+
+    func testFailureDetailIsReadableWithoutAnError() {
+        XCTAssertEqual(Format.failureDetail(nil), "No error detail reported by the system player.")
+    }
+
+    // MARK: helpers
+
+    private func url(_ raw: String) -> URL {
+        guard let parsed = URL(string: raw) else {
+            XCTFail("not a URL: \(raw)")
+            return URL(fileURLWithPath: "/dev/null")
+        }
+        return parsed
+    }
 
     private func release(
         _ filename: String,
