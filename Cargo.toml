@@ -60,10 +60,27 @@ flate2 = "1.0.35"
 tar = "0.4.44"
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 tempfile = "3.17.1"
+uniffi = { version = "0.29", optional = true, features = ["cli"] }
+
+[features]
+default = []
+# Enables the UniFFI bridge used by the iOS/mobile clients. The default build and
+# the `moviebox-tui` binary never see it.
+mobile = ["dep:uniffi"]
+
+[[bin]]
+name = "moviebox-tui"
+path = "src/main.rs"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["mobile"]
 
 [lib]
 name = "moviebox_tui"
 path = "src/lib.rs"
+crate-type = ["rlib", "staticlib"]
 
 [lints.clippy]
 collapsible_else_if = "allow"
