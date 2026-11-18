@@ -270,15 +270,15 @@ impl MovieBoxService {
         let mut deduplicated: Vec<crate::providers::models::SubtitleOption> = Vec::new();
         let mut seen_languages = std::collections::HashSet::new();
         for sub in all_captions {
-            let sanitized_lang = crate::tui::text::sanitize_language_label(&sub.name);
+            let sanitized_lang = crate::text_util::sanitize_language_label(&sub.name);
             if seen_languages.insert(sanitized_lang) {
                 deduplicated.push(sub);
             }
         }
 
         deduplicated.sort_by(|a, b| {
-            let clean_a = crate::tui::text::sanitize_language_label(&a.name);
-            let clean_b = crate::tui::text::sanitize_language_label(&b.name);
+            let clean_a = crate::text_util::sanitize_language_label(&a.name);
+            let clean_b = crate::text_util::sanitize_language_label(&b.name);
             if clean_a.eq_ignore_ascii_case("english") {
                 std::cmp::Ordering::Less
             } else if clean_b.eq_ignore_ascii_case("english") {

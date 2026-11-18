@@ -38,6 +38,28 @@ code and how data flows through it.
                                  └────────────────┘└─────────────┘└─────────────────┘
 ```
 
+### Non-terminal front ends (iOS)
+
+The crate is not terminal-only. The same provider, networking and model modules are
+reused by a native front end through UniFFI, and that path never touches ratatui or
+crossterm:
+
+```text
+  SwiftUI screens (ios/MovieBox/*.swift)
+              │  Bridge.swift: serial queue + checked continuation
+              ▼
+  Generated bindings (ios/Generated/moviebox_tui.swift)
+              ▼
+  src/ffi.rs  MobileClient        ← compiled only with the `mobile` feature
+              ▼
+  MovieBoxService (src/service.rs) ── providers/ · net.rs · models.rs · text_util.rs
+```
+
+The bridge is gated by the `mobile` Cargo feature (`src/lib.rs` declares
+`#[cfg(feature = "mobile")] pub mod ffi;`), so the default build and the `moviebox-tui`
+binary never compile or link it. See [ios-client.md](ios-client.md) for the FFI surface
+and the build pipeline.
+
 ## Subsystem Breakdown & Module Tree
 
 ```text

@@ -8,8 +8,9 @@ responsibility.
 src/
   main.rs            Entry point. Logging init, panic hook, raw mode, alternate
                      screen, TerminalGuard, App::new + App::run.
-  lib.rs             Crate root: declares pub mod cache/config/download/favorites/
-                     history/logging/models/net/player/providers/proxy/service/tui/updater.
+  lib.rs             Crate root: declares pub mod cache/config/download/ffi (mobile
+                     feature only)/favorites/history/logging/models/net/player/providers/
+                     proxy/service/text_util/tui/updater.
 
   cache.rs           Disk cache: provider-namespaced directories, TTL expiry,
                      atomic temp-file writes, payload validation, background purge.
@@ -21,6 +22,14 @@ src/
   download.rs        Download engine (pure, async): resume via .part files,
                      HTTP ranges, optional multi-segment download, retries, cancel
                      via an AtomicBool, Windows-safe file stems.
+
+  ffi.rs             UniFFI bridge for native mobile clients (iOS): MobileClient
+                     object plus MobileCatalogItem/MobileDetails/MobileSeason/
+                     MobileEpisode/MobileRelease/MobileHeader/MobileSubtitle/
+                     MobileHistoryItem records and MobileError. Feature-gated:
+                     compiled only with the `mobile` feature, never by the default
+                     terminal build. Methods are synchronous on the Swift side and
+                     run on a dedicated Tokio runtime.
 
   favorites.rs       Starred titles: read/write favorites.json, whole-title identity
                      dedupe via SubjectIdentity, no cap.
@@ -77,6 +86,12 @@ src/
   service.rs         MovieBoxService: unified multi-provider headless client &
                      engine (suggest, search, details, homepage, resolutions,
                      captions, subtitle download, path resolution).
+
+  text_util.rs       TUI-free text helpers shared by the service layer and the
+                     non-terminal (UniFFI) front end: sanitize_language_label,
+                     format_subtitle_label, format_duration, parse_duration_seconds.
+                     src/tui/text.rs re-exports them, which keeps crossterm out of
+                     the service/history dependency chain.
 
   updater/           GitHub release update check.
     mod.rs           Module declarations, re-exports, perform_self_update orchestration.
