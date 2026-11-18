@@ -1,5 +1,5 @@
 {
-  "version": "0.1.29",
+  "version": "0.1.30",
   "description": "Terminal interface to find, download, and stream movies, TV shows, and live TV",
   "homepage": "https://github.com/mesamirh/MovieBox-Tui",
   "license": "MIT|Apache-2.0",
@@ -8,12 +8,12 @@
   },
   "architecture": {
     "64bit": {
-      "url": "https://github.com/mesamirh/MovieBox-Tui/releases/download/v0.1.29/MovieBox_Windows_x64.zip",
-      "hash": "079fbbda6e535b19ac797fd380fb7b6b7605ce4e68eb57060f0404b29eaffc2b"
+      "url": "https://github.com/mesamirh/MovieBox-Tui/releases/download/v0.1.30/MovieBox_Windows_x64.zip",
+      "hash": "7c705917868cc4cde56d36529182a38e522f589affa25431ccdefa830d9a4d2a"
     },
     "arm64": {
-      "url": "https://github.com/mesamirh/MovieBox-Tui/releases/download/v0.1.29/MovieBox_Windows_arm64.zip",
-      "hash": "da516b7fd19b317302726fb958f04702a09b141e79ba3a0c19f9f935df44fe1f"
+      "url": "https://github.com/mesamirh/MovieBox-Tui/releases/download/v0.1.30/MovieBox_Windows_arm64.zip",
+      "hash": "c96bf6aec5697bddc45bc661c3532490a715c0f35694f0e591ca85fd00c8ef40"
     }
   },
   "bin": "moviebox-tui.exe",
