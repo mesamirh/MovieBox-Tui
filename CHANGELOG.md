@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Fixed
+- **Media Playback & Subtitle Engine**:
+  - Fixed subtitle selection popup being skipped on subsequent series episodes or certain movie streams by falling back to sibling stream resource IDs when the selected release lacks an explicit `resource_id` (#236).
+  - Switched background caption prefetching to use the active preferred stream's resource ID rather than hardcoding the first stream in the list (#236).
 - **In-App Updater Lifecycle**:
   - Prevented a deadlock in Windows in-app self-update where the helper script hung in `:wait_loop` due to `DETACHED_PROCESS` breaking anonymous pipe handling in `cmd.exe` (#240).
   - Standardized helper script calls to `%SystemRoot%\System32\tasklist.exe` and `%SystemRoot%\System32\timeout.exe` to guarantee system utility resolution, and increased move retry attempts to 10 for resilience against antivirus background locks (#240).

@@ -330,7 +330,14 @@ impl App {
     }
 
     pub(super) fn get_selected_resource_id(&self) -> Option<String> {
-        self.get_selected_release().and_then(|r| r.resource_id)
+        self.get_selected_release()
+            .and_then(|r| r.resource_id)
+            .or_else(|| {
+                self.state
+                    .selected_resources
+                    .iter()
+                    .find_map(|r| r.resource_id.clone())
+            })
     }
 
     pub(super) fn get_selected_release(&self) -> Option<Release> {
@@ -973,7 +980,7 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use crate::providers::models::ProviderKind;
+    use crate::providers::models::{ProviderKind, Release, SourceMirror};
     use crate::tui::action::Action;
     use crate::tui::app::App;
     use crate::tui::overlay::NotificationKind;
@@ -1088,5 +1095,53 @@ mod tests {
 
         assert!(app.request_tasks.search.is_none());
         assert!(!app.state.is_loading);
+    }
+
+    #[tokio::test]
+    async fn test_get_selected_resource_id_fallback_when_selected_stream_has_none() {
+        let mut app = App::new();
+        let r1 = Release {
+            provider: ProviderKind::MovieBox,
+            filename: "Stream_No_Rid.mp4".to_string(),
+            quality: Some("1080p".to_string()),
+            codec: None,
+            language: None,
+            size_bytes: Some(100),
+            season: Some(1),
+            episode: Some(2),
+            mirrors: vec![SourceMirror {
+                label: "Direct".to_string(),
+                resolver_url: "https://example.com/1.mp4".to_string(),
+                headers: vec![],
+                direct_file: true,
+            }],
+            resource_id: None,
+        };
+        let r2 = Release {
+            provider: ProviderKind::MovieBox,
+            filename: "Stream_With_Rid.mp4".to_string(),
+            quality: Some("720p".to_string()),
+            codec: None,
+            language: None,
+            size_bytes: Some(80),
+            season: Some(1),
+            episode: Some(2),
+            mirrors: vec![SourceMirror {
+                label: "Direct".to_string(),
+                resolver_url: "https://example.com/2.mp4".to_string(),
+                headers: vec![],
+                direct_file: true,
+            }],
+            resource_id: Some("ep2-resource-id-999".to_string()),
+        };
+
+        app.state.selected_resources = vec![r1, r2];
+        // Select the first release which has resource_id: None
+        app.state.resource_list_state.select(Some(0));
+
+        assert_eq!(
+            app.get_selected_resource_id(),
+            Some("ep2-resource-id-999".to_string())
+        );
     }
 }

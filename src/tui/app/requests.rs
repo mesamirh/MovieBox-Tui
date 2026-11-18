@@ -1663,12 +1663,7 @@ impl App {
                     .set_status_default(format!("{} streams available.", count));
 
                 if count > 0 {
-                    if let Some(rid) = self
-                        .state
-                        .selected_resources
-                        .first()
-                        .and_then(|r| r.resource_id.clone())
-                    {
+                    if let Some(rid) = self.get_selected_resource_id() {
                         let subject_id = self.state.active_subject_id.clone().unwrap_or_default();
                         let service = self.service.clone();
                         let sibling_ids: Vec<String> = self

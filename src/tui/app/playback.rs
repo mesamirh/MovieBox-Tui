@@ -1321,8 +1321,13 @@ mod tests {
             Some("167282974499786072")
         );
 
+        // Even when selecting index 1 (which has resource_id: None), get_selected_resource_id
+        // falls back to the sibling stream's resource_id for caption fetching
         app.state.resource_list_state.select(Some(1));
-        assert_eq!(app.get_selected_resource_id(), None);
+        assert_eq!(
+            app.get_selected_resource_id().as_deref(),
+            Some("167282974499786072")
+        );
     }
 
     #[tokio::test]

@@ -40,6 +40,66 @@ async fn test_season_download_remembers_explicit_no_subtitle_choice() {
 }
 
 #[tokio::test]
+async fn test_playback_resolves_subtitle_popup_when_selected_release_lacks_resource_id() {
+    use moviebox_tui::providers::models::{ProviderKind, Release, SourceMirror};
+    use moviebox_tui::tui::state::Screen;
+
+    let mut app = App::new();
+    app.state_mut().active_screen = Screen::Details;
+    app.state_mut().active_subject_id = Some("sub-12345".to_string());
+    app.state_mut().last_playback_launch =
+        std::time::Instant::now() - std::time::Duration::from_secs(5);
+
+    let r1 = Release {
+        provider: ProviderKind::MovieBox,
+        filename: "Episode2_1080p.mp4".to_string(),
+        quality: Some("1080p".to_string()),
+        codec: None,
+        language: None,
+        size_bytes: Some(100),
+        season: Some(1),
+        episode: Some(2),
+        mirrors: vec![SourceMirror {
+            label: "Direct".to_string(),
+            resolver_url: "https://example.com/stream1.mp4".to_string(),
+            headers: vec![],
+            direct_file: true,
+        }],
+        resource_id: None, // No resource_id on 1080p stream
+    };
+
+    let r2 = Release {
+        provider: ProviderKind::MovieBox,
+        filename: "Episode2_720p.mp4".to_string(),
+        quality: Some("720p".to_string()),
+        codec: None,
+        language: None,
+        size_bytes: Some(80),
+        season: Some(1),
+        episode: Some(2),
+        mirrors: vec![SourceMirror {
+            label: "Direct".to_string(),
+            resolver_url: "https://example.com/stream2.mp4".to_string(),
+            headers: vec![],
+            direct_file: true,
+        }],
+        resource_id: Some("ep2-resource-id-789".to_string()),
+    };
+
+    app.state_mut().selected_resources = vec![r1, r2];
+    app.state_mut().resource_list_state.select(Some(0)); // Selected 1080p which has None
+
+    // Trigger PlayStream
+    app.handle_action(Action::PlayStream).await;
+
+    // Sibling resource_id fallback must be engaged so it prepares playback instead of bypassing directly
+    assert!(
+        app.state().pending_playback_source.is_some(),
+        "Playback source must be pending subtitle resolution rather than launched directly without subtitles"
+    );
+}
+
+#[tokio::test]
 async fn test_tui_all_theme_rendering() {
     let mut app = App::new();
     for theme_kind in ThemeKind::ALL {
