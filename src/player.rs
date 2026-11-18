@@ -1568,6 +1568,105 @@ pub fn format_mpv_script_opts(
     )
 }
 
+// ---------------------------------------------------------------------------
+// Esc-to-cancel for a running player
+// ---------------------------------------------------------------------------
+
+/// A player that sits in the background longer than this asks for a second
+/// Esc before it is closed, so a stray key press cannot end a film.
+const CANCEL_GRACE: std::time::Duration = std::time::Duration::from_secs(120);
+/// How long the "press Esc again" prompt stays armed.
+const CANCEL_CONFIRM_WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
+
+struct PlaybackCancel {
+    flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    started: std::time::Instant,
+    armed_at: Option<std::time::Instant>,
+}
+
+static PLAYBACK_CANCEL: std::sync::Mutex<Option<PlaybackCancel>> = std::sync::Mutex::new(None);
+
+fn with_playback_cancel<R>(f: impl FnOnce(&mut Option<PlaybackCancel>) -> R) -> R {
+    let mut guard = PLAYBACK_CANCEL.lock().unwrap_or_else(|e| e.into_inner());
+    f(&mut guard)
+}
+
+/// Result of an Esc press while a player may be running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CancelRequest {
+    /// No cancellable player: Esc keeps its normal meaning.
+    NoPlayer,
+    /// A long-running player: press Esc once more to close it.
+    Armed,
+    /// The player is being closed.
+    Cancelled,
+}
+
+/// Registers the player that was just started and returns its cancel flag.
+pub fn register_playback_cancel() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+    let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    with_playback_cancel(|slot| {
+        *slot = Some(PlaybackCancel {
+            flag: flag.clone(),
+            started: std::time::Instant::now(),
+            armed_at: None,
+        });
+    });
+    flag
+}
+
+/// Forgets the player behind `flag` (only if it is still the registered one).
+pub fn clear_playback_cancel(flag: &std::sync::Arc<std::sync::atomic::AtomicBool>) {
+    with_playback_cancel(|slot| {
+        if slot
+            .as_ref()
+            .is_some_and(|entry| std::sync::Arc::ptr_eq(&entry.flag, flag))
+        {
+            *slot = None;
+        }
+    });
+}
+
+/// Esc pressed while the TUI believes a player is running.
+pub fn request_playback_cancel() -> CancelRequest {
+    with_playback_cancel(|slot| {
+        let Some(entry) = slot.as_mut() else {
+            return CancelRequest::NoPlayer;
+        };
+        let confirmed = entry
+            .armed_at
+            .is_some_and(|at| at.elapsed() <= CANCEL_CONFIRM_WINDOW);
+        if entry.started.elapsed() <= CANCEL_GRACE || confirmed {
+            entry.flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            CancelRequest::Cancelled
+        } else {
+            entry.armed_at = Some(std::time::Instant::now());
+            CancelRequest::Armed
+        }
+    })
+}
+
+/// Waits for `child` like `Child::wait`, but kills it as soon as `cancel`
+/// is set.
+pub fn wait_or_cancel(
+    child: &mut std::process::Child,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> std::io::Result<std::process::ExitStatus> {
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) => {
+                if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+                    let _ = child.kill();
+                    return child.wait();
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -41,6 +41,37 @@ impl App {
                 let sender = self.action_sender.clone();
 
                 tokio::spawn(async move {
+                    if crate::providers::addons::nuvio::is_direct_script_url(&url) {
+                        match crate::providers::addons::nuvio::fetch_single_scraper(&url).await {
+                            Ok(installed) => {
+                                let name = installed.name.clone();
+                                let _ = tokio::task::spawn_blocking(move || {
+                                    let mut addons = crate::config::load_addons();
+                                    addons.retain(|existing| {
+                                        existing.manifest_url != installed.manifest_url
+                                    });
+                                    addons.push(installed);
+                                    crate::config::save_addons(&addons);
+                                })
+                                .await;
+                                sender
+                                    .send(Action::SetStatus(format!(
+                                        "Installed and enabled {name} (needs Node.js 18+)."
+                                    )))
+                                    .ok();
+                                sender.send(Action::ShowAddonManager).ok();
+                            }
+                            Err(err) => {
+                                sender
+                                    .send(Action::SetStatus(format!(
+                                        "Error: Nuvio script install failed: {err}"
+                                    )))
+                                    .ok();
+                            }
+                        }
+                        return;
+                    }
+                    let url = crate::providers::addons::nuvio::normalize_nuvio_url(&url);
                     match client.fetch_manifest(&url).await {
                         Ok(manifest) => {
                             let installed = InstalledAddon::from_manifest(url.clone(), &manifest);
@@ -61,6 +92,36 @@ impl App {
                             })
                             .await;
                             sender.send(Action::ShowAddonManager).ok();
+                        }
+                        Err(err) if err == crate::providers::addons::nuvio::REPO_MANIFEST_ERROR => {
+                            match crate::providers::addons::nuvio::fetch_repo(&url).await {
+                                Ok((repo_base, scrapers)) => {
+                                    let count = scrapers.len();
+                                    let _ = tokio::task::spawn_blocking(move || {
+                                        let mut addons = crate::config::load_addons();
+                                        crate::providers::addons::nuvio::merge_repo(
+                                            &mut addons,
+                                            &repo_base,
+                                            &scrapers,
+                                        );
+                                        crate::config::save_addons(&addons);
+                                    })
+                                    .await;
+                                    sender
+                                        .send(Action::SetStatus(format!(
+                                            "Installed {count} Nuvio scrapers (all off). Enable the ones you want; needs Node.js 18+."
+                                        )))
+                                        .ok();
+                                    sender.send(Action::ShowAddonManager).ok();
+                                }
+                                Err(err) => {
+                                    sender
+                                        .send(Action::SetStatus(format!(
+                                            "Error: Nuvio repository install failed: {err}"
+                                        )))
+                                        .ok();
+                                }
+                            }
                         }
                         Err(err) => {
                             sender

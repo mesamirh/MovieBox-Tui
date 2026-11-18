@@ -77,6 +77,33 @@ impl SlashCommand {
         let lower = query.to_ascii_lowercase();
         let mut results = Vec::new();
 
+        if let Some(arg) = lower.strip_prefix("/browse ")
+            && Self::Browse.is_available(state)
+        {
+            let needle = arg.trim();
+            if state.active_provider == crate::providers::models::ProviderKind::Addons {
+                for preset in crate::providers::addons::models::curated_catalog_presets(
+                    &state.installed_addons,
+                ) {
+                    if needle.is_empty()
+                        || preset.label.to_ascii_lowercase().contains(needle)
+                        || preset.addon_name.to_ascii_lowercase().contains(needle)
+                        || preset.catalog_id.to_ascii_lowercase().contains(needle)
+                        || preset.r#type.to_ascii_lowercase().contains(needle)
+                    {
+                        results.push(format!("/browse {}", preset.label));
+                    }
+                }
+            } else if state.active_provider == crate::providers::models::ProviderKind::MovieBox {
+                for preset in crate::tui::state::BrowsePreset::ALL {
+                    if needle.is_empty() || preset.label().to_ascii_lowercase().contains(needle) {
+                        results.push(format!("/browse {}", preset.label()));
+                    }
+                }
+            }
+            return results;
+        }
+
         for cmd in Self::ALL {
             let name = cmd.name();
             if !cmd.is_available(state) {
@@ -96,6 +123,10 @@ impl SlashCommand {
         } else {
             return None;
         };
+
+        if trimmed.len() > 7 && trimmed[..7].eq_ignore_ascii_case("/browse") {
+            return Some(Self::Browse.description(state));
+        }
 
         match trimmed {
             "/settings" => Some(Self::Settings.description(state)),

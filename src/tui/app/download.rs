@@ -583,10 +583,23 @@ impl App {
                         {
                             let sender_clone = self.action_sender.clone();
                             let max_height = Some(release.resolution_u64()).filter(|&h| h > 0);
+                            let resolver_url = if release.provider == ProviderKind::Addons {
+                                crate::providers::addons::torrent::with_episode_hint(
+                                    &first_mirror.resolver_url,
+                                    release
+                                        .season
+                                        .or(Some(self.state.selected_season).filter(|&s| s > 0)),
+                                    release
+                                        .episode
+                                        .or(Some(self.state.selected_episode).filter(|&e| e > 0)),
+                                )
+                            } else {
+                                first_mirror.resolver_url.clone()
+                            };
                             sender_clone
                                 .send(Action::StartDownload(
                                     subtitle_url,
-                                    Some(first_mirror.resolver_url.clone()),
+                                    Some(resolver_url),
                                     first_mirror.headers.clone(),
                                     max_height,
                                 ))

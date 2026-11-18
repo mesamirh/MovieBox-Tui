@@ -82,6 +82,33 @@ impl App {
             }
         }
 
+        // Esc closes a player that is still loading (a wrong file, an
+        // unsupported 4K stream) so the next link can be tried at once.
+        if key.code == KeyCode::Esc
+            && self.state.is_playing
+            && self.state.input_mode != InputMode::Editing
+            && !self.state.tv_input_active
+            && !self.state.addon_input_active
+            && !self.state.has_active_modal()
+        {
+            match crate::player::request_playback_cancel() {
+                crate::player::CancelRequest::Cancelled => {
+                    self.state.notify(
+                        crate::tui::overlay::NotificationKind::Info,
+                        "Playback Cancelled",
+                        "Closing the player.",
+                    );
+                    return None;
+                }
+                crate::player::CancelRequest::Armed => {
+                    self.state
+                        .set_status_short("Press Esc again to close the player.");
+                    return None;
+                }
+                crate::player::CancelRequest::NoPlayer => {}
+            }
+        }
+
         if let KeyCode::Char('x') | KeyCode::Char('X') = key.code
             && self.state.download_progress.is_some()
             && self.state.input_mode != InputMode::Editing

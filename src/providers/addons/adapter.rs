@@ -457,16 +457,124 @@ pub fn parse_season_episode(text: &str) -> Option<(usize, usize)> {
     None
 }
 
+const MAX_MAGNET_TRACKERS: usize = 30;
+
+pub fn is_valid_info_hash(hash: &str) -> bool {
+    let hash = hash.trim();
+    hash.len() == 40 && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+pub fn build_magnet_uri(info_hash: &str, display_name: Option<&str>, sources: &[String]) -> String {
+    use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+
+    let mut uri = format!(
+        "magnet:?xt=urn:btih:{}",
+        info_hash.trim().to_ascii_lowercase()
+    );
+    if let Some(name) = display_name.map(str::trim).filter(|n| !n.is_empty()) {
+        uri.push_str("&dn=");
+        uri.push_str(&utf8_percent_encode(name, NON_ALPHANUMERIC).to_string());
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    let addon_trackers = sources.iter().map(|s| {
+        let s = s.trim();
+        s.strip_prefix("tracker:").unwrap_or(s)
+    });
+    let defaults = super::torrent::DEFAULT_TRACKERS.iter().copied();
+    for tracker in addon_trackers.chain(defaults) {
+        if !tracker.contains("://") || seen.contains(&tracker) {
+            continue;
+        }
+        seen.push(tracker);
+        uri.push_str("&tr=");
+        uri.push_str(&utf8_percent_encode(tracker, NON_ALPHANUMERIC).to_string());
+        if seen.len() >= MAX_MAGNET_TRACKERS {
+            break;
+        }
+    }
+    uri
+}
+
+/// Builds the HTTP URL the built-in torrent engine serves a torrent on.
+/// Stremio `fileIdx` is zero-based; the engine's `index` is one-based.
+pub fn torrent_gateway_url(gateway: &str, magnet: &str, file_idx: Option<usize>) -> Option<String> {
+    use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+
+    let base = gateway.trim().trim_end_matches('/');
+    if !crate::net::is_http_url(base) {
+        return None;
+    }
+    let mut url = format!(
+        "{base}/stream?link={}",
+        utf8_percent_encode(magnet, NON_ALPHANUMERIC)
+    );
+    if let Some(idx) = file_idx {
+        url.push_str(&format!("&index={}", idx + 1));
+    }
+    url.push_str("&play");
+    Some(url)
+}
+
 pub fn stream_item_to_release(
     addon_name: &str,
     stream: &StreamItem,
     season: usize,
     episode: usize,
 ) -> Option<Release> {
-    let url = stream.url.as_ref()?.trim();
-    if !crate::net::is_http_url(url) {
+    let http_url = stream
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| crate::net::is_http_url(u));
+    let mut is_torrent = false;
+    let torrent_url;
+    let url: &str = if let Some(u) = http_url {
+        u
+    } else if let Some(raw_magnet) = stream.url.as_deref().map(str::trim).filter(|u| {
+        u.get(..7)
+            .is_some_and(|p| p.eq_ignore_ascii_case("magnet:"))
+    }) && let Some(magnet) = super::torrent::normalize_magnet(
+        raw_magnet,
+        stream
+            .behavior_hints
+            .as_ref()
+            .and_then(|h| h.filename.as_deref()),
+        stream.title.as_deref().and_then(|t| t.lines().next()),
+        &stream.sources,
+    ) {
+        torrent_url = torrent_gateway_url(
+            &crate::config::torrent_engine_base(),
+            &magnet,
+            stream.file_idx,
+        )?;
+        is_torrent = true;
+        &torrent_url
+    } else if stream
+        .url
+        .as_deref()
+        .map(str::trim)
+        .is_none_or(str::is_empty)
+        && let Some(hash) = stream
+            .info_hash
+            .as_deref()
+            .and_then(super::torrent::btih_to_hex)
+    {
+        let name = stream
+            .behavior_hints
+            .as_ref()
+            .and_then(|h| h.filename.as_deref())
+            .or(stream.title.as_deref().and_then(|t| t.lines().next()));
+        let magnet = build_magnet_uri(&hash, name, &stream.sources);
+        torrent_url = torrent_gateway_url(
+            &crate::config::torrent_engine_base(),
+            &magnet,
+            stream.file_idx,
+        )?;
+        is_torrent = true;
+        &torrent_url
+    } else {
         return None;
-    }
+    };
 
     let stream_name_str = stream.name.as_deref().unwrap_or_default();
     let title_str = stream.title.as_deref().unwrap_or_default();
@@ -475,10 +583,19 @@ pub fn stream_item_to_release(
     let combined_text = format!("{stream_name_str} {title_str} {desc_str}");
 
     if season > 0 && episode > 0 {
-        if let Some((stream_s, stream_e)) = parse_season_episode(&combined_text) {
-            if stream_s != season || stream_e != episode {
-                return None;
-            }
+        // The addon's own filename hint is the most reliable statement of
+        // which episode a stream is; season-pack titles often mention other
+        // episodes, so the free-form text is only a fallback.
+        let from_filename = stream
+            .behavior_hints
+            .as_ref()
+            .and_then(|h| h.filename.as_deref())
+            .and_then(parse_season_episode);
+        let found = from_filename.or_else(|| parse_season_episode(&combined_text));
+        if let Some((stream_s, stream_e)) = found
+            && (stream_s != season || stream_e != episode)
+        {
+            return None;
         }
     }
 
@@ -502,8 +619,16 @@ pub fn stream_item_to_release(
         .unwrap_or_else(|| format!("{addon_name} Stream"));
 
     let filename = crate::providers::models::clean_stream_text(&raw_filename);
-    let raw_source_label =
-        detect_stream_host(addon_name, stream_name_str, title_str, desc_str, url);
+    let raw_source_label = if is_torrent {
+        // Seeder count in the label lets the user judge a swarm at a glance.
+        match super::torrent::stream_seeders(stream) {
+            Some(1) => format!("{addon_name} · Torrent · 1 seed"),
+            Some(n) => format!("{addon_name} · Torrent · {n} seeds"),
+            None => format!("{addon_name} · Torrent"),
+        }
+    } else {
+        detect_stream_host(addon_name, stream_name_str, title_str, desc_str, url)
+    };
     let source_label = crate::providers::models::clean_stream_text(&raw_source_label);
     let language = language.map(|l| crate::providers::models::clean_stream_text(&l));
 
@@ -519,6 +644,8 @@ pub fn stream_item_to_release(
             "x-forwarded-for",
             "accept",
             "accept-language",
+            "cookie",
+            "authorization",
         ];
         for (k, v) in hdr_map {
             if ALLOWED_HEADERS.contains(&k.to_ascii_lowercase().as_str()) {
@@ -561,6 +688,82 @@ pub fn release_to_playback_source(release: &Release) -> Option<PlaybackSource> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_torrent_stream_maps_to_local_engine_and_file_index() {
+        let stream = StreamItem {
+            name: Some("Torrentio\n1080p".to_string()),
+            title: Some("Movie.2024.1080p.WEB-DL.x265\n💾 2.1 GB".to_string()),
+            info_hash: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+            file_idx: Some(2),
+            sources: vec![
+                "tracker:udp://tracker.example:1337/announce".to_string(),
+                "dht:0123456789abcdef0123456789abcdef01234567".to_string(),
+            ],
+            ..Default::default()
+        };
+        let rel = stream_item_to_release("Torrentio", &stream, 0, 0).expect("torrent release");
+        let url = &rel.mirrors[0].resolver_url;
+        let prefix = format!(
+            "{}/stream?link=magnet",
+            crate::config::torrent_engine_base()
+        );
+        assert!(url.starts_with(&prefix));
+        assert!(url.contains("%3A0123456789abcdef0123456789abcdef01234567"));
+        assert!(url.contains("tracker"));
+        assert!(!url.contains("dht%3A"));
+        assert!(url.ends_with("&index=3&play"));
+        assert_eq!(rel.mirrors[0].label, "Torrentio · Torrent");
+        assert_eq!(rel.quality.as_deref(), Some("1080p"));
+    }
+
+    #[test]
+    fn test_filename_hint_decides_episode_of_season_pack() {
+        let stream = StreamItem {
+            name: Some("Torrentio\n1080p".to_string()),
+            title: Some("Show.S01.COMPLETE.1080p [S01E01-S01E10]\n👤 40".to_string()),
+            info_hash: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+            file_idx: Some(3),
+            behavior_hints: Some(crate::providers::addons::models::StreamBehaviorHints {
+                filename: Some("Show.S01E04.1080p.mkv".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert!(stream_item_to_release("Torrentio", &stream, 1, 4).is_some());
+        assert!(stream_item_to_release("Torrentio", &stream, 1, 5).is_none());
+    }
+
+    #[test]
+    fn test_empty_url_string_still_allows_torrent() {
+        let stream = StreamItem {
+            url: Some(String::new()),
+            info_hash: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+            ..Default::default()
+        };
+        assert!(stream_item_to_release("T", &stream, 0, 0).is_some());
+    }
+
+    #[test]
+    fn test_torrent_label_shows_seeders() {
+        let stream = StreamItem {
+            name: Some("Torrentio\n1080p".to_string()),
+            title: Some("Movie.2024.1080p.WEB-DL\n👤 128 💾 2.1 GB".to_string()),
+            info_hash: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+            ..Default::default()
+        };
+        let rel = stream_item_to_release("Torrentio", &stream, 0, 0).expect("torrent release");
+        assert_eq!(rel.mirrors[0].label, "Torrentio · Torrent · 128 seeds");
+    }
+
+    #[test]
+    fn test_torrent_rejects_bad_hash() {
+        let stream = StreamItem {
+            info_hash: Some("not-a-hash".to_string()),
+            ..Default::default()
+        };
+        assert!(stream_item_to_release("T", &stream, 0, 0).is_none());
+    }
 
     #[test]
     fn test_meta_to_catalog_item() {

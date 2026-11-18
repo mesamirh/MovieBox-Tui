@@ -10,5 +10,6 @@ pub mod player;
 pub mod providers;
 pub mod proxy;
 pub mod service;
+pub mod torrent_engine;
 pub mod tui;
 pub mod updater;

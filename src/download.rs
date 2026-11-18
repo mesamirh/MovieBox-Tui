@@ -173,13 +173,27 @@ pub async fn download<F>(
 where
     F: FnMut(DownloadProgress),
 {
+    // Built-in torrent streams need the engine running and the torrent added
+    // before the first request, exactly like playback. They also stream from a
+    // single sequential reader so parallel Range workers do not fight librqbit's
+    // piece priority.
+    let is_torrent_gateway = crate::providers::addons::torrent::is_gateway_stream_url(url);
+    let prepared_url;
+    let url: &str = if is_torrent_gateway {
+        prepared_url = crate::providers::addons::torrent::prepare_playback_url(url, None, None)
+            .await
+            .map_err(|e| DownloadError::File(std::io::Error::other(e)))?;
+        &prepared_url
+    } else {
+        url
+    };
     let partial = sidecar_path(destination, "part");
     let metadata_path = sidecar_path(destination, "part.json");
     let mut metadata = read_metadata(&metadata_path).await;
     let started = Instant::now();
     let mut last_report = Instant::now() - Duration::from_secs(1);
     let mut last_error = None;
-    let mut segmented_disabled = false;
+    let mut segmented_disabled = is_torrent_gateway;
 
     for attempt in 1..=MAX_ATTEMPTS {
         let is_segmented_state = metadata.segments.is_some();

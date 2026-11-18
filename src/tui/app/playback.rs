@@ -16,6 +16,66 @@ pub(super) enum PlaybackResolution {
     NoPlayersInstalled,
 }
 
+/// Title of the sticky notification shown while a torrent is starting.
+pub(crate) const TORRENT_NOTICE_TITLE: &str = "Torrent running";
+
+fn human_bytes(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.1} GB", b / GB)
+    } else if b >= MB {
+        format!("{:.1} MB", b / MB)
+    } else {
+        format!("{:.0} KB", b / KB)
+    }
+}
+
+/// Text of the "torrent running" notification. The first line carries what
+/// matters most, because small terminals only show one line.
+pub(crate) fn torrent_notice_text(status: &crate::torrent_engine::Status) -> String {
+    use crate::torrent_engine::Phase;
+    let secs = status.elapsed.as_secs();
+    match status.phase {
+        Phase::StartingEngine => format!("Starting torrent engine... {secs}s"),
+        Phase::FindingPeers => {
+            format!("Finding peers and metadata... {secs}s\nEsc cancels")
+        }
+        Phase::Buffering | Phase::Playing => {
+            let peers = if status.peers == 0 {
+                format!("Connecting to peers... ({} trying)", status.connecting)
+            } else if status.seeders > 0 {
+                format!("{} peers ({} seeds)", status.peers, status.seeders)
+            } else {
+                format!("{} peers", status.peers)
+            };
+            let detail = if status.prewarm_target_bytes > 0
+                && status.prewarm_done_bytes < status.prewarm_target_bytes
+            {
+                let pct = (status.prewarm_done_bytes.saturating_mul(100)
+                    / status.prewarm_target_bytes)
+                    .min(99);
+                format!(
+                    "Pre-buffering {pct}% ({} / {})",
+                    human_bytes(status.prewarm_done_bytes),
+                    human_bytes(status.prewarm_target_bytes)
+                )
+            } else {
+                format!(
+                    "{} downloaded, waiting for the player",
+                    human_bytes(status.downloaded_bytes)
+                )
+            };
+            format!(
+                "{peers} - {}/s\n{detail}",
+                human_bytes(status.download_bytes_per_sec)
+            )
+        }
+    }
+}
+
 impl App {
     pub(super) fn resolve_playback_player(
         &self,
@@ -584,12 +644,21 @@ impl App {
                     let fallback_link = effective_link.clone();
                     let fallback_sub = effective_subtitle.clone();
                     let fallback_headers = headers.clone();
+                    let cancel_flag = crate::player::register_playback_cancel();
                     tokio::task::spawn_blocking(move || {
-                        let result = child.wait();
+                        let result = crate::player::wait_or_cancel(&mut child, &cancel_flag);
+                        let cancelled = cancel_flag.load(std::sync::atomic::Ordering::SeqCst);
+                        crate::player::clear_playback_cancel(&cancel_flag);
                         let error_output = std::fs::read_to_string(&log_path).unwrap_or_default();
                         let _ = std::fs::remove_file(&log_path);
 
                         match &result {
+                            Ok(_) if cancelled => {
+                                log::info!(
+                                    "player {kind:?} closed by the user (Esc) after {}s",
+                                    start_time.elapsed().as_secs()
+                                );
+                            }
                             Ok(status)
                                 if status.success()
                                     || is_vlc_normal_exit(
@@ -879,6 +948,59 @@ impl App {
                             source_label: first_mirror.label.clone(),
                             max_height,
                         };
+                        if release.provider == ProviderKind::Addons
+                            && crate::providers::addons::torrent::is_gateway_stream_url(
+                                &direct_source.url,
+                            )
+                        {
+                            // Sticky notice: stays on screen (with live peers and
+                            // speed) until the player is actually reading video.
+                            crate::torrent_engine::begin_session();
+                            self.state.notify_sticky(
+                                NotificationKind::Info,
+                                TORRENT_NOTICE_TITLE,
+                                "Starting torrent engine...",
+                            );
+                            let sender = self.action_sender.clone();
+                            let (season, episode) = (release.season, release.episode);
+                            let mut source = direct_source;
+                            self.request_tasks.spawn_playback_resolve(async move {
+                                let prepared = tokio::time::timeout(
+                                    std::time::Duration::from_secs(100),
+                                    crate::providers::addons::torrent::prepare_playback_url(
+                                        &source.url,
+                                        season,
+                                        episode,
+                                    ),
+                                )
+                                .await;
+                                match prepared {
+                                    Ok(Ok(url)) => {
+                                        source.url = url;
+                                        sender.send(Action::DispatchPlayback(source)).ok();
+                                    }
+                                    Ok(Err(error)) => {
+                                        log::error!("torrent prepare failed: {error}");
+                                        sender.send(Action::PlayerExited).ok();
+                                        sender
+                                            .send(Action::SetStatus(format!(
+                                                "Error: Torrent: {error}"
+                                            )))
+                                            .ok();
+                                    }
+                                    Err(_) => {
+                                        log::error!("torrent prepare timed out");
+                                        sender.send(Action::PlayerExited).ok();
+                                        sender
+                                            .send(Action::SetStatus(
+                                                "Error: Torrent: Timed out.".to_string(),
+                                            ))
+                                            .ok();
+                                    }
+                                }
+                            });
+                            return None;
+                        }
                         let client = if release.provider == ProviderKind::Addons
                             || release.provider == ProviderKind::Dramachi
                             || release.provider == ProviderKind::BdixCircleFtp
@@ -1113,11 +1235,17 @@ impl App {
                 self.state.history.reconcile_pending_playback_states();
                 self.state.is_playing = false;
                 self.state.is_resolving_playback = false;
+                if self.state.download_progress.is_none() {
+                    crate::torrent_engine::pause_all_background();
+                }
             }
             Action::PlayerCrashed(code, error_msg) => {
                 self.state.history.reconcile_pending_playback_states();
                 self.state.is_playing = false;
                 self.state.is_resolving_playback = false;
+                if self.state.download_progress.is_none() {
+                    crate::torrent_engine::pause_all_background();
+                }
                 let code_str = code
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "unknown".into());
@@ -1202,6 +1330,55 @@ impl App {
             _ => return None,
         }
         None
+    }
+}
+
+impl App {
+    /// Keeps the sticky "torrent running" notification current. It is called
+    /// on every tick and removes the notice once the player is reading video,
+    /// or once nothing is starting any more (cancelled, failed, player closed).
+    pub(super) fn tick_torrent_notice(&mut self) {
+        if !self.state.has_sticky_notification(TORRENT_NOTICE_TITLE) {
+            return;
+        }
+        let resolving = self
+            .request_tasks
+            .playback_resolve
+            .as_ref()
+            .is_some_and(|task| !task.is_finished());
+        if !resolving && !self.state.is_resolving_playback && !self.state.is_playing {
+            self.state.dismiss_notification(TORRENT_NOTICE_TITLE);
+            crate::torrent_engine::end_session();
+            return;
+        }
+        // Reading the stats twice a second is plenty.
+        if self.state.tick_count % 5 != 0 {
+            return;
+        }
+        let Some(status) = crate::torrent_engine::status() else {
+            return;
+        };
+        if status.phase == crate::torrent_engine::Phase::Playing {
+            self.state.dismiss_notification(TORRENT_NOTICE_TITLE);
+            crate::torrent_engine::end_session();
+            let detail = if status.peers > 0 {
+                format!(
+                    "Video is playing - {} peers, {}/s",
+                    status.peers,
+                    human_bytes(status.download_bytes_per_sec)
+                )
+            } else {
+                "Video is playing.".to_string()
+            };
+            self.state
+                .notify(NotificationKind::Success, "Torrent playing", detail);
+            return;
+        }
+        self.state.notify_sticky(
+            NotificationKind::Info,
+            TORRENT_NOTICE_TITLE,
+            torrent_notice_text(&status),
+        );
     }
 }
 
@@ -1839,5 +2016,43 @@ mod tests {
             .get_item("moviebox", "vlc_retain_test", 0, 0, None)
             .expect("history item exists");
         assert_eq!(saved.progress_seconds, 420);
+    }
+
+    fn torrent_status(
+        phase: crate::torrent_engine::Phase,
+        peers: u32,
+    ) -> crate::torrent_engine::Status {
+        crate::torrent_engine::Status {
+            phase,
+            elapsed: std::time::Duration::from_secs(8),
+            peers,
+            seeders: 0,
+            connecting: 3,
+            download_bytes_per_sec: 0,
+            downloaded_bytes: 0,
+            served_bytes: 0,
+        }
+    }
+
+    #[test]
+    fn torrent_notice_text_follows_the_phases() {
+        use crate::torrent_engine::Phase;
+
+        let text = super::torrent_notice_text(&torrent_status(Phase::StartingEngine, 0));
+        assert_eq!(text, "Starting torrent engine... 8s");
+
+        let text = super::torrent_notice_text(&torrent_status(Phase::FindingPeers, 0));
+        assert!(text.starts_with("Finding peers and metadata... 8s"));
+
+        let text = super::torrent_notice_text(&torrent_status(Phase::Buffering, 0));
+        assert!(text.starts_with("Connecting to peers... (3 trying)"));
+
+        let mut status = torrent_status(Phase::Buffering, 14);
+        status.seeders = 3;
+        status.download_bytes_per_sec = 4 * 1024 * 1024;
+        status.downloaded_bytes = 38 * 1024 * 1024;
+        let text = super::torrent_notice_text(&status);
+        assert!(text.starts_with("14 peers (3 seeds) - 4.0 MB/s"));
+        assert!(text.contains("38.0 MB downloaded"));
     }
 }

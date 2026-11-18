@@ -117,7 +117,6 @@ impl App {
             || self.state.is_loading
             || self.state.search_results.is_empty()
             || self.state.active_browse_preset.is_some()
-            || self.state.active_addon_catalog.is_some()
             || self.state.search_query.trim().starts_with('/')
             || (!self.state.is_homepage_mode && self.state.search_exhausted)
         {
@@ -143,6 +142,45 @@ impl App {
                         page: next_page,
                     })
                     .ok();
+            } else if let Some(target) = self.state.active_addon_catalog.clone() {
+                let skip = self.state.search_results.len();
+                let service = self.service.clone();
+                let sender = self.action_sender.clone();
+                let context = self.request_context();
+                let request_id = self.state.active_search_request;
+                self.state.is_loading = true;
+                if let Some(h) = self.request_tasks.search.take() {
+                    h.abort();
+                }
+                self.request_tasks.search = Some(tokio::spawn(async move {
+                    let result = service
+                        .fetch_addon_catalog_page(
+                            &target.manifest_url,
+                            &target.r#type,
+                            &target.catalog_id,
+                            next_page,
+                            skip,
+                        )
+                        .await;
+                    match result {
+                        Ok(items) => {
+                            sender
+                                .send(Action::SearchSuccess {
+                                    context,
+                                    request_id,
+                                    query: String::new(),
+                                    page: next_page,
+                                    items,
+                                })
+                                .ok();
+                        }
+                        Err(e) => {
+                            sender
+                                .send(Action::SearchFailure(context, request_id, next_page, e))
+                                .ok();
+                        }
+                    }
+                }));
             } else {
                 let query = self.state.search_query.to_string();
                 let service = self.service.clone();
@@ -390,7 +428,25 @@ impl App {
                     return None;
                 }
                 if !self.state.notifications.is_empty() {
+                    let torrent_starting = self.state.is_resolving_playback
+                        && self
+                            .state
+                            .has_sticky_notification(super::playback::TORRENT_NOTICE_TITLE);
                     self.state.notifications.clear();
+                    if torrent_starting {
+                        // Esc on the "torrent running" notice cancels the start.
+                        self.request_tasks.cancel_playback_resolve();
+                        crate::torrent_engine::end_session();
+                        if self.state.download_progress.is_none() {
+                            crate::torrent_engine::pause_all_background();
+                        }
+                        self.state.is_resolving_playback = false;
+                        self.state.notify(
+                            crate::tui::overlay::NotificationKind::Info,
+                            "Playback Cancelled",
+                            "Torrent start cancelled.",
+                        );
+                    }
                     return None;
                 }
                 if self.state.favorites_focus {

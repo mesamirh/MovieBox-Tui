@@ -416,9 +416,13 @@ impl App {
 
                 if page <= 1 {
                     self.state.search_results = new_results;
-                    sort_results(&mut self.state.search_results, &query);
+                    if self.state.active_addon_catalog.is_none() {
+                        sort_results(&mut self.state.search_results, &query);
+                    }
                 } else {
-                    sort_results(&mut new_results, &query);
+                    if self.state.active_addon_catalog.is_none() {
+                        sort_results(&mut new_results, &query);
+                    }
                     self.state.search_results.extend(new_results);
                 }
                 if let Some(prev_id) = previous_selected_id {
@@ -442,10 +446,21 @@ impl App {
 
                 self.state
                     .set_status_default(if self.state.search_results.is_empty() {
+                        if let Some(cat) = &self.state.active_addon_catalog {
+                            format!("No items found in {} ({}).", cat.label, cat.addon_name)
+                        } else {
+                            format!(
+                                "No matches for '{}' on {}. Press Ctrl+P to try another provider.",
+                                query,
+                                context.provider.label()
+                            )
+                        }
+                    } else if let Some(cat) = &self.state.active_addon_catalog {
                         format!(
-                            "No matches for '{}' on {}. Press Ctrl+P to try another provider.",
-                            query,
-                            context.provider.label()
+                            "Loaded {} titles from {} ({}).",
+                            self.state.search_results.len(),
+                            cat.label,
+                            cat.addon_name
                         )
                     } else {
                         format!(
@@ -1297,34 +1312,55 @@ impl App {
                             return;
                         }
 
-                        let (releases, blocked_addons) =
-                            crate::providers::addons::aggregate_streams(
-                                &client, &addons, &id, season, episode, is_series,
-                            )
-                            .await;
+                        let crate::providers::addons::StreamAggregation {
+                            releases,
+                            blocked: blocked_addons,
+                            failed: failed_addons,
+                        } = crate::providers::addons::aggregate_streams_detailed(
+                            &client, &addons, &id, season, episode, is_series,
+                        )
+                        .await;
 
-                        if !blocked_addons.is_empty() {
+                        let failure_detail = (!failed_addons.is_empty()).then(|| {
+                            failed_addons
+                                .iter()
+                                .map(|(name, reason)| format!("{name} ({reason})"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        });
+                        if let Some(detail) = &failure_detail {
                             sender
                                 .send(Action::SetStatus(format!(
-                                    "Warning: Blocked {} torrent streams. HTTP only.",
+                                    "Warning: no streams from {detail}. Press 'r' to retry."
+                                )))
+                                .ok();
+                        } else if !blocked_addons.is_empty() {
+                            sender
+                                .send(Action::SetStatus(format!(
+                                    "Warning: {} returned no playable streams.",
                                     blocked_addons.join(", ")
                                 )))
                                 .ok();
                         }
 
                         if !releases.is_empty() {
-                            let id_clone = id.clone();
-                            let releases_clone = releases.clone();
-                            let provider = context.provider;
-                            tokio::task::spawn_blocking(move || {
-                                crate::cache::set_provider_stream_cache_typed(
-                                    provider,
-                                    &id_clone,
-                                    season,
-                                    episode,
-                                    &releases_clone,
-                                );
-                            });
+                            // A list that is missing an addon that failed or timed
+                            // out must not be cached, or the missing source stays
+                            // hidden until the cache expires.
+                            if failed_addons.is_empty() {
+                                let id_clone = id.clone();
+                                let releases_clone = releases.clone();
+                                let provider = context.provider;
+                                tokio::task::spawn_blocking(move || {
+                                    crate::cache::set_provider_stream_cache_typed(
+                                        provider,
+                                        &id_clone,
+                                        season,
+                                        episode,
+                                        &releases_clone,
+                                    );
+                                });
+                            }
 
                             sender
                                 .send(Action::EpisodeStreamsReady(
@@ -1339,7 +1375,12 @@ impl App {
                                     id,
                                     season,
                                     episode,
-                                    "No streams found. Press 'r' to retry.".into(),
+                                    match &failure_detail {
+                                        Some(detail) => format!(
+                                            "No streams found: {detail}. Press 'r' to retry."
+                                        ),
+                                        None => "No streams found. Press 'r' to retry.".into(),
+                                    },
                                 ))
                                 .ok();
                         }

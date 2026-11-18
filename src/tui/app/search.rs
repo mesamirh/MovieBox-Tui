@@ -156,7 +156,52 @@ impl App {
                         format!("Available in Streaming Mode ({ctrl_s})."),
                     );
                 } else {
-                    self.action_sender.send(Action::ShowBrowseMenu).ok();
+                    let arg = trimmed
+                        .split_once(char::is_whitespace)
+                        .map(|(_, rest)| rest.trim())
+                        .unwrap_or("");
+                    if !arg.is_empty() {
+                        if self.state.active_provider
+                            == crate::providers::models::ProviderKind::Addons
+                        {
+                            if let Some(target) =
+                                crate::providers::addons::models::find_catalog_preset(
+                                    &self.state.installed_addons,
+                                    arg,
+                                )
+                            {
+                                self.action_sender
+                                    .send(Action::SelectAddonCatalog(target))
+                                    .ok();
+                            } else {
+                                self.state.notify(
+                                    NotificationKind::Info,
+                                    "Browse Addons",
+                                    format!(
+                                        "No addon catalog matched '{arg}'. Showing all catalogs."
+                                    ),
+                                );
+                                self.action_sender.send(Action::ShowBrowseMenu).ok();
+                            }
+                        } else if self.state.active_provider
+                            == crate::providers::models::ProviderKind::MovieBox
+                        {
+                            let needle = arg.to_ascii_lowercase();
+                            if let Some(preset) = crate::tui::state::BrowsePreset::ALL
+                                .iter()
+                                .copied()
+                                .find(|p| p.label().to_ascii_lowercase().contains(&needle))
+                            {
+                                self.action_sender.send(Action::SelectBrowse(preset)).ok();
+                            } else {
+                                self.action_sender.send(Action::ShowBrowseMenu).ok();
+                            }
+                        } else {
+                            self.action_sender.send(Action::ShowBrowseMenu).ok();
+                        }
+                    } else {
+                        self.action_sender.send(Action::ShowBrowseMenu).ok();
+                    }
                 }
                 Some(true)
             }
@@ -238,6 +283,7 @@ impl App {
         self.state.active_addon_catalog = Some(target.clone());
         self.state.browse_metrics.clear();
         self.state.current_page = 1;
+        self.state.search_exhausted = false;
         self.state.active_screen = Screen::Home;
         self.state.active_subject_id = None;
         self.state.selected_details = None;

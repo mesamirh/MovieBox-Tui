@@ -183,6 +183,9 @@ pub struct Notification {
     pub title: String,
     pub message: String,
     pub expires_at: Instant,
+    /// A sticky notification never expires on its own: it stays on screen until
+    /// the code that created it dismisses it (used for "torrent running").
+    pub sticky: bool,
 }
 
 impl Notification {
@@ -197,10 +200,23 @@ impl Notification {
             title: title.into(),
             message: message.into(),
             expires_at: Instant::now() + duration,
+            sticky: false,
+        }
+    }
+
+    /// A notification that stays until it is explicitly dismissed.
+    pub fn new_sticky(
+        kind: NotificationKind,
+        title: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            sticky: true,
+            ..Self::new(kind, title, message)
         }
     }
 
     pub fn expired(&self) -> bool {
-        Instant::now() >= self.expires_at
+        !self.sticky && Instant::now() >= self.expires_at
     }
 }

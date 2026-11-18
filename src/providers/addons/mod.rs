@@ -2,12 +2,14 @@ pub mod adapter;
 pub mod aggregator;
 pub mod client;
 pub mod models;
+pub mod nuvio;
+pub mod torrent;
 
 pub use adapter::{
     meta_detail_to_media_details, meta_to_catalog_item, release_to_playback_source,
     stream_item_to_release,
 };
-pub use aggregator::aggregate_streams;
+pub use aggregator::{StreamAggregation, aggregate_streams, aggregate_streams_detailed};
 pub use client::AddonClient;
 pub use models::{AddonManifest, InstalledAddon, MetaDetail, MetaItem, StreamItem};
 

@@ -684,18 +684,63 @@ impl AppState {
             return;
         }
 
-        if self.notifications.len() >= 3 {
-            let removable = self
-                .notifications
-                .iter()
-                .position(|notification| {
-                    notification.kind != crate::tui::overlay::NotificationKind::Error
-                })
-                .unwrap_or(0);
-            self.notifications.remove(removable);
-        }
+        self.make_room_for_notification();
         self.notifications
             .push_back(crate::tui::overlay::Notification::new(kind, title, message));
+    }
+
+    /// Drops the least important notification when three are already shown.
+    /// Sticky notices (a running torrent) and errors are kept as long as
+    /// anything else can go instead.
+    fn make_room_for_notification(&mut self) {
+        if self.notifications.len() < 3 {
+            return;
+        }
+        let removable = self
+            .notifications
+            .iter()
+            .position(|n| !n.sticky && n.kind != crate::tui::overlay::NotificationKind::Error)
+            .or_else(|| self.notifications.iter().position(|n| !n.sticky))
+            .unwrap_or(0);
+        self.notifications.remove(removable);
+    }
+
+    /// Shows (or updates in place) a notification that does not expire.
+    /// It stays until [`AppState::dismiss_notification`] removes it.
+    pub fn notify_sticky(
+        &mut self,
+        kind: crate::tui::overlay::NotificationKind,
+        title: impl Into<String>,
+        message: impl Into<String>,
+    ) {
+        let title = title.into();
+        let message = message.into();
+        if let Some(existing) = self
+            .notifications
+            .iter_mut()
+            .find(|n| n.sticky && n.title == title)
+        {
+            existing.kind = kind;
+            existing.message = message;
+            return;
+        }
+        self.make_room_for_notification();
+        self.notifications
+            .push_back(crate::tui::overlay::Notification::new_sticky(
+                kind, title, message,
+            ));
+    }
+
+    pub fn has_sticky_notification(&self, title: &str) -> bool {
+        self.notifications
+            .iter()
+            .any(|n| n.sticky && n.title == title)
+    }
+
+    /// Removes the sticky notification with this title, if it is showing.
+    pub fn dismiss_notification(&mut self, title: &str) {
+        self.notifications
+            .retain(|n| !(n.sticky && n.title == title));
     }
 
     pub fn expire_notifications(&mut self) {
@@ -1503,6 +1548,39 @@ mod tests {
         state.search_suggestions = vec!["suggestion".to_string()];
         state.input_mode = InputMode::Normal;
         assert!(state.favorites_landing_visible());
+    }
+
+    #[test]
+    fn test_sticky_notification_does_not_expire_or_get_evicted() {
+        use crate::tui::overlay::NotificationKind::Info;
+        let mut state = AppState::default();
+        state.notify_sticky(Info, "Torrent running", "Finding peers...");
+
+        // Long past its normal lifetime, it is still there.
+        state.notifications[0].expires_at =
+            std::time::Instant::now() - std::time::Duration::from_secs(600);
+        state.expire_notifications();
+        assert!(state.has_sticky_notification("Torrent running"));
+
+        // Other notifications come and go around it.
+        for i in 0..6 {
+            state.notify(Info, format!("Note {i}"), "text");
+        }
+        assert!(state.has_sticky_notification("Torrent running"));
+        assert!(state.notifications.len() <= 3);
+
+        // Updating keeps a single card and swaps the text.
+        state.notify_sticky(Info, "Torrent running", "12 peers");
+        let cards: Vec<_> = state
+            .notifications
+            .iter()
+            .filter(|n| n.title == "Torrent running")
+            .collect();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].message, "12 peers");
+
+        state.dismiss_notification("Torrent running");
+        assert!(!state.has_sticky_notification("Torrent running"));
     }
 
     #[test]
