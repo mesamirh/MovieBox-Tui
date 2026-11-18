@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- **In-App Updater Lifecycle**:
+  - Prevented a deadlock in Windows in-app self-update where the helper script hung in `:wait_loop` due to `DETACHED_PROCESS` breaking anonymous pipe handling in `cmd.exe` (#240).
+  - Standardized helper script calls to `%SystemRoot%\System32\tasklist.exe` and `%SystemRoot%\System32\timeout.exe` to guarantee system utility resolution, and increased move retry attempts to 10 for resilience against antivirus background locks (#240).
+
 ## [0.1.29] - 2026-11-05
 
 ### Fixed
