@@ -10,12 +10,23 @@
 		1A0000000000000000000009 /* moviebox_tui.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000018 /* moviebox_tui.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		2B000000000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A0000000000000000000004 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1A0000000000000000000005;
+			remoteInfo = MovieBox;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		1A0000000000000000000003 /* MovieBox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MovieBox.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000018 /* moviebox_tui.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = moviebox_tui.swift; sourceTree = "<group>"; };
 		1A0000000000000000000019 /* moviebox_tuiFFI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = moviebox_tuiFFI.h; sourceTree = "<group>"; };
 		1A000000000000000000001A /* moviebox_tuiFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = moviebox_tuiFFI.modulemap; sourceTree = "<group>"; };
 		1A000000000000000000001B /* bridging.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bridging.h; sourceTree = "<group>"; };
+		2B0000000000000000000002 /* MovieBoxTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MovieBoxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -37,10 +48,22 @@
 			path = MovieBox;
 			sourceTree = "<group>";
 		};
+		2B0000000000000000000003 /* MovieBoxTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MovieBoxTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		1A000000000000000000000B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2B0000000000000000000008 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -54,6 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000006 /* MovieBox */,
+				2B0000000000000000000003 /* MovieBoxTests */,
 				1A0000000000000000000017 /* Generated */,
 				1A0000000000000000000002 /* Products */,
 			);
@@ -63,6 +87,7 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000003 /* MovieBox.app */,
+				2B0000000000000000000002 /* MovieBoxTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -104,6 +129,29 @@
 			productReference = 1A0000000000000000000003 /* MovieBox.app */;
 			productType = "com.apple.product-type.application";
 		};
+		2B0000000000000000000001 /* MovieBoxTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2B0000000000000000000004 /* Build configuration list for PBXNativeTarget "MovieBoxTests" */;
+			buildPhases = (
+				2B0000000000000000000007 /* Sources */,
+				2B0000000000000000000008 /* Frameworks */,
+				2B0000000000000000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2B000000000000000000000A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2B0000000000000000000003 /* MovieBoxTests */,
+			);
+			name = MovieBoxTests;
+			packageProductDependencies = (
+			);
+			productName = MovieBoxTests;
+			productReference = 2B0000000000000000000002 /* MovieBoxTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -116,6 +164,10 @@
 				TargetAttributes = {
 					1A0000000000000000000005 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					2B0000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 1A0000000000000000000005;
 					};
 				};
 			};
@@ -134,12 +186,20 @@
 			projectRoot = "";
 			targets = (
 				1A0000000000000000000005 /* MovieBox */,
+				2B0000000000000000000001 /* MovieBoxTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		1A000000000000000000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2B0000000000000000000009 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -175,7 +235,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2B0000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		2B000000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1A0000000000000000000005 /* MovieBox */;
+			targetProxy = 2B000000000000000000000B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1A0000000000000000000010 /* Debug */ = {
@@ -331,6 +406,62 @@
 			};
 			name = Release;
 		};
+		2B0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TWZH6Z332Y;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Generated";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.29;
+				PRODUCT_BUNDLE_IDENTIFIER = com.moviebox.ios.MovieBoxTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Generated";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MovieBox.app/MovieBox";
+			};
+			name = Debug;
+		};
+		2B0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TWZH6Z332Y;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Generated";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.29;
+				PRODUCT_BUNDLE_IDENTIFIER = com.moviebox.ios.MovieBoxTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Generated";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MovieBox.app/MovieBox";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -348,6 +479,15 @@
 			buildConfigurations = (
 				1A0000000000000000000012 /* Debug */,
 				1A0000000000000000000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2B0000000000000000000004 /* Build configuration list for PBXNativeTarget "MovieBoxTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2B0000000000000000000005 /* Debug */,
+				2B0000000000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

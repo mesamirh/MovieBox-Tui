@@ -107,14 +107,17 @@ enum SubtitleParser {
     private static func cleaned(_ line: String) -> String {
         var result = line
         // Strip ASS-style override blocks: {\an8}, {\pos(...)}
+        // Both loops remove the block through its closing delimiter. `upperBound`
+        // is one past that delimiter and the range is inclusive, so using it here
+        // would also eat the first character after the block.
         while let open = result.range(of: "{"), let close = result.range(of: "}") {
             guard open.lowerBound < close.lowerBound else { break }
-            result.removeSubrange(open.lowerBound...close.upperBound)
+            result.removeSubrange(open.lowerBound...close.lowerBound)
         }
         // Strip simple HTML tags: <i>, </b>, <font ...>
         while let open = result.range(of: "<"), let close = result.range(of: ">") {
             guard open.lowerBound < close.lowerBound else { break }
-            result.removeSubrange(open.lowerBound...close.upperBound)
+            result.removeSubrange(open.lowerBound...close.lowerBound)
         }
         result = result
             .replacingOccurrences(of: "&amp;", with: "&")

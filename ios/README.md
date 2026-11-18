@@ -78,6 +78,31 @@ xcrun simctl launch --console-pty booted com.moviebox.ios
 provider failures. The app writes its config, cache and data stores under its
 Application Support directory inside the simulator sandbox.
 
+## Tests
+
+`MovieBoxTests` is a hosted XCTest bundle (`TEST_HOST` pointed at `MovieBox.app`)
+so it can use `@testable import MovieBox` and exercise the app's real types. Run
+it against a booted simulator:
+
+```bash
+xcodebuild test -project ios/MovieBox.xcodeproj -scheme MovieBox \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -derivedDataPath /tmp/mb-test-dd
+```
+
+The suite covers the deterministic logic only, because every network and Rust
+call sits behind `Bridge` and needs a live provider:
+
+- `SubtitleParser` — SRT and WebVTT cue parsing, timestamp conversion, BOM/CRLF
+  tolerance, ASS/HTML/entity cleanup, malformed input and the 20 000-cue bound,
+  plus the active-cue lookup at its exact boundaries.
+- `Format` — clock, byte-size, episode label, quality rank and progress helpers.
+- Pure `AppModel` value types — `LoadPhase`, `HomeFeed`, `SourceRequest`, and the
+  `SubtitleError` messages shown to the viewer.
+
+Views, `Bridge` and `AppModel`'s async loaders need a simulator run instead:
+there is no offline double for the UniFFI client.
+
 ## What the app does
 
 | Screen | Behaviour |

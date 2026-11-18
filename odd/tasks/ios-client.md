@@ -27,6 +27,7 @@ Native iOS application for MovieBox, sharing the Rust provider layer as the sing
 | T8 | SwiftUI: subtitles, resolution picker, favorites, history | S1 | done | e00d04e |
 | T9 | Verify: boot simulator, iterate until a stream plays | S4 | done — video playing, see L7 | e00d04e |
 | T10 | Docs + CI job for the iOS build | S3 | done | c44e3f7 |
+| T11 | Tests: `MovieBoxTests` XCTest target for the subtitle parser, `Format` helpers and the pure `AppModel` value types | S4 | done — 72 tests, see L13 | — |
 
 ## Contract notes for T7/T8
 
@@ -64,3 +65,11 @@ prefer direct files and surface manifests only as a fallback.
 Re-verified after that commit: `xcodebuild` succeeds for the simulator and for `generic/platform=iOS`; and a differential check over `4598d54:src/tui/text.rs` vs `src/text_util.rs` reports all four moved helpers (`sanitize_language_label`, `format_subtitle_label`, `format_duration`, `parse_duration_seconds`) byte-identical, so the item-3 risk (shared code the TUI consumes) carries no behaviour change.
 
 **L12** (defect found in the pushed tree, not fixed — needs a decision). `HEAD` tracks only `roku/build/`: 61 generated files, 3.3 MB including `moviebox-roku.zip`. The actual channel — `roku/manifest`, `roku/source/`, `roku/components/`, `roku/scripts/` — exists only on `feat/roku-channel` and never reached this branch. So `origin/main` carries Roku build output with no Roku source. Most likely a `git add -A` that swept untracked artifacts left behind by the `feat/roku-channel` checkout. Not touched without authorisation.
+
+**L13** (verification — T11, S4). Added the missing test target: `ios/MovieBoxTests/` plus a hosted `MovieBoxTests` unit-test target in `ios/MovieBox.xcodeproj`, wired into the shared scheme's `TestAction` (previously empty, so `xcodebuild test` ran nothing). 72 tests in six files: SRT and WebVTT cue parsing, BOM/CRLF tolerance, ASS/HTML/entity cleanup, malformed input, the 20 000-cue bound, the active-cue lookup at its exact boundaries, the `Format` helpers and the pure `AppModel` value types. They are characterisation tests over behaviour that already shipped, so a mutation check stands in for a red phase: flipping `endValue > start` to `>=`, `cue.end > time` to `>=` and the 20 000 bound to 40 000 produced 6 failures, then the mutations were reverted.
+
+Not covered, and why: `AppModel.appendingUnique` is `private static`, so it is unreachable without editing `AppModel.swift`; every async loader and every view needs `Bridge` and a live provider. `Format.clock` also traps for seconds beyond `Int`'s range — unreachable from the player, left alone.
+
+The suite found one real defect, fixed in `SubtitleOverlay.swift`. `cleaned` stripped markup with `removeSubrange(open.lowerBound...close.upperBound)`; `upperBound` is one past the closing delimiter and the range is inclusive, so every pass also deleted the character after the block — `{\an8}Hello` rendered as `ello` and `{\an8}<i>Top</i> line` as `i>Top</i> line`. It now removes through `close.lowerBound`.
+
+Verification: `xcodebuild test -project ios/MovieBox.xcodeproj -scheme MovieBox -destination 'platform=iOS Simulator,id=5D9ED183-…' -derivedDataPath /tmp/mb-test-dd` → `Executed 72 tests, with 0 failures (0 unexpected)`, `** TEST SUCCEEDED **`; the app-only simulator build → `** BUILD SUCCEEDED **`.
