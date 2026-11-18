@@ -1,0 +1,16 @@
+title=MovieBox
+subtitle=Movies, TV shows and anime
+major_version=1
+minor_version=0
+build_version=1
+mm_icon_focus_hd=pkg:/images/icon_focus_hd.png
+mm_icon_focus_fhd=pkg:/images/icon_focus_fhd.png
+mm_icon_side_hd=pkg:/images/icon_side_hd.png
+mm_icon_side_fhd=pkg:/images/icon_side_fhd.png
+splash_screen_hd=pkg:/images/splash_hd.jpg
+splash_screen_fhd=pkg:/images/splash_fhd.jpg
+splash_color=#0A0E14
+splash_min_time=1000
+ui_resolutions=fhd
+supports_input_launch=1
+bs_const=DEBUG=false

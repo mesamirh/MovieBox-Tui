@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="Spinner" extends="Group">
+    <interface>
+        <field id="running" type="boolean" value="false" onChange="onRunningChange" />
+        <field id="message" type="string" onChange="onMessageChange" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/widgets/Spinner.brs" />
+    <script type="text/brightscript" uri="pkg:/source/bslib.brs" />
+    <children>
+        <Poster id="ring" uri="pkg:/images/spinner.png" width="96" height="96" translation="[-48, -48]" scaleRotateCenter="[48, 48]" />
+        <Label id="label" color="0x8A94A6FF" horizAlign="center" width="800" translation="[-400, 72]">
+            <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="26" />
+        </Label>
+        <Animation id="spin" duration="0.9" repeat="true" easeFunction="linear">
+            <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, -6.2831853]" fieldToInterp="ring.rotation" />
+        </Animation>
+    </children>
+</component>

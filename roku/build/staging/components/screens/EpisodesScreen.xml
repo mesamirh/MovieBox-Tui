@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="EpisodesScreen" extends="Group">
+    <interface>
+        <field id="item" type="node" />
+        <field id="seasons" type="array" />
+        <field id="startSeason" type="integer" value="1" />
+        <field id="startEpisode" type="integer" value="1" />
+        <field id="ready" type="boolean" alwaysNotify="true" onChange="onReady" />
+        <field id="action" type="assocarray" alwaysNotify="true" />
+        <field id="focusIn" type="boolean" alwaysNotify="true" onChange="onFocusIn" />
+        <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/lib/Utils.brs" />
+    <script type="text/brightscript" uri="pkg:/components/screens/EpisodesScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/bslib.brs" />
+    <children>
+        <Poster uri="pkg:/images/bg_default.jpg" width="1920" height="1080" />
+        <Poster id="backdrop" width="1920" height="1080" loadWidth="1280" loadHeight="720" loadDisplayMode="scaleToZoom" opacity="0.35" />
+        <Rectangle width="1920" height="1080" color="0x0A0E14B0" />
+        <Poster uri="pkg:/images/grad_left.png" width="1920" height="1080" opacity="0.7" />
+        <Label id="title" color="0xF2F4F8FF" translation="[96, 84]" width="1500" wrap="false">
+            <Font role="font" uri="pkg:/fonts/Inter-Bold.ttf" size="56" />
+        </Label>
+        <Label id="subtitle" color="0x8A94A6FF" translation="[96, 160]" width="1500">
+            <Font role="font" uri="pkg:/fonts/Inter-Regular.ttf" size="26" />
+        </Label>
+        <Label text="SEASONS" color="0x5A6476FF" translation="[96, 232]">
+            <Font role="font" uri="pkg:/fonts/Inter-SemiBold.ttf" size="20" />
+        </Label>
+        <LabelList id="seasonList" translation="[96, 276]" itemSize="[300, 68]" itemSpacing="[0, 8]" numRows="10" vertFocusAnimationStyle="floatingFocus" focusBitmapUri="pkg:/images/pill.9.png" focusBitmapBlendColor="0xF5B82EFF" focusFootprintBitmapUri="pkg:/images/pill.9.png" focusFootprintBlendColor="0xFFFFFF26" color="0xC9D1DCFF" focusedColor="0x0A0E14FF" textHorizAlign="left">
+            <Font role="font" uri="pkg:/fonts/Inter-Medium.ttf" size="28" />
+            <Font role="focusedFont" uri="pkg:/fonts/Inter-SemiBold.ttf" size="28" />
+        </LabelList>
+        <Label id="episodesHeader" text="EPISODES" color="0x5A6476FF" translation="[480, 232]">
+            <Font role="font" uri="pkg:/fonts/Inter-SemiBold.ttf" size="20" />
+        </Label>
+        <MarkupGrid id="grid" translation="[480, 276]" itemComponentName="EpisodeItem" numColumns="4" numRows="4" itemSize="[322, 176]" itemSpacing="[28, 28]" drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
+    </children>
+</component>

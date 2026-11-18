@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="KeyItem" extends="Group">
+    <interface>
+        <field id="itemContent" type="node" onChange="onContentChange" />
+        <field id="width" type="float" onChange="onContentChange" />
+        <field id="height" type="float" onChange="onContentChange" />
+        <field id="focusPercent" type="float" onChange="onFocusChange" />
+        <field id="gridHasFocus" type="boolean" onChange="onFocusChange" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/widgets/KeyItem.brs" />
+    <script type="text/brightscript" uri="pkg:/source/bslib.brs" />
+    <children>
+        <Rectangle id="bg" color="0xFFFFFF14" />
+        <Label id="label" color="0xF2F4F8FF" horizAlign="center" vertAlign="center">
+            <Font role="font" uri="pkg:/fonts/Inter-SemiBold.ttf" size="30" />
+        </Label>
+    </children>
+</component>
