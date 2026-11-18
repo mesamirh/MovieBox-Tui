@@ -31,7 +31,7 @@ Enter `/settings` in the search bar or click `[ ⚙ Settings ]` on the Home scre
 | `dramachi_enabled` | `bool` | `true` | Enable Dramachi streaming provider |
 | `bdix_circleftp_enabled` | `bool` | `false` | Enable CircleFTP (BDIX) provider |
 | `bdix_dhakaflix_enabled` | `bool` | `false` | Enable DhakaFlix (BDIX) provider |
-| `hide_hindi` | `bool` | `true` | Hide Hindi releases and Hindi audio tracks. A title that only exists in Hindi is still offered, so this never empties a picker |
+| `hide_hindi` | `bool` | `true` | Hide Hindi releases, Hindi audio tracks and Hindi catalog entries. A page or picker that would become empty is returned unchanged, so this never leaves a blank listing |
 | `theme` | `string` | `"TokyoNight"` | Active color theme |
 | `mpv_path` | `string?` | `None` | Custom executable path for `mpv` |
 | `vlc_path` | `string?` | `None` | Custom executable path for `VLC` |

@@ -523,6 +523,12 @@ impl App {
         items: Vec<CatalogItem>,
         metrics_map: std::collections::HashMap<String, crate::models::BrowseMetrics>,
     ) -> usize {
+        // Spec S6b/S6c: the service drops Hindi entries, and the home page is
+        // also served from the in-memory and on-disk caches before the service
+        // runs (`search.rs:456`, `search.rs:476`), so the same rule is applied to
+        // whatever arrives here. An all-Hindi page comes back unchanged (S4), so
+        // the listing never goes blank.
+        let items = crate::language_filter::hindi_catalog_items(items, self.state.hide_hindi);
         let mut count = 0;
         for item in items {
             let id = item.id.value.clone();

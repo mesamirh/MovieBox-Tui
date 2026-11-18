@@ -67,7 +67,24 @@ impl MovieBoxService {
             .suggest(query)
             .await
             .map_err(|e| e.to_string())?;
-        Ok(crate::providers::moviebox::adapt::moviebox_suggest_json_to_strings(&payload))
+        let suggestions =
+            crate::providers::moviebox::adapt::moviebox_suggest_json_to_strings(&payload);
+        Ok(crate::language_filter::hindi_suggestions(
+            suggestions,
+            crate::config::load().hide_hindi,
+        ))
+    }
+
+    /// Spec S6b: Hindi catalog entries leave every listing page.
+    ///
+    /// The rule runs here, in the core funnel both clients call, so every
+    /// provider and both front ends are covered by one place instead of a
+    /// per-client copy. The page-size guard inside
+    /// [`crate::language_filter::hindi_catalog_items`] keeps an all-Hindi page
+    /// non-empty, so a client that ends pagination on an empty page still asks
+    /// for the next one.
+    fn hide_hindi_catalog(&self, items: Vec<CatalogItem>) -> Vec<CatalogItem> {
+        crate::language_filter::hindi_catalog_items(items, crate::config::load().hide_hindi)
     }
 
     pub async fn search_typed(
@@ -76,7 +93,7 @@ impl MovieBoxService {
         query: &str,
         page: usize,
     ) -> Result<Vec<CatalogItem>, ProviderError> {
-        match provider {
+        let items = match provider {
             ProviderKind::MovieBox => Provider::search(&self.client, query, page).await,
             ProviderKind::FourKHdHub => {
                 let fourk = self.fourk_client.as_ref().ok_or_else(|| {
@@ -92,7 +109,8 @@ impl MovieBoxService {
             }
             ProviderKind::Addons => Provider::search(&self.addon_client, query, page).await,
             ProviderKind::Dramachi => Provider::search(&self.dramachi_client, query, page).await,
-        }
+        }?;
+        Ok(self.hide_hindi_catalog(items))
     }
 
     pub async fn fetch_addon_catalog(
@@ -179,7 +197,9 @@ impl MovieBoxService {
             .get_homepage(tab_id, page)
             .await
             .map_err(|e| e.to_string())?;
-        Ok(crate::providers::moviebox::adapt::moviebox_homepage_json_to_catalog(&payload))
+        let (items, metrics) =
+            crate::providers::moviebox::adapt::moviebox_homepage_json_to_catalog(&payload);
+        Ok((self.hide_hindi_catalog(items), metrics))
     }
 
     pub async fn fetch_collection_resolutions(&self, subject_id: &str) -> Result<Vec<u32>, String> {
