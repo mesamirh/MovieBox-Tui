@@ -245,10 +245,10 @@ fn render_helper_script(staged_path: &Path, current_exe: &Path, pid: u32) -> Str
         "@echo off".to_string(),
         ":wait_loop".to_string(),
         format!(
-            "tasklist /FI \"PID eq {pid}\" 2>NUL | %SystemRoot%\\System32\\find.exe \"{pid}\" >NUL"
+            "%SystemRoot%\\System32\\tasklist.exe /FI \"PID eq {pid}\" 2>NUL | %SystemRoot%\\System32\\find.exe \"{pid}\" >NUL"
         ),
         "if %ERRORLEVEL% == 0 (".to_string(),
-        "    timeout /t 1 /nobreak >NUL".to_string(),
+        "    %SystemRoot%\\System32\\timeout.exe /t 1 /nobreak >NUL".to_string(),
         "    goto wait_loop".to_string(),
         ")".to_string(),
         "set /a attempts=0".to_string(),
@@ -260,8 +260,8 @@ fn render_helper_script(staged_path: &Path, current_exe: &Path, pid: u32) -> Str
         ),
         "if %ERRORLEVEL% NEQ 0 (".to_string(),
         "    set /a attempts+=1".to_string(),
-        "    if %attempts% LSS 5 (".to_string(),
-        "        timeout /t 1 /nobreak >NUL".to_string(),
+        "    if %attempts% LSS 10 (".to_string(),
+        "        %SystemRoot%\\System32\\timeout.exe /t 1 /nobreak >NUL".to_string(),
         "        goto move_loop".to_string(),
         "    )".to_string(),
         ")".to_string(),
@@ -290,11 +290,8 @@ fn spawn_windows_helper(staged_path: &Path, current_exe: &Path) -> Result<(), St
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        cmd.creation_flags(
-            crate::player::CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
-        );
+        cmd.creation_flags(crate::player::CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
     }
     cmd.spawn()
         .map_err(|e| format!("failed to spawn Windows update helper: {e}"))?;
@@ -407,13 +404,13 @@ mod tests {
         let lines: Vec<&str> = script.split("\r\n").collect();
         assert_eq!(lines[0], "@echo off");
         assert!(script.contains(
-            "tasklist /FI \"PID eq 4242\" 2>NUL | %SystemRoot%\\System32\\find.exe \"4242\" >NUL"
+            "%SystemRoot%\\System32\\tasklist.exe /FI \"PID eq 4242\" 2>NUL | %SystemRoot%\\System32\\find.exe \"4242\" >NUL"
         ));
         assert!(script.contains(
             "move /y \"C:\\App\\update dir\\.moviebox_update_staged.exe\" \"C:\\App\\moviebox-tui.exe\" >NUL 2>&1"
         ));
         assert!(script.contains(":move_loop"));
-        assert!(script.contains("if %attempts% LSS 5 ("));
+        assert!(script.contains("if %attempts% LSS 10 ("));
         assert!(script.contains(
             "if exist \"C:\\App\\update dir\\.moviebox_update_staged.exe\" del /f /q \"C:\\App\\update dir\\.moviebox_update_staged.exe\""
         ));
