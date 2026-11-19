@@ -63,7 +63,9 @@ end sub
 ' ---------------------------------------------------------------------------
 
 function loadHome(tabId as String) as Object
-    res = MB_Get("/wefeed-mobile-bff/tab-operating?page=1&tabId=" + tabId + "&version=")
+    ' Catalogue pages tolerate a short staleness window; 30 minutes keeps a tab
+    ' switch instant without showing a yesterday's home page.
+    res = MB_GetCached("/wefeed-mobile-bff/tab-operating?page=1&tabId=" + tabId + "&version=", 1800)
     if not res.ok then return { ok: false, error: res.error }
 
     groups = invalid
@@ -173,7 +175,7 @@ function loadSearch(query as String, page as Integer) as Object
     if page < 1 then page = 1
     q = Chr(34)
     body = "{" + q + "keyword" + q + ":" + FormatJson(query) + "," + q + "page" + q + ":" + page.ToStr() + "," + q + "perPage" + q + ":20," + q + "subjectType" + q + ":0}"
-    res = MB_Post("/wefeed-mobile-bff/subject-api/search/v2", body)
+    res = MB_PostCached("/wefeed-mobile-bff/subject-api/search/v2", body, 600)
     if not res.ok then return { ok: false, error: res.error }
 
     root = CreateObject("roSGNode", "ContentNode")
@@ -214,7 +216,7 @@ function loadDetails(id as String) as Object
 end function
 
 function loadDetailsInner(id as String, allowRedirect as Boolean) as Object
-    res = MB_Get("/wefeed-mobile-bff/subject-api/get?subjectId=" + id)
+    res = MB_GetCached("/wefeed-mobile-bff/subject-api/get?subjectId=" + id, 86400)
     if not res.ok then return { ok: false, error: res.error }
     data = res.data
     if Type(data) <> "roAssociativeArray" then return { ok: false, error: "Title not found" }
@@ -262,7 +264,7 @@ function loadDetailsInner(id as String, allowRedirect as Boolean) as Object
 
     seasons = []
     if item.stype = 2 then
-        sres = MB_Get("/wefeed-mobile-bff/subject-api/season-info?subjectId=" + id)
+        sres = MB_GetCached("/wefeed-mobile-bff/subject-api/season-info?subjectId=" + id, 86400)
         if sres.ok and Type(sres.data) = "roAssociativeArray" and sres.data.seasons <> invalid then
             for each s in sres.data.seasons
                 se = MB_Int(s.se)

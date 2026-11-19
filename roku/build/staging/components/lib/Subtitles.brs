@@ -40,6 +40,7 @@ function SUB_FindImdbId(title as String, year as String, kind as String) as Stri
     wanted = SUB_Normalize(title)
     bestId = ""
     bestScore = -1
+    corroborated = false
     index = 0
     for each meta in json.metas
         imdb = MB_Str(meta.imdb_id)
@@ -57,6 +58,7 @@ function SUB_FindImdbId(title as String, year as String, kind as String) as Stri
                 end if
             end if
             ' Earlier results are more relevant; use the position as a tiebreaker.
+            if score > 0 then corroborated = true
             score = score * 10 - index
             if score > bestScore then
                 bestScore = score
@@ -66,7 +68,13 @@ function SUB_FindImdbId(title as String, year as String, kind as String) as Stri
         index = index + 1
         if index >= 8 then exit for
     end for
-    ' Without a name or year match the top hit is still the best guess.
+    ' Never guess: a wrong IMDb id pulls subtitles for a different film, which the
+    ' viewer sees as broken subtitles. Mirror the TUI, which demands a corroborated
+    ' title before trusting a lookup.
+    if not corroborated then
+        MB_Log("subs: no corroborated imdb match for " + title)
+        return ""
+    end if
     return bestId
 end function
 

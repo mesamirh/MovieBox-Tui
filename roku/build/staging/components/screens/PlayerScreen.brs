@@ -207,25 +207,31 @@ sub onVideoState()
     if state = "playing" then
         m.started = true
         hideLoading()
+    else if state = "paused" then
+        ' A deliberate pause is a good moment to commit progress to flash.
+        saveProgress(false, true)
     else if state = "error" then
-        failed = m.sources[m.sourceIndex]
+        failed = invalid
+        if m.sourceIndex >= 0 and m.sourceIndex < m.sources.Count() then failed = m.sources[m.sourceIndex]
         position = m.video.position
         if position < 5 then position = m.resumeAt
         msg = m.video.errorMsg
         if msg = invalid or msg = "" then msg = "Playback error"
-        if failed.provider <> invalid then
+        failedLabel = "this stream"
+        if failed <> invalid and failed.label <> invalid and failed.label <> "" then failedLabel = failed.label
+        if failed <> invalid and failed.provider <> invalid then
             ' A file picked from another provider: let the user choose a different one.
             m.video.control = "stop"
             hideLoading()
             openAltList("That file couldn't be played on this Roku (" + msg + "). Pick another one.")
         else if m.sourceIndex + 1 < m.sources.Count() and m.sources[m.sourceIndex + 1].provider = invalid then
-            showToast("Stream failed (" + failed.label + "). Trying another source...")
+            showToast("Stream failed (" + failedLabel + "). Trying another source...")
             playSource(m.sourceIndex + 1, Int(position))
         else
             autoAlternatives(msg)
         end if
     else if state = "finished" then
-        saveProgress(true)
+        saveProgress(true, true)
         nextEpisode = findNextEpisode()
         if nextEpisode <> invalid then
             m.se = nextEpisode.se
@@ -257,17 +263,19 @@ end function
 sub onVideoPosition()
     if not m.started then return
     position = Int(m.video.position)
-    if Abs(position - m.lastSaved) >= 15 then saveProgress(false)
+    ' Periodic ticks stay in memory: the registry is flash-backed and flushing
+    ' every 15 seconds is needless wear. Pause, finish and close flush.
+    if Abs(position - m.lastSaved) >= 15 then saveProgress(false, false)
 end sub
 
-sub saveProgress(finished as Boolean)
+sub saveProgress(finished as Boolean, flush as Boolean)
     if not m.started then return
     position = Int(m.video.position)
     duration = Int(m.video.duration)
     if finished and duration > 0 then position = duration
     if position < 1 then return
     m.lastSaved = position
-    HistorySave(SnapshotItem(m.top.item), m.se, m.ep, position, duration)
+    HistorySave(SnapshotItem(m.top.item), m.se, m.ep, position, duration, flush)
 end sub
 
 sub failAndExplain(message as String)
@@ -435,6 +443,7 @@ end sub
 sub searchOnlineSubtitles()
     item = m.top.item
     showToast("Searching subtitles online...")
+    cancelSubTask()
     m.subTask = CreateObject("roSGNode", "ApiTask")
     m.subTask.observeField("response", "onOnlineSearch")
     m.subTask.request = { action: "subsearch", title: item.title, year: item.year, stype: item.stype, se: m.se, ep: m.ep }
@@ -471,6 +480,7 @@ end sub
 sub downloadOnlineSubtitle(choice as Object)
     m.pendingSub = choice
     showToast("Downloading subtitle...")
+    cancelSubTask()
     m.subTask = CreateObject("roSGNode", "ApiTask")
     m.subTask.observeField("response", "onOnlineDownload")
     m.subTask.request = { action: "subfetch", url: choice.url, id: choice.id }
@@ -512,10 +522,27 @@ sub startAltTask(req as Object, callback as String)
     req.se = m.se
     req.ep = m.ep
     req.withSubs = m.captions.Count() = 0
+    ' Only one provider lookup may be in flight; a second one must replace it
+    ' rather than race it.
+    cancelAltTask()
     m.altTask = CreateObject("roSGNode", "ApiTask")
     m.altTask.observeField("response", callback)
     m.altTask.request = req
     m.altTask.control = "run"
+end sub
+
+sub cancelSubTask()
+    if m.subTask = invalid then return
+    m.subTask.unobserveField("response")
+    m.subTask.control = "stop"
+    m.subTask = invalid
+end sub
+
+sub cancelAltTask()
+    if m.altTask = invalid then return
+    m.altTask.unobserveField("response")
+    m.altTask.control = "stop"
+    m.altTask = invalid
 end sub
 
 ' Whether something is on screen (playing, paused or loading a stream).
@@ -724,7 +751,7 @@ end sub
 
 sub close()
     if m.closing then return
-    saveProgress(false)
+    saveProgress(false, true)
     m.closing = true
     m.video.control = "stop"
     m.top.action = { type: "close" }

@@ -60,10 +60,13 @@ function StoreReadArray(key as String) as Object
     return []
 end function
 
-sub StoreWriteArray(key as String, data as Object)
+' flush=false keeps the write in memory. Callers that save several times a
+' minute (playback progress) flush only on pause, finish or exit: the registry
+' is flash-backed, so a flush per position tick is needless wear.
+sub StoreWriteArray(key as String, data as Object, flush as Boolean)
     reg = Store()
     reg.Write(key, FormatJson(data))
-    reg.Flush()
+    if flush then reg.Flush()
 end sub
 
 function PrefGet(name as String, fallback as String) as String
@@ -132,7 +135,7 @@ function HistoryFind(id as String) as Dynamic
     return invalid
 end function
 
-sub HistorySave(item as Object, se as Integer, ep as Integer, position as Integer, duration as Integer)
+sub HistorySave(item as Object, se as Integer, ep as Integer, position as Integer, duration as Integer, flush as Boolean)
     entries = HistoryAll()
     kept = []
     for each entry in entries
@@ -157,7 +160,7 @@ sub HistorySave(item as Object, se as Integer, ep as Integer, position as Intege
     for each entry in kept
         if result.Count() < 40 then result.Push(entry)
     end for
-    StoreWriteArray("history", result)
+    StoreWriteArray("history", result, flush)
 end sub
 
 function HistoryFindIn(entries as Object, id as String) as Dynamic
@@ -172,7 +175,7 @@ sub HistoryRemove(id as String)
     for each entry in HistoryAll()
         if entry.item <> invalid and entry.item.id <> id then kept.Push(entry)
     end for
-    StoreWriteArray("history", kept)
+    StoreWriteArray("history", kept, true)
 end sub
 
 function FavoritesAll() as Object
@@ -199,14 +202,14 @@ function FavoriteToggle(item as Object) as Boolean
         end if
     end for
     if found then
-        StoreWriteArray("favorites", kept)
+        StoreWriteArray("favorites", kept, true)
         return false
     end if
     result = [item]
     for each fav in kept
         if result.Count() < 100 then result.Push(fav)
     end for
-    StoreWriteArray("favorites", result)
+    StoreWriteArray("favorites", result, true)
     return true
 end function
 
@@ -283,7 +286,7 @@ function AddonsAll() as Object
 end function
 
 sub AddonsSave(addons as Object)
-    StoreWriteArray("addons", addons)
+    StoreWriteArray("addons", addons, true)
 end sub
 
 ' Adds or replaces (same manifest URL) an addon; returns false when it was already there.

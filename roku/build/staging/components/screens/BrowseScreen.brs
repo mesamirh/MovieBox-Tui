@@ -43,6 +43,9 @@ sub load()
         buildRows()
         return
     end if
+    ' Abandon any in-flight page load: switching tabs quickly used to leave
+    ' several tasks running, all racing to overwrite m.remoteRows.
+    cancelTask()
     m.spinner.message = ""
     m.spinner.running = true
     m.task = CreateObject("roSGNode", "ApiTask")
@@ -51,7 +54,16 @@ sub load()
     m.task.control = "run"
 end sub
 
+sub cancelTask()
+    if m.task = invalid then return
+    m.task.unobserveField("response")
+    m.task.control = "stop"
+    m.task = invalid
+end sub
+
 sub onResponse()
+    ' A cancelled load must never be able to publish its rows.
+    if m.task = invalid then return
     res = m.task.response
     m.spinner.running = false
     if res.ok = true then
