@@ -54,7 +54,7 @@ S11. The channel source must live outside `roku/build/` (a build output dir), a
 | T2 | S2 | inline | done — compiler-verified, no device |
 | T3 | S4 | inline | done — compiler-verified, no device |
 | T4 | S7 | inline | done — home 30m, search 10m, details/seasons 24h; play-info never cached |
-| T5 | S6, S8 | inline | pending |
+| T5 | S6, S8 | inline | done — Settings section, hideHindi pref gates the catalogue filters |
 | T6 | S9 | inline | done for mediaType routing; autoplay needs a DetailsScreen field |
 | T7 | S10 | inline | pending — Roku screen-reader API must be verified before writing it |
 | T8 | S11 | inline | pending — moves 61 tracked files, needs the branch decision |
@@ -74,3 +74,16 @@ L4 (decision): no Roku hardware and no `bsc` toolchain in the repo, so verificat
 uses `brighterscript` installed outside the repository (`/tmp/roku-verify`),
 comparing diagnostics against a pre-change baseline. Runtime behavior remains
 unverified without a device; that is reported as such, never as a pass.
+
+L5 (decision, user): commits go to a new `feat/roku-hardening` branch, one commit
+per slice.
+
+L6 (decision, user): after the correctness slice, the next slice is Settings plus
+the configurable `hideHindi` preference.
+
+L7 (evidence): `e979a60` slice 1, compiler diagnostics equal to the pre-change
+baseline (zero). Slice 2 commit hash recorded below.
+
+L8 (deviation, recorded): S7 asked for homepage caching too. Home payloads reach
+the 400 KB cap that protects `tmp:/` (shared with downloaded subtitles), so the
+cap silently skips the largest pages; that is intended, not a bug.

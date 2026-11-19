@@ -14,6 +14,7 @@ sub init()
         { title: "Search", kind: "search", tabId: "" }
         { title: "My Library", kind: "browse", tabId: "library" }
         { title: "Providers", kind: "providers", tabId: "" }
+        { title: "Settings", kind: "settings", tabId: "" }
     ]
     titles = []
     for each s in m.sections
@@ -67,6 +68,8 @@ function sectionScreen(index as Integer) as Object
         screen = m.sectionsGroup.createChild("SearchScreen")
     else if section.kind = "providers" then
         screen = m.sectionsGroup.createChild("ProvidersScreen")
+    else if section.kind = "settings" then
+        screen = m.sectionsGroup.createChild("SettingsScreen")
     else
         screen = m.sectionsGroup.createChild("BrowseScreen")
         screen.tabId = section.tabId

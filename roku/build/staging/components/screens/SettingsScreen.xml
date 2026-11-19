@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SettingsScreen" extends="Group">
+    <interface>
+        <field id="action" type="assocarray" alwaysNotify="true" />
+        <field id="focusIn" type="boolean" alwaysNotify="true" onChange="onFocusIn" />
+        <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/lib/Utils.brs" />
+    <script type="text/brightscript" uri="pkg:/components/screens/SettingsScreen.brs" />
+    <script type="text/brightscript" uri="pkg:/source/bslib.brs" />
+    <children>
+        <Poster uri="pkg:/images/bg_default.jpg" width="1920" height="1080" />
+        <Rectangle width="1920" height="1080" color="0x0A0E14D9" />
+        <Label id="title" translation="[140, 130]" font="font:LargeBoldSystemFont" color="0xF2F5F8FF" text="Settings" />
+        <Label id="hint" translation="[140, 200]" font="font:SmallSystemFont" color="0x8A93A0FF" text="Press OK to change a value. Back returns to the menu." />
+        <LabelList id="list" translation="[140, 268]" itemSize="[1180, 88]" font="font:MediumSystemFont" focusBitmapUri="pkg:/images/pill.png" />
+        <Label id="footnote" translation="[140, 720]" width="1180" height="120" wrap="true" font="font:SmallSystemFont" color="0x6E7784FF" text="Hiding Hindi releases removes India-only rows and titles, the same default the desktop client ships. Turning it off shows everything the catalogue returns." />
+        <SelectDialog id="dialog" />
+    </children>
+</component>

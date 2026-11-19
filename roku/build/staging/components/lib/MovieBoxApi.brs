@@ -518,17 +518,20 @@ end function
 
 ' Content the channel hides: Hindi dubs/versions and Indian-origin titles.
 function MB_IsHiddenLanguage(text as String) as Boolean
+    if not HideHindiActive() then return false
     return Instr(1, LCase(text), "hindi") > 0
 end function
 
 ' Indian-origin titles are dropped outright; Hindi dubs of foreign titles are kept
 ' but shown as the original (details/playback redirect to the original version).
 function MB_IsHiddenSubject(country as String) as Boolean
+    if not HideHindiActive() then return false
     return LCase(country.Trim()) = "india"
 end function
 
 ' Row titles from the regional feed that only carry Indian content.
 function MB_IsHiddenRow(title as String) as Boolean
+    if not HideHindiActive() then return false
     ' India-curated banners are named like "IN Banner" or "Banner_movie tab_IN".
     for each token in title.Replace("_", " ").Split(" ")
         if token = "IN" then return true

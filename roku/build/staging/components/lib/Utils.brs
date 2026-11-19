@@ -222,8 +222,15 @@ function HistoryInProgress(entry as Object) as Boolean
 end function
 
 ' Mirrors the API-side filter for titles already saved on the device.
+' Hiding Hindi releases is the shipped default but it is a preference now:
+' the Settings screen turns it off for anyone who wants the whole catalogue.
+function HideHindiActive() as Boolean
+    return PrefGet("hideHindi", "on") <> "off"
+end function
+
 function IsHiddenItem(item as Dynamic) as Boolean
     if item = invalid or item.tag = invalid then return false
+    if not HideHindiActive() then return false
     return Instr(1, LCase(item.tag), "hindi") > 0
 end function
 
