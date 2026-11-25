@@ -45,7 +45,7 @@ pub fn build_help_columns(
         "Scroll search results / pages",
         theme,
     ));
-    left.push(help_row("Esc", "Go back or dismiss popups", theme));
+    left.push(help_row("Esc / b", "Go back or dismiss popups", theme));
     left.push(help_row("c", "Clear search query (Home)", theme));
     left.push(help_row("Ctrl+U", "Clear entire search input", theme));
     left.push(Line::from(""));

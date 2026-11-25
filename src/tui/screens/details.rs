@@ -2044,6 +2044,7 @@ fn details_footer(
     }
     secondary.extend(footer_group("f", fav_label, false, theme, modal_active));
     secondary.extend(footer_group("i", "Info", false, theme, modal_active));
+    secondary.extend(footer_group("b", "Back", false, theme, modal_active));
     if let Some(last) = secondary.last_mut() {
         *last = Span::raw("");
     }

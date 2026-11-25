@@ -30,7 +30,7 @@ impl App {
                     let page_size = rows.saturating_sub(6).max(4) as usize;
                     self.state.help_scroll = self.state.help_scroll.saturating_add(page_size);
                 }
-                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') | KeyCode::Char('b') | KeyCode::Char('B') => {
                     self.state.show_help = false;
                     self.state.help_scroll = 0;
                 }
@@ -823,7 +823,7 @@ impl App {
                         return None;
                     }
                     match key.code {
-                        KeyCode::Esc => {
+                        KeyCode::Esc | KeyCode::Char('b') | KeyCode::Char('B') => {
                             self.action_sender.send(Action::GoBack).ok();
                         }
                         KeyCode::Up => {
@@ -1150,7 +1150,7 @@ impl App {
                                 self.action_sender.send(Action::BackTabPane).ok();
                             }
                         }
-                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
+                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Char('b') | KeyCode::Char('B') => {
                             self.action_sender.send(Action::GoBack).ok();
                         }
                         KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Char('P') => {
