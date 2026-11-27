@@ -10,10 +10,13 @@
 [![crates.io](https://img.shields.io/crates/v/moviebox-tui.svg?logo=rust&style=flat)](https://crates.io/crates/moviebox-tui)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg?style=flat)](#license)
 [![Telegram](https://img.shields.io/badge/Telegram-Channel-2CA5E0?style=flat&logo=telegram&logoColor=white)](https://t.me/getfromme)
-[![Support](https://img.shields.io/badge/Support-Crypto-F7931A?style=flat&logo=bitcoin&logoColor=white)](#optional-support)
 </div>
 
 [moviebox-tui-walkthrough.webm](https://github.com/user-attachments/assets/7554a7e5-6ff5-49ec-9d87-f821ea99950e)
+
+## স্পন্সর (Sponsors)
+
+এখানে আপনার ব্র্যান্ড বা প্রোডাক্ট দেখাতে চাইলে [et6253013@gmail.com](mailto:et6253013@gmail.com)-এ যোগাযোগ করুন।
 
 ## মূল সুবিধাসমূহ
 
@@ -145,21 +148,6 @@ moviebox-tui
 প্রজেক্টে যেকোনো ধরনের অবদান সাদরে আমন্ত্রিত। পুল রিকোয়েস্ট পাঠানোর আগে [CONTRIBUTING.md](CONTRIBUTING.md) গাইডলাইনটি দেখে নিন।
 
 কোনো বাগ রিপোর্ট করতে বা নতুন ফিচারের অনুরোধ জানাতে [GitHub Issues](https://github.com/mesamirh/MovieBox-Tui/issues) ব্যবহার করুন।
-
-<details>
-<summary><b>ঐচ্ছিক সহায়তা (Optional Support)</b></summary>
-<div id="optional-support" tabindex="-1"></div>
-
-প্রজেক্টের নিয়মিত উন্নয়নে সরাসরি সহায়তা করতে চাইলে:
-
-| নেটওয়ার্ক / ক্রিপ্টোকারেন্সি | অ্যাড্রেস |
-| :--- | :--- |
-| **USDT (TRC20)** | `TL4yW73qmbKZpBWwbEFgjBpwVkPDFTkJgV` |
-| **Bitcoin (BTC)** | `3MEAtqtRWrQBhnaMi3Zuf5nt2efNUS2LUQ` |
-| **Ethereum / EVM** | `0x7ea20d5fa29d87f33195f5a3b211ff94038d794c` |
-| **Solana (SOL)** | `6ctm5WFv73MNywoCKAz3xK72yizSspHa72rFNygooU6` |
-
-</details>
 
 ## গোপনীয়তা (Privacy)
 
